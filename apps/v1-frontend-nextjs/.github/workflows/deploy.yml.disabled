@@ -1,0 +1,44 @@
+name: Build and Push Frontend to ECR
+
+# 1. The Trigger: Wake up when code is pushed to the main branch
+on:
+  push:
+    branches: [ "main" ]
+
+# 2. Security Permissions (Required for AWS OIDC)
+permissions:
+  id-token: write
+  contents: read
+
+# 3. The schematics
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step A: Download your source code
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # Step B: Securely log into AWS without passwords
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          # FIXED: Injected the GitHub Secret
+          role-to-assume: ${{ secrets.FRONTEND_GITHUB_ROLE_ARN }}
+          aws-region: eu-west-2
+        
+      # Step C: Log into your private ECR Vault
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+        
+      # Step D: Build the image and push to the Vault
+      - name: Build, tag, and push Docker image
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          REPOSITORY: rr-dev-frontend
+          IMAGE_TAG: latest
+        run: |
+          docker build -t $REGISTRY/$REPOSITORY:$IMAGE_TAG -t $REGISTRY/$REPOSITORY:${{ github.sha }} .
+          docker push -a $REGISTRY/$REPOSITORY

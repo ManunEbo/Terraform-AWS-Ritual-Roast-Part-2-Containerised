@@ -1,0 +1,102 @@
+name: Build and Push to GHCR (K8s Istio Phase)
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'apps/v1-frontend-nextjs/**'
+      - 'apps/v1-backend-flask/**'
+      - 'apps/v2-frontend-vite/**'
+      - 'apps/v2-backend-go/**'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_OWNER: ${{ github.repository_owner }}
+
+jobs:
+  # ==========================================
+  # BASELINE: V1 Images (For Istio Comparison)
+  # ==========================================
+  build-v1-frontend:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and Push V1 Next.js Frontend
+        working-directory: ./apps/v1-frontend-nextjs
+        run: |
+          IMAGE_NAME=$(echo "${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/rr-v1-frontend" | tr '[:upper:]' '[:lower:]')
+          docker build -t $IMAGE_NAME:latest -t $IMAGE_NAME:${{ github.sha }} .
+          docker push --all-tags $IMAGE_NAME
+
+  build-v1-backend:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and Push V1 Flask Backend
+        working-directory: ./apps/v1-backend-flask
+        run: |
+          IMAGE_NAME=$(echo "${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/rr-v1-backend" | tr '[:upper:]' '[:lower:]')
+          docker build -t $IMAGE_NAME:latest -t $IMAGE_NAME:${{ github.sha }} .
+          docker push --all-tags $IMAGE_NAME
+
+  # ==========================================
+  # CANARY: V2 Images (The High-Efficiency Workloads)
+  # ==========================================
+  build-v2-frontend:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and Push V2 Vite Frontend
+        working-directory: ./apps/v2-frontend-vite
+        run: |
+          IMAGE_NAME=$(echo "${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/rr-v2-frontend" | tr '[:upper:]' '[:lower:]')
+          docker build -t $IMAGE_NAME:latest -t $IMAGE_NAME:${{ github.sha }} .
+          docker push --all-tags $IMAGE_NAME
+
+  build-v2-backend:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and Push V2 Go Backend
+        working-directory: ./apps/v2-backend-go
+        run: |
+          IMAGE_NAME=$(echo "${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/rr-v2-backend" | tr '[:upper:]' '[:lower:]')
+          docker build -t $IMAGE_NAME:latest -t $IMAGE_NAME:${{ github.sha }} .
+          docker push --all-tags $IMAGE_NAME

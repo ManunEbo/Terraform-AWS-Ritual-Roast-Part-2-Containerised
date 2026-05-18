@@ -1,0 +1,12 @@
+version: 0.1
+
+projects:
+  # 1. The Foundational Infrastructure (Tier-0)
+  - path: tier-0/environments/dev
+    name: Tier-0-Foundation
+    usage_file: tier-0/environments/dev/infracost-usage.yml
+
+  # 2. The Application Architecture (Tier-1)
+  - path: terraform/environments/dev
+    name: Tier-1-Application
+    usage_file: terraform/environments/dev/infracost-usage.yml

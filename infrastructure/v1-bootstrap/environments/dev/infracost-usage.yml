@@ -1,0 +1,11 @@
+version: 0.1
+resource_usage:
+  # --------------------------------------------------------------
+  # TIER-0: FOUNDATIONAL MICRO-COSTS 
+  # --------------------------------------------------------------
+  
+  # ECR Storage (Assuming 5GB per repository for retained CI/CD images)
+  module.ecr.aws_ecr_repository.rr_frontend_repo:
+    storage_gb: 5
+  module.ecr.aws_ecr_repository.rr_backend_repo:
+    storage_gb: 5

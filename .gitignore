@@ -1,0 +1,65 @@
+# =========================
+# Node.js / Next.js / Vite
+# =========================
+node_modules/
+dist/
+build/
+.next/
+out/
+coverage/
+.vercel/
+*.tsbuildinfo
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# =========================
+# Python / Flask
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.venv/
+*.egg-info/
+.pytest_cache/
+htmlcov/
+.coverage
+
+# =========================
+# Golang
+# =========================
+# Ignore the compiled binary from our multi-stage build
+/apps/v2-backend-go/server
+
+# =========================
+# Terraform (Infrastructure)
+# =========================
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+*.tfvars.json
+crash.log
+# NOTE: .terraform.lock.hcl is NOT ignored. It must be committed.
+
+# =========================
+# Environment Variables & Secrets
+# =========================
+.env
+.env.*
+*.pem
+!global-bundle.pem
+
+# =========================
+# OS & IDE Files
+# =========================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo

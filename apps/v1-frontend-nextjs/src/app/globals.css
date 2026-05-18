@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+:root {
+  --background: #fefefe;
+  --foreground: #4d3a33; /* Set to brown-dark for better readability */
+  --gold: #cfc28d;
+  --gold-dark: #d47a45;
+  --brown: #b46941;
+  --brown-dark: #4d3a33;
+  --brown-light: #cfc28d;
+  --form-background: #f0e7e0;
+  --table-bg: #edecea;
+  --table-bg-alt: #dcd8d7;
+  --error: #F87171;
+}
+
+@theme {
+  /* Mapping your custom variables to Tailwind utility classes */
+  --color-gold: var(--gold);
+  --color-gold-dark: var(--gold-dark);
+  --color-brown: var(--brown);
+  --color-brown-dark: var(--brown-dark);
+  --color-brown-light: var(--brown-light);
+  --color-form-bg: var(--form-background);
+  --color-table-accent: var(--table-bg-alt);
+  
+  /* Syncing with your Montserrat font from Layout.tsx */
+  --font-montserrat: var(--font-montserrat);
+  --font-montserrat-alt: var(--font-montserrat-alternates);
+}
+
+/* 1. RESET & BASE STYLES */
+@layer base {
+  html, body {
+    @apply max-w-[100vw] overflow-x-hidden min-h-screen antialiased;
+    background: var(--background);
+    color: var(--foreground);
+  }
+
+  /* Ensuring Montserrat is the default */
+  body {
+    font-family: var(--font-montserrat), ui-sans-serif, system-ui;
+  }
+}
+
+/* 2. COMPONENT SHORTCUTS */
+@layer components {
+  .ritual-container {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+
+  .footer-text {
+    @apply text-sm md:text-base font-bold;
+    font-family: var(--font-montserrat-alternates);
+  }
+}

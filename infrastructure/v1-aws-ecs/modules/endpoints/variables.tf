@@ -1,0 +1,34 @@
+variable "vpc_id" {
+  type = string
+}
+
+variable "vpc_name" {
+  type = string
+}
+
+variable "aws_region" {
+  type = string
+}
+
+variable "common_tags" {
+  type = map(string)
+}
+
+variable "environment" {
+  type = string  
+}
+
+variable "endpoints_sg_id" {
+  description = "The SG ID that allows 443 from App and lambda tiers"
+  type        = string
+}
+
+variable "app_subnet_ids" {
+  description = "Subnets where the endpoint network interfaces will live"
+  type        = list(string)
+}
+
+# variable "private_route_table_id" {
+#   description = "Route tables id to inject the s3 gateway route into"
+#   type        = list(string)
+# }
