@@ -14,7 +14,7 @@ resource "aws_iam_role" "rr_github_backend_role" {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
         }
         StringLike = {
-          "token.actions.githubusercontent.com:sub" = "repo:ManunEbo/rr-backend:*"
+          "token.actions.githubusercontent.com:sub" = "repo:ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised:*"
         }
       }
     }]
