@@ -11,24 +11,32 @@ on:
 env:
   AWS_REGION: eu-west-2
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   build-v1-frontend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Configure AWS Credentials
+      
+      - name: Configure AWS Credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          # Dynamically constructing the ARN to obfuscate the Account ID
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/rr-dev-github-frontend-role
           aws-region: ${{ env.AWS_REGION }}
+          
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
+        
       - name: Build and Push Frontend
         env:
+          # The login action automatically pulls the registry URL, keeping the Account ID hidden here as well
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: ritual-roast-frontend # Ensure this matches your v1-bootstrap ECR name
+          ECR_REPOSITORY: rr-dev-frontend
           IMAGE_TAG: ${{ github.sha }}
         working-directory: ./apps/v1-frontend-nextjs
         run: |
@@ -39,19 +47,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Configure AWS Credentials
+      
+      - name: Configure AWS Credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          # Dynamically constructing the ARN to obfuscate the Account ID
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/rr-dev-github-backend-role
           aws-region: ${{ env.AWS_REGION }}
+          
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
+        
       - name: Build and Push Backend
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: ritual-roast-backend # Ensure this matches your v1-bootstrap ECR name
+          ECR_REPOSITORY: rr-dev-backend
           IMAGE_TAG: ${{ github.sha }}
         working-directory: ./apps/v1-backend-flask
         run: |
