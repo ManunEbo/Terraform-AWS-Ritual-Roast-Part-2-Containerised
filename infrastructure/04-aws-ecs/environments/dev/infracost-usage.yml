@@ -1,0 +1,12 @@
+version: 0.1
+resource_usage:
+  module.alb.aws_lb.public:
+    processed_bytes_gb: 1000
+    new_connections: 50
+    active_connections: 50
+
+  module.endpoints.aws_vpc_endpoint.ecr_api:
+    monthly_data_processed_gb: 500
+
+  module.rds.aws_db_instance.rr_database:
+    additional_backup_storage_gb: 100
