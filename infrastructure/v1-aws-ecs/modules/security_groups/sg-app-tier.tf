@@ -7,7 +7,7 @@ resource "aws_security_group" "rr_backend" {
   vpc_id      = var.vpc_id
 
   tags = merge(var.common_tags, {
-    Name = "rr-${var.vpc_name}-backend-sg"
+    Name = "rr-${var.environment}-backend-sg"
   })
 }
 

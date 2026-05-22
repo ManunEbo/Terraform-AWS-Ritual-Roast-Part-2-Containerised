@@ -14,7 +14,7 @@ resource "aws_security_group" "rr_frontend" {
   vpc_id      = var.vpc_id
 
   tags = merge(var.common_tags, {
-    Name = "rr-${var.vpc_name}-frontend-sg"
+    Name = "rr-${var.environment}-frontend-sg"
   })
 }
 
