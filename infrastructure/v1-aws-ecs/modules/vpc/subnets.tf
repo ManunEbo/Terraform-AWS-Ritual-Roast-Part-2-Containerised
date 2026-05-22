@@ -1,6 +1,6 @@
 resource "aws_subnet" "public" {
   count                   = length(var.public_subnet_list)
-  vpc_id                  = aws_vpc.main.id
+  vpc_id                  = aws_vpc.rr_vpc.id
   cidr_block              = var.public_subnet_list[count.index].cidr
   availability_zone       = var.public_subnet_list[count.index].az
   map_public_ip_on_launch = true
@@ -11,7 +11,7 @@ resource "aws_subnet" "public" {
 
 resource "aws_subnet" "web" {
   count             = length(var.web_subnet_list)
-  vpc_id            = aws_vpc.main.id
+  vpc_id            = aws_vpc.rr_vpc.id
   cidr_block        = var.web_subnet_list[count.index].cidr
   availability_zone = var.web_subnet_list[count.index].az
   tags = merge(var.common_tags, {
@@ -22,7 +22,7 @@ resource "aws_subnet" "web" {
 
 resource "aws_subnet" "app" {
   count             = length(var.app_subnet_list)
-  vpc_id            = aws_vpc.main.id
+  vpc_id            = aws_vpc.rr_vpc.id
   cidr_block        = var.app_subnet_list[count.index].cidr
   availability_zone = var.app_subnet_list[count.index].az
   tags = merge(var.common_tags, {
@@ -32,7 +32,7 @@ resource "aws_subnet" "app" {
 
 resource "aws_subnet" "database" {
   count             = length(var.database_subnet_list)
-  vpc_id            = aws_vpc.main.id
+  vpc_id            = aws_vpc.rr_vpc.id
   cidr_block        = var.database_subnet_list[count.index].cidr
   availability_zone = var.database_subnet_list[count.index].az
   tags = merge(var.common_tags, {

@@ -2,7 +2,7 @@
 # This gives access to .id, .cidr_block, .main_route_table_id, etc.
 output "vpc" {
   description = "The entire VPC resource object"
-  value       = aws_vpc.main
+  value       = aws_vpc.rr_vpc
 }
 
 # --- Subnet Objects (Lists of Objects) ---

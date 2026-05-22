@@ -1,6 +1,6 @@
 # Public route
 resource "aws_route_table" "public" {
-  vpc_id = aws_vpc.main.id
+  vpc_id = aws_vpc.rr_vpc.id
   tags = merge(var.common_tags, {
     Name = "${var.vpc_name}-public-rt"
   })
@@ -15,7 +15,7 @@ resource "aws_route" "public_internet_access" {
 
 # Private route table (No Internet Access)
 resource "aws_route_table" "private" {
-  vpc_id = aws_vpc.main.id
+  vpc_id = aws_vpc.rr_vpc.id
   tags = merge(var.common_tags, {
     Name = "${var.vpc_name}-private-rt"
   })
