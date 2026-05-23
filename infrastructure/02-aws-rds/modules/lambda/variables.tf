@@ -6,10 +6,6 @@ variable "common_tags" {
   type = map(string)
 }
 
-variable "s3_bucket" {
-  type = string
-}
-
 variable "lambda_role_arn" {
   type = string
 }

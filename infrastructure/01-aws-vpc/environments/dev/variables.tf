@@ -46,6 +46,14 @@ variable "database_subnet_list" {
   }))
 }
 
+variable "k8s_subnet_list" {
+  type = list(object({
+    subnet_name = string
+    cidr        = string
+    az          = string
+  }))
+}
+
 variable "environment" {
   type    = string
   default = "dev"

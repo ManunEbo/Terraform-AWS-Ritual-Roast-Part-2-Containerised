@@ -24,15 +24,16 @@ resource "aws_security_group" "rr_database" {
 # Ingress Rules (MySQL Port 3306)
 #--------------------------------------------------------------
 
-resource "aws_security_group_rule" "rr_db_ingress_from_backend" {
-  type                     = "ingress"
-  description              = "RR: Backend containers access to MySQL"
-  from_port                = 3306
-  to_port                  = 3306
-  protocol                 = "tcp"
-  security_group_id        = aws_security_group.rr_database.id
-  source_security_group_id = aws_security_group.rr_backend.id # Referenced from sg-app-tier.tf
-}
+# This security group rule will be attached in ECS
+# resource "aws_security_group_rule" "rr_db_ingress_from_backend" {
+#   type                     = "ingress"
+#   description              = "RR: Backend containers access to MySQL"
+#   from_port                = 3306
+#   to_port                  = 3306
+#   protocol                 = "tcp"
+#   security_group_id        = aws_security_group.rr_database.id
+#   source_security_group_id = aws_security_group.rr_backend.id # Referenced from sg-app-tier.tf
+# }
 
 resource "aws_security_group_rule" "rr_db_ingress_from_lambda" {
   type                     = "ingress"

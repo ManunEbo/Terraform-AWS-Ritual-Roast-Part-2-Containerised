@@ -35,7 +35,17 @@ variable "database_subnet_list" {
   }))
 }
 
+
+variable "k8s_subnet_list" {
+  type = list(object({
+    subnet_name = string
+    cidr        = string
+    az          = string
+  }))
+}
+
 variable "common_tags" {
   description = "A map of common tags to apply to all resources"
   type        = map(string)
 }
+

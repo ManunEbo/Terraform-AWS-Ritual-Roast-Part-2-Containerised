@@ -1,7 +1,3 @@
 #--------------------------------------------------------------
-# 1. The Public Application URL (The most important output!)
+# 1. The 
 #--------------------------------------------------------------
-output "ritual_roast_public_url" {
-  description = "The DNS Name of the Public ALB to access the Next.js frontend."
-  value       = "http://${module.alb.public_alb_dns_name}"
-}

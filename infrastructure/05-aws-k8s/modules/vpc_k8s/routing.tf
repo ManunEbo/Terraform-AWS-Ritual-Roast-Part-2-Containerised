@@ -1,12 +1,3 @@
-# 1. Create a dedicated Route Table for K8s
-resource "aws_route_table" "rr_k8s_private_rt" {
-    vpc_id = var.vpc_id
-
-    tags = merge(var.common_tags, {
-        Name = "rr-${var.environment}-k8s-private-rt"
-    })
-}
-
 # 2. Route outbound traffic to the V1 NAT Gateway
 resource "aws_route" "rr_k8s_nat_route" {
     route_table_id = aws_route_table.rr_k8s_private_rt.id

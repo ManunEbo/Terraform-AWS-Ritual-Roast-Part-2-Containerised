@@ -16,6 +16,7 @@ module "vpc" {
   web_subnet_list      = var.web_subnet_list
   app_subnet_list      = var.app_subnet_list
   database_subnet_list = var.database_subnet_list
+  k8s_subnet_list = var.k8s_subnet_list
 }
 
 # --- 2. Consumer (Security groups: Creates the firewalls) ---
