@@ -17,7 +17,7 @@ resource "aws_iam_role" "rr_lambda_secrets_role" {
       Effect = "Allow"
       Sid    = ""
     }]
-  }) # <-- FIXED: Closed the jsonencode early so tags are at the resource level!
+  })
 
   tags = merge(var.common_tags, {
     Name = "rr-${var.environment}-lambda-secrets-role"

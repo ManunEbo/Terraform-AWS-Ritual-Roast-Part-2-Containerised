@@ -19,3 +19,12 @@ locals {
     Region        = local.Region
   }
 }
+
+# Retrieving database subnet IDs
+locals {
+  db_subnet_ids = {
+    DataSubnet_2a = data.aws_subnet.DataSubnet_2a.id
+    DataSubnet_2b = data.aws_subnet.DataSubnet_2b.id
+    DataSubnet_2c = data.aws_subnet.DataSubnet_2c.id
+  }
+}

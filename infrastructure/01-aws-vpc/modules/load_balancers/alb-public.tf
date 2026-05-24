@@ -1,19 +1,19 @@
 #--- Public Load Balancer ---
 # This ALB handles the "Front Door" of your application
-resource "aws_lb" "public" {
-  name               = "${var.environment}-public-alb"
+resource "aws_lb" "rr_public" {
+  name               = "rr-${var.environment}-public-alb"
   internal           = false
   load_balancer_type = "application"
   security_groups    = [var.public_alb_sg_id]
   subnets            = var.public_subnet_ids
 
   tags = merge(var.common_tags, {
-    Name = "${var.vpc_name}-public-alb"
+    Name = "rr-${var.vpc_name}-public-alb"
   })
 }
 
 #--- Target Group for Frontend ---
-resource "aws_lb_target_group" "frontend" {
+resource "aws_lb_target_group" "rr_frontend" {
   name        = "${var.environment}-frontend-tg"
   port        = 3000
   protocol    = "HTTP" # Why is this not HTTPS, is it because we need an ssl certificate
@@ -39,6 +39,6 @@ resource "aws_lb_listener" "public_http" {
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.frontend.arn
+    target_group_arn = aws_lb_target_group.rr_frontend.arn
   }
 }

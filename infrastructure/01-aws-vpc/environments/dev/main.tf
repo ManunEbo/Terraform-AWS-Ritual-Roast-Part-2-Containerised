@@ -122,21 +122,3 @@ module "lambda" {
   lambda_sg_id        = module.security_groups.lambda_sg.id
 }
 
-# --- 8. Consumer (Database) ---
-module "rds" {
-  source = "../../modules/rds"
-
-  environment = var.environment
-  common_tags = local.common_tags
-
-  # Pulling networking and security from the VPC and SG modules
-  database_subnet_ids = module.vpc.database_subnets[*].id
-  database_sg_id      = module.security_groups.database_sg.id
-
-  # Credentials passed in from your terminal or secrets file at deploy time
-  db_username = var.db_username
-  db_password = var.db_password
-
-  # The Lambda rotation function ARN exported from the lambda module
-  rotation_lambda_arn = module.lambda.lambda_function_arn
-}

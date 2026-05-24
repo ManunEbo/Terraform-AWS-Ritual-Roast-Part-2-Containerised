@@ -1,24 +1,4 @@
-# --- 1. The Producer (Creates the Network) ---
-module "vpc" {
-  source      = "../../modules/vpc" # Adjusted path to reach modules from environments/dev/
-  common_tags = local.common_tags
-
-  # Project Metadata
-  vpc_name    = var.vpc_name
-  environment = var.environment
-  aws_region  = var.aws_region
-
-  # Networking CIDR
-  vpc_cidr = var.vpc_cidr
-
-  # Passing the Lists of Objects (The subnets)
-  public_subnet_list   = var.public_subnet_list
-  web_subnet_list      = var.web_subnet_list
-  app_subnet_list      = var.app_subnet_list
-  database_subnet_list = var.database_subnet_list
-}
-
-# --- 2. Consumer (Security groups: Creates the firewalls) ---
+# --- 1. Security groups: Creates the firewalls
 module "security_groups" {
   source      = "../../modules/security_groups"
   common_tags = local.common_tags

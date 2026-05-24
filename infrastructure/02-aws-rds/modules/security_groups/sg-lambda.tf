@@ -28,12 +28,13 @@ resource "aws_security_group_rule" "rr_lambda_egress_to_db" {
 }
 
 # Egress: Lambda -> VPC Endpoints (HTTPS Port 443)
-resource "aws_security_group_rule" "rr_lambda_egress_to_endpoints" {
-  type                     = "egress"
-  description              = "RR: Allow Lambda to reach Secrets Manager via VPC Endpoint"
-  from_port                = 443
-  to_port                  = 443
-  protocol                 = "tcp"
-  security_group_id        = aws_security_group.rr_lambda.id
-  source_security_group_id = aws_security_group.rr_endpoints.id # Referenced from sg-endpoints.tf
-}
+# This security group rule belongs in ECS
+# resource "aws_security_group_rule" "rr_lambda_egress_to_endpoints" {
+#   type                     = "egress"
+#   description              = "RR: Allow Lambda to reach Secrets Manager via VPC Endpoint"
+#   from_port                = 443
+#   to_port                  = 443
+#   protocol                 = "tcp"
+#   security_group_id        = aws_security_group.rr_lambda.id
+#   source_security_group_id = aws_security_group.rr_endpoints.id # Referenced from sg-endpoints.tf
+# }

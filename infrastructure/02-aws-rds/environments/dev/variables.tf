@@ -15,17 +15,15 @@ variable "vpc_cidr" {
 }
 
 
-variable "database_subnet_list" {
-  type = list(object({
-    subnet_name = string
-    cidr        = string
-    az          = string
-  }))
-}
-
 variable "environment" {
   type    = string
   default = "dev"
+}
+
+# Retrieve database subnet IDs
+variable "database_subnet_ids" {
+  description = "List of database subnets IDs"
+  type = list(string)
 }
 
 #--- Database credentials (sensitive) ---
