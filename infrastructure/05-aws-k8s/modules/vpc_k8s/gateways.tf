@@ -13,7 +13,7 @@ resource "aws_nat_gateway" "rr_nat_gateway_k8s" {
 
     # Assign the EIP and the public subnet
     allocation_id = aws_eip.rr_nat_gateway_eip_k8s.id
-    subnet_id = var.rr_v1_public_subnet_1_id # <------- must import this subnet id from v1
+    subnet_id = var.rr_public_subnet_1_id
 
     tags = merge(var.common_tags, {
         Name = "rr-${var.environment}-nat-gateway-k8s"

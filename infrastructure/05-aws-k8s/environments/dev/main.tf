@@ -6,13 +6,13 @@ module "vpc_k8s" {
   source = "../../modules/vpc_k8s"
 
   environment              = var.environment
-  vpc_id                   = data.aws_vpc.rr_v1_vpc.id
-  rr_v1_igw                = data.aws_internet_gateway.rr_v1_igw.id
-  rr_v1_public_subnet_1_id = data.aws_subnet.rr_v1_public_subnet_1.id
+  vpc_id                   = data.aws_vpc.rr_vpc.id
+  vpc_name = data.aws_vpc.rr_vpc.vpc_name
+  rr_igw                = data.aws_internet_gateway.rr_igw
+  rr_public_subnet_1_id = data.aws_subnet.rr_public_subnet_1.id
+  rr_k8s_subnets_ids = data.aws_subnets.rr_k8s_subnets.ids
   common_tags              = local.common_tags
-  
-  # Pass the list variable we just created in dev/terraform.tfvars
-  k8s_subnet_list          = var.k8s_subnet_list
+  rr_k8s_private_rt_id = data.aws_route_table.rr_k8s_private_rt.id
 }
 
 module "security_k8s" {
