@@ -1,21 +1,13 @@
+variable "vpc_id" {
+  type = string
+}
+
 variable "environment" {
   type = string
 }
 
 variable "common_tags" {
   type = map(string)
-}
-
-variable "aws_region" {
-  type = string
-}
-
-variable "aws_account_id" {
-  type = string
-}
-
-variable "vpc_id" {
-  type = string
 }
 
 variable "ecs_execution_role_arn" {
@@ -66,7 +58,7 @@ variable "internal_alb_dns_name" {
   type        = string
 }
 
-variable "db_secret_arn" {
-  description = "The ARN of the Secrets Manager secret for the backend database"
-  type        = string
-}
+# variable "db_secret_arn" {
+#   description = "The ARN of the Secrets Manager secret for the backend database"
+#   type        = string
+# }

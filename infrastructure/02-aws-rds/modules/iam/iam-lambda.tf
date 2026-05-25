@@ -51,7 +51,7 @@ resource "aws_iam_policy" "rr_lambda_secrets_custom_policy" {
         "secretsmanager:UpdateSecretVersionStage" #  Permits shifting the "AWSCURRENT" label
       ]
       # FIXED: Capitalized 'Resource'
-      Resource = "arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:rr-${var.environment}-db-secret-*"
+      Resource = "arn:aws:secretsmanager:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:secret:rr-${var.environment}-db-secret-*"
       },
       {
         # Allow lambda to write metrics to CloudWatch Metrics

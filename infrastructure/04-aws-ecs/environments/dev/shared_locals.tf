@@ -6,7 +6,7 @@ locals {
   Project_owner  = "Elvy ManunEbo"
   Terraform      = "true"
   Environment    = var.environment
-  Region         = var.aws_region
+  Region         = data.aws_region.current.name
   aws_account_id = data.aws_caller_identity.current.account_id
   s3_bucket      = "rr-capstone-5b160b287a99a6d9"
 }

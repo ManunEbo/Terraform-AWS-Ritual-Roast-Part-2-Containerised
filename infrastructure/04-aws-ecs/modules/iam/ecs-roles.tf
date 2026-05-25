@@ -15,6 +15,10 @@ resource "aws_iam_role" "rr_ecs_execution_role" {
       Principal = { Service = "ecs-tasks.amazonaws.com" }
     }]
   })
+
+  tags = merge(var.common_tags, {
+    Name = "rr-${var.environment}-ecs-execution-role"
+  })
 }
 
 # Standard AWS Managed Policy for ECS Execution

@@ -61,5 +61,5 @@ resource "aws_security_group_rule" "rr_frontend_egress_to_s3" {
   to_port           = 443
   protocol          = "tcp"
   security_group_id = aws_security_group.rr_frontend.id
-  prefix_list_ids   = [data.aws_prefix_list.s3.id]
+  prefix_list_ids   = [data.aws_prefix_list.s3.id] # <----- Need to recreate this data source
 }

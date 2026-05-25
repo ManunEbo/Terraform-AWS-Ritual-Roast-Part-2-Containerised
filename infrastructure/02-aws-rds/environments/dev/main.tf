@@ -15,8 +15,6 @@ module "security_groups" {
 module "iam" {
   source         = "../../modules/iam"
   environment    = var.environment
-  aws_account_id = data.aws_caller_identity.current.account_id # <--- verify that this is the most efficient code for this task
-  aws_region     = data.aws_caller_identity.current.aws_region # <--- verify that this is the most efficient code for this task
   vpc_id         = data.aws_vpc.rr_v1_vpc.id
   common_tags    = local.common_tags
 }
@@ -27,7 +25,7 @@ module "lambda" {
   environment         = var.environment
   common_tags         = local.common_tags
   lambda_role_arn     = module.iam.lambda_role_arn
-  database_subnet_ids = var.database_subnet_ids # <--- verify that this is the most efficient code for this task
+  database_subnet_ids = data.aws_subnets.rr_db_subnets.ids
   lambda_sg_id        = module.security_groups.lambda_sg.id
 }
 
@@ -39,7 +37,7 @@ module "rds" {
   common_tags = local.common_tags
 
   # Pulling networking and security from the VPC and SG modules
-  database_subnet_ids = var.database_subnet_ids # <--- verify that this is the most efficient code for this task
+  database_subnet_ids = data.aws_subnets.rr_db_subnets.ids
   database_sg_id      = module.security_groups.database_sg.id
 
   # Credentials passed in from your terminal or secrets file at deploy time

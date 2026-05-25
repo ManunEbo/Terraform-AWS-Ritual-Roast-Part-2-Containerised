@@ -7,7 +7,7 @@
 # (App and Lambda) can talk to the Secrets Manager, ECS, and ECR APIs.
 # It sits on the "receiving" end of all those internal HTTPS calls.
 
-resource "aws_security_group" "rr_endpoints" {
+resource "aws_security_group" "rr_endpoints_sg" {
   name_prefix = "rr-${var.environment}-vpc-endpoints-sg-"
   description = "RR: Receiving HTTPS traffic for VPC Interface Endpoints"
   vpc_id      = var.vpc_id
@@ -28,7 +28,7 @@ resource "aws_security_group_rule" "rr_endpoints_ingress_from_backend" {
   from_port                = 443
   to_port                  = 443
   protocol                 = "tcp"
-  security_group_id        = aws_security_group.rr_endpoints.id
+  security_group_id        = aws_security_group.rr_endpoints_sg.id
   source_security_group_id = aws_security_group.rr_backend.id
 }
 
@@ -39,8 +39,8 @@ resource "aws_security_group_rule" "rr_endpoints_ingress_from_lambda" {
   from_port                = 443
   to_port                  = 443
   protocol                 = "tcp"
-  security_group_id        = aws_security_group.rr_endpoints.id
-  source_security_group_id = aws_security_group.rr_lambda.id
+  security_group_id        = aws_security_group.rr_endpoints_sg.id
+  source_security_group_id = aws_security_group.rr_lambda.id # <----- This needs to be retrieved via data source
 }
 
 # Rule 3: Identity - Frontend Tier
@@ -50,6 +50,6 @@ resource "aws_security_group_rule" "rr_endpoints_ingress_from_frontend" {
   from_port                = 443
   to_port                  = 443
   protocol                 = "tcp"
-  security_group_id        = aws_security_group.rr_endpoints.id
+  security_group_id        = aws_security_group.rr_endpoints_sg.id
   source_security_group_id = aws_security_group.rr_frontend.id
 }

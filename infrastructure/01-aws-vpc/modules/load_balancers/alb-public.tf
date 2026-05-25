@@ -14,7 +14,7 @@ resource "aws_lb" "rr_public" {
 
 #--- Target Group for Frontend ---
 resource "aws_lb_target_group" "rr_frontend" {
-  name        = "${var.environment}-frontend-tg"
+  name        = "rr-${var.environment}-frontend-tg"
   port        = 3000
   protocol    = "HTTP" # Why is this not HTTPS, is it because we need an ssl certificate
   vpc_id      = var.vpc_id
@@ -29,6 +29,10 @@ resource "aws_lb_target_group" "rr_frontend" {
     healthy_threshold   = 2
     unhealthy_threshold = 2
   }
+
+  tags = merge(var.common_tags, {
+    Name = "rr-${var.environment}-frontend-tg"
+  })
 }
 
 #--- Listener for HTTP ---

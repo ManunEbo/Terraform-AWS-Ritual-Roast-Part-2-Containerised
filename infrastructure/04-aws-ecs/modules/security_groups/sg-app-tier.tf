@@ -28,7 +28,7 @@ resource "aws_security_group_rule" "backend_to_db" {
   to_port                  = 3306
   protocol                 = "tcp"
   security_group_id        = aws_security_group.rr_backend.id
-  source_security_group_id = aws_security_group.rr_database.id
+  source_security_group_id = aws_security_group.rr_database.id # <----- Retrieve this using data source
 }
 
 # Egress: Backend -> Interface Endpoints (ECR/Secrets)
@@ -51,5 +51,5 @@ resource "aws_security_group_rule" "rr_backend_egress_to_s3" {
   to_port           = 443
   protocol          = "tcp"
   security_group_id = aws_security_group.rr_backend.id
-  prefix_list_ids   = [data.aws_prefix_list.s3.id]
+  prefix_list_ids   = [data.aws_prefix_list.s3.id] # <------ Need to re-create this s3 data source
 }
