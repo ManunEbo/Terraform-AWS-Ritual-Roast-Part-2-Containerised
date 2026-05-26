@@ -30,6 +30,7 @@ resource "aws_security_group" "rr_k8s_worker_sg" {
 
 # Rule A: Only allow authorized K3s worker nodes to talk to the API Server
 resource "aws_security_group_rule" "rr_cp_ingress_api_from_workers" {
+    description = "K8s API Server access Only from K3s worker nodes"
     type = "ingress"
     from_port = 6443
     to_port = 6443
@@ -38,12 +39,12 @@ resource "aws_security_group_rule" "rr_cp_ingress_api_from_workers" {
 
     # TARGETED: Only instances with the worker security group can enter
     source_security_group_id = aws_security_group.rr_k8s_worker_sg.id
-    description = "K8s API Server access Only from K3s worker nodes"
 }
 
 # Rule B (Optional/self): Allow the Control plane to talk to itself over 6443
 # (Required for local cluster loopback operations and multi-master setups)
 resource "aws_security_group_rule" "rr_cp_ingress_api_self" {
+    description = "Allow control plane local loopback API access"
     type = "ingress"
     from_port = 6443
     to_port = 6443
@@ -51,63 +52,85 @@ resource "aws_security_group_rule" "rr_cp_ingress_api_self" {
     security_group_id = aws_security_group.rr_k8s_control_plane_sg.id
 
     source_security_group_id = aws_security_group.rr_k8s_control_plane_sg.id
-    description = "Allow control plane local loopback API access"
 }
 
 # Rule: Control plane requires outbound internet to fetch images/updates
 resource "aws_security_group_rule" "rr_cp_egress_all" {
+    description = "Allow all outbound"
     type = "egress"
     from_port = 0
     to_port = 0
     protocol = "-1"
     cidr_blocks = ["0.0.0.0/0"]
-    security_group_id = aws_security_group.rr_k8s_control_plane_sg.id
-    description = "Allow all outbound"
+    security_group_id = aws_security_group.rr_k8s_control_plane_sg.id    
 }
 
 # ==========================================
-# 3. Worker Node Rules
+# 3. Worker Node Rules (Zero-Trust Ingress)
 # ==========================================
 
-# Group the V1 authorized sender SGs into a map
-locals {
-    istio_authorized_sgs = {
-        "ALB" = var.alb_sg_id
-        "Web" = var.web_sg_id
-        "App" = var.app_sg_id
-    }
-}
-
-# Rule: Allow control plane to communicate with workers (Logs, Exec, Metrics)
+# Allow control plance to communicate with workers (Logs, Exec, Metrics)
 resource "aws_security_group_rule" "rr_worker_ingress_from_cp" {
+    description = "Allow traffic from Control Plane"
     type = "ingress"
     from_port = 0
     to_port = 0
     protocol = "-1"
     source_security_group_id = aws_security_group.rr_k8s_control_plane_sg.id
     security_group_id = aws_security_group.rr_k8s_worker_sg.id
-    description = "Allow traffic from control plane"
 }
 
-# Rule: Allow workers to communicate with each other (Pod-to-Pod overlay network)
+# Allow Workers to communicate with each other (Pod-to-pod overlay network)
 resource "aws_security_group_rule" "rr_worker_ingress_self" {
+    description = "Allow inter-node Worker traffic"
     type = "ingress"
     from_port = 0
     to_port = 0
     protocol = "-1"
     source_security_group_id = aws_security_group.rr_k8s_worker_sg.id
     security_group_id = aws_security_group.rr_k8s_worker_sg.id
-    description = "Allow inter-node worker traffic"
 }
 
-# Rule: Istio HTTP Gateway (Open to VPC so V1 ECS/ALB) can route canary traffic)
-resource "aws_security_group_rule" "rr_worker_ingress_http" {
+# Istio HTTP Gateway - LOCKED exclusively to the Public ALB
+resource "aws_security_group_rule" "rr_worker_ingress_http_alb" {
+    description = "HTTP Ingress strickly from V1 Public ALB"
     type = "ingress"
     from_port = 80
     to_port = 80
     protocol = "tcp"
-    cidr_blocks = ["10.16.0.0/16"]
-    security_group_id = aws_security_group.rr_k8s_worker_sg
-    description = "HTTP for Istio Ingress Gateway from VPC"
+    source_security_group_id = var.alb_sg_id
+    security_group_id = aws_security_group.rr_k8s_worker_sg.id
 }
 
+# Istio HTTPS Gateway - LOCKED exclusively to the Public ALB
+resource "aws_security_group_rule" "rr_worker_ingress_https_alb" {
+    description = "HTTPS Ingress stricly from public ALB"
+    type = "ingress"
+    from_port = 443
+    to_port = 443
+    protocol = "tcp"
+    source_security_group_id = var.alb_sg_id
+    security_group_id = aws_security_group.rr_k8s_worker_sg
+}
+
+# Workers require outbound internet to fetch GHCR images and route NAT traffic
+resource "aws_security_group_rule" "rr_worker_egress_all" {
+    description = "Allow all outbound"
+    type = "egress"
+    from_port = 0
+    to_port = 0
+    protocol = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+    security_group_id = aws_security_group.rr_k8s_worker_sg
+}
+
+# Inject an egress rule into the public ALB so it can route traffic to K8s Workers
+resource "aws_security_group_rule" "rr_alb_egress_to_k8s_http" {
+    description = "Allow public ALB to route traffic to K3s worker Nodes"
+    type = "egress"
+    from_port = 80
+    to_port = 80
+    protocol = "tcp"
+    source_security_group_id = aws_security_group.rr_k8s_worker_sg.id
+    security_group_id = var.alb_sg_id
+}

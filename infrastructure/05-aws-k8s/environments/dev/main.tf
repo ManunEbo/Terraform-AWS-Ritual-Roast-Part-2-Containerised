@@ -19,14 +19,14 @@ module "security_k8s" {
   source = "../../modules/security_k8s"
 
   environment = var.environment
-  vpc_id      = data.aws_vpc.rr_v1_vpc.id
-  rds_sg_id   = data.aws_security_group.rr_v1_rds_sg.id
+  vpc_id      = data.aws_vpc.rr_vpc.id
+  rds_sg_id   = data.aws_security_group.rr_rds_sg.id
   common_tags = local.common_tags
   
   # Passing the V1 workload SGs  for zero-trust Istio ingress
-  alb_sg_id =  data.aws_security_group.rr_v1_alb_sg.id
-  web_sg_id = data.aws_security_group.rr_v1_web_sg.id
-  app_sg_id = data.aws_security_group.rr_v1_app_sg.id
+  alb_sg_id =  data.aws_security_group.rr_alb_sg.id
+  web_sg_id = data.aws_security_group.rr_web_sg.id
+  app_sg_id = data.aws_security_group.rr_app_sg.id
 }
 
 module "iam_k8s" {
@@ -40,7 +40,7 @@ module "compute_k8s" {
   source = "../../modules/compute_k8s"
 
   environment = var.environment
-  vpc_id      = data.aws_vpc.rr_v1_vpc.id
+  vpc_id      = data.aws_vpc.rr_vpc.id
   subnet_ids  = module.vpc_k8s.private_subnet_ids
   
   control_plane_sg_id   = module.security_k8s.control_plane_sg_id
