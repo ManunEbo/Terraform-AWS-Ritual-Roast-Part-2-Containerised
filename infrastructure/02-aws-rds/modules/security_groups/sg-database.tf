@@ -1,14 +1,15 @@
 #--------------------------------------------------------------
-#               rr-Database-SG: The Final Tier
+# rr-Database-SG: Base Structural Identity Shell
 #--------------------------------------------------------------
 
 # The Database SG is the most restricted layer. It operates on 
 # a "Zero Trust" basis, only allowing ingress from the Backend 
 # and the rotation Lambda.
 
+
 resource "aws_security_group" "rr_database" {
   name_prefix = "rr-${var.environment}-database-sg-"
-  description = "RR: Allow MySQL 3306 from Backend-SG and Lambda"
+  description = "RR: Foundational security identity boundary for database assets"
   vpc_id      = var.vpc_id
 
   lifecycle {

@@ -35,11 +35,7 @@ resource "aws_lambda_function" "rr_secret_rotation_function" {
   layers = [aws_lambda_layer_version.rr_db_layer.arn]
 
   vpc_config {
-    subnet_ids = [
-      var.database_subnet_ids[0],
-      var.database_subnet_ids[1],
-      var.database_subnet_ids[2],
-    ]
+    subnet_ids         = var.database_subnet_ids
     security_group_ids = [var.lambda_sg_id]
   }
 

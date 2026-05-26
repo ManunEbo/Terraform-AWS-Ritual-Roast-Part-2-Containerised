@@ -1,8 +1,6 @@
-
 #------------------------------------------------------
 # Public route table
 #------------------------------------------------------
-
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.rr_vpc.id
   tags = merge(var.common_tags, {
@@ -10,7 +8,7 @@ resource "aws_route_table" "public" {
   })
 }
 
-# Stand alone route resource for the public route table
+# Standalone route resource for the public route table
 resource "aws_route" "public_internet_access" {
   route_table_id         = aws_route_table.public.id
   destination_cidr_block = "0.0.0.0/0"
@@ -18,7 +16,7 @@ resource "aws_route" "public_internet_access" {
 }
 
 #------------------------------------------------------
-# Private route table (No Internet Access)
+# Private route table (No Direct Internet Access)
 #------------------------------------------------------
 resource "aws_route_table" "private" {
   vpc_id = aws_vpc.rr_vpc.id
@@ -27,7 +25,7 @@ resource "aws_route_table" "private" {
   })
 }
 
-# Associate public subnets to the public route
+# Associate public subnets to the public route table
 resource "aws_route_table_association" "public_assoc" {
   count          = length(aws_subnet.public)
   subnet_id      = aws_subnet.public[count.index].id
@@ -41,9 +39,7 @@ resource "aws_route_table_association" "app_assoc" {
   route_table_id = aws_route_table.private.id
 }
 
-# Asssotiate the Web tier with the private subnet
-# Note even though these handle "Web" traffic, they sit behind the ALB
-# and don't need a direct route to the IGW.
+# Associate the Web tier with the private route table
 resource "aws_route_table_association" "web_assoc" {
   count          = length(aws_subnet.web)
   subnet_id      = aws_subnet.web[count.index].id
@@ -51,7 +47,6 @@ resource "aws_route_table_association" "web_assoc" {
 }
 
 # Associate the database tier subnets with the private route table
-# This is the most sensitive tier.
 resource "aws_route_table_association" "database_assoc" {
   count          = length(aws_subnet.database)
   subnet_id      = aws_subnet.database[count.index].id
@@ -64,14 +59,14 @@ resource "aws_route_table_association" "database_assoc" {
 
 # 1. Create a dedicated Route Table for K8s
 resource "aws_route_table" "k8s_rt" {
-    vpc_id = aws_vpc.rr_vpc.id
+  vpc_id = aws_vpc.rr_vpc.id
 
-    tags = merge(var.common_tags, {
-        Name = "rr-${var.environment}-${var.vpc_name}-k8s-private-rt"
-    })
+  tags = merge(var.common_tags, {
+    Name = "rr-${var.environment}-${var.vpc_name}-k8s-private-rt"
+  })
 }
 
-# Associate the K8s tier subnets with the rr_k8s_private_rt route table
+# Associate the K8s tier subnets with the k8s_rt route table
 resource "aws_route_table_association" "k8s_assoc" {
   count          = length(aws_subnet.k8s)
   subnet_id      = aws_subnet.k8s[count.index].id

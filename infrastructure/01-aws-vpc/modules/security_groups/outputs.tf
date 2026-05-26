@@ -1,34 +1,34 @@
-output "alb_sg" {
-  description = "The Public Load Balancer Security Group Object"
-  value       = aws_security_group.rr_alb
+output "alb_sg_id" {
+  description = "The Public edge load balancer security identifier"
+  value       = aws_security_group.rr_alb.id
 }
 
-output "internal_alb_sg" {
-  description = "The internal loadbalancer security group object"
-  value       = aws_security_group.rr_internal_alb
+output "internal_alb_sg_id" {
+  description = "The internal web-to-app tier routing security identifier"
+  value       = aws_security_group.rr_internal_alb.id
 }
 
-output "frontend_sg" {
-  description = "The Frontend (Web Tier) Security Group object"
-  value       = aws_security_group.rr_frontend
+output "frontend_sg_id" {
+  description = "The Frontend tier runtime context identifier"
+  value       = aws_security_group.rr_frontend.id
 }
 
-output "backend_sg" {
-  description = "The Backend (App Tier) Security Group object"
-  value       = aws_security_group.rr_backend
+output "backend_sg_id" {
+  description = "The Core Application tier runtime context identifier"
+  value       = aws_security_group.rr_backend.id
 }
 
-output "database_sg" {
-  description = "The Database Security Group object"
-  value       = aws_security_group.rr_database
+output "database_sg_id" {
+  description = "The persistent storage platform access identifier shell"
+  value       = aws_security_group.rr_database.id
 }
 
-output "lambda_sg" {
-  description = "The Lambda Rotation Security Group object"
-  value       = aws_security_group.rr_lambda
+output "lambda_sg_id" {
+  description = "The automated data engine rotation runtime identity"
+  value       = aws_security_group.rr_lambda.id
 }
 
-output "endpoints_sg" {
-  description = "The VPC Endpoints Security Group object"
-  value       = aws_security_group.rr_endpoints
+output "endpoints_sg_id" {
+  description = "The private boundary identity for secure cloud service endpoints"
+  value       = aws_security_group.rr_endpoints.id
 }

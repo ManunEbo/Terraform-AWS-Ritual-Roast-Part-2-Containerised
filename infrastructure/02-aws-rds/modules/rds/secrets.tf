@@ -24,6 +24,12 @@ resource "aws_secretsmanager_secret_version" "rr_db_skeleton" {
     port     = 3306
     dbname   = "ritual_roast"
   })
+
+  lifecycle {
+    # THE FIX: We must blind Terraform to the skeleton 
+    # so it doesn't fight the Host Update or Lambda later.
+    ignore_changes = [secret_string]
+  }
 }
 
 #--------------------------------------------------------------

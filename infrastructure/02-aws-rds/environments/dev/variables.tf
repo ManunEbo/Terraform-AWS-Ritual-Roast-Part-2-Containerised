@@ -14,11 +14,6 @@ variable "environment" {
   default = "dev"
 }
 
-# Retrieve database subnet IDs
-variable "database_subnet_ids" {
-  description = "List of database subnets IDs"
-  type = list(string)
-}
 
 #--- Database credentials (sensitive) ---
 variable "db_username" {

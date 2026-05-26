@@ -1,39 +1,52 @@
-#--- VPC Object ---
-# This gives access to .id, .cidr_block, .main_route_table_id, etc.
-output "vpc" {
-  description = "The entire VPC resource object"
-  value       = aws_vpc.rr_vpc
+# --- 1. Core VPC Identifier ---
+output "vpc_id" {
+  description = "The ID of the provisioned primary VPC"
+  value       = aws_vpc.rr_vpc.id
 }
 
-# --- Subnet Objects (Lists of Objects) ---
-# Because we used 'count', these return a list of the full resource objects.
-output "public_subnets" {
-  description = "List of all public subnet objects"
-  value       = aws_subnet.public
+output "vpc_cidr_block" {
+  description = "The network CIDR range allocated to the VPC"
+  value       = aws_vpc.rr_vpc.cidr_block
 }
 
-output "web_subnets" {
-  description = "List of all web tier subnet objects"
-  value       = aws_subnet.web
+# --- 2. Subnet ID Arrays ---
+output "public_subnet_ids" {
+  description = "IDs of the public edge subnets"
+  value       = aws_subnet.public[*].id
 }
 
-output "app_subnets" {
-  description = "List of all app tier subnet objects"
-  value       = aws_subnet.app
+output "web_subnet_ids" {
+  description = "IDs of the isolated web tier subnets"
+  value       = aws_subnet.web[*].id
 }
 
-output "database_subnets" {
-  description = "List of all database tier subnet objects"
-  value       = aws_subnet.database
+output "app_subnet_ids" {
+  description = "IDs of the isolated application tier subnets"
+  value       = aws_subnet.app[*].id
 }
 
-# --- Gateway & Routing Objects ---
-output "internet_gateway" {
-  description = "The Internet Gateway object"
-  value       = aws_internet_gateway.main
+output "database_subnet_ids" {
+  description = "IDs of the strictly private persistence subnets"
+  value       = aws_subnet.database[*].id
 }
 
-output "private_route_table" {
-  description = "The private route table object"
-  value       = aws_route_table.private
+output "k8s_subnet_ids" {
+  description = "IDs of the dedicated service mesh computing subnets"
+  value       = aws_subnet.k8s[*].id
+}
+
+# --- 3. Gateway References ---
+output "internet_gateway_id" {
+  description = "The Core Internet Gateway identifier"
+  value       = aws_internet_gateway.main.id
+}
+
+output "private_route_table_id" {
+  description = "Identifier for the standalone private internal route table"
+  value       = aws_route_table.private.id
+}
+
+output "k8s_route_table_id" {
+  description = "Identifier for the standalone service mesh route table"
+  value       = aws_route_table.k8s_rt.id
 }
