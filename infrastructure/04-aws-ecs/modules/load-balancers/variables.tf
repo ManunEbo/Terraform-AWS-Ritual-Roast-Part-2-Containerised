@@ -33,3 +33,7 @@ variable "environment" {
 variable "common_tags" {
   type = map(string)
 }
+
+variable "gateway_listener_arn" {
+  type = string
+}

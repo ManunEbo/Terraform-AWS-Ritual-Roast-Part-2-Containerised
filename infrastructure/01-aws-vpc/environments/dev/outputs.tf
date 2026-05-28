@@ -18,11 +18,6 @@ output "database_subnet_ids" {
   value       = module.vpc.database_subnet_ids
 }
 
-output "public_alb_dns_name" {
-  description = "Public URL mapping for routing"
-  value       = module.alb.public_alb_dns_name
-}
-
 output "public_alb_sg_id" {
   description = "The public load balancer boundary security identity"
   value       = module.security_groups.alb_sg_id

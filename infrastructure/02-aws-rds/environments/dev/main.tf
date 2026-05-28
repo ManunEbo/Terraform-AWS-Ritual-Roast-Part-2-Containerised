@@ -3,7 +3,7 @@ module "security_groups" {
   source      = "../../modules/security_groups"
   common_tags = local.common_tags
   
-  aws_region  = data.aws_region.current.name 
+  aws_region  = data.aws_region.current.id 
   vpc_id      = data.aws_vpc.rr_vpc.id
   environment = var.environment
   vpc_name    = var.vpc_name 

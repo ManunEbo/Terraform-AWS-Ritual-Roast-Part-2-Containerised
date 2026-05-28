@@ -25,13 +25,3 @@ variable "db_password" {
   type      = string
   sensitive = true
 }
-
-#--- S3 Config ---
-variable "s3_bucket" {
-  type = string
-}
-
-variable "app_source_bucket" {
-  type    = string
-  default = "rr-capstone-5b160b287a99a6d9"
-}

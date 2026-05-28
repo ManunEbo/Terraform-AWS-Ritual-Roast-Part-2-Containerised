@@ -33,7 +33,7 @@ resource "aws_ecs_task_definition" "rr_frontend_task" {
   container_definitions = jsonencode([
     {
       name      = "rr-frontend-container-01"
-      image     = "${data.aws_Caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.name}.amazonaws.com/rr-${var.environment}-frontend:latest"
+      image     = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.id}.amazonaws.com/rr-${var.environment}-frontend:latest"
       essential = true
 
       # OS Unlocked: Using Fargate's native 20GB ephemeral storage
@@ -60,7 +60,7 @@ resource "aws_ecs_task_definition" "rr_frontend_task" {
         logDriver = "awslogs"
         options = {
           "awslogs-group"         = aws_cloudwatch_log_group.rr_frontend_logs.name
-          "awslogs-region"        = data.aws_region.name
+          "awslogs-region"        = data.aws_region.current.id
           "awslogs-stream-prefix" = "frontend"
         }
       }
@@ -86,7 +86,7 @@ resource "aws_ecs_task_definition" "rr_backend_task" {
   container_definitions = jsonencode([
     {
       name      = "rr-backend-container-01"
-      image     = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.name}.amazonaws.com/rr-${var.environment}-backend:latest"
+      image     = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.id}.amazonaws.com/rr-${var.environment}-backend:latest"
       essential = true
 
       # OS Unlocked: Allowing Gunicorn to write heartbeat files to /tmp securely
@@ -109,7 +109,7 @@ resource "aws_ecs_task_definition" "rr_backend_task" {
         },
         {
           name  = "AWS_REGION"
-          value = data.aws_region.current.name
+          value = data.aws_region.current.id
         }
       ]
 
@@ -117,7 +117,7 @@ resource "aws_ecs_task_definition" "rr_backend_task" {
         logDriver = "awslogs"
         options = {
           "awslogs-group"         = aws_cloudwatch_log_group.rr_backend_logs.name
-          "awslogs-region"        = data.aws_region.current.name
+          "awslogs-region"        = data.aws_region.current.id
           "awslogs-stream-prefix" = "backend"
         }
       }

@@ -15,7 +15,7 @@ locals {
 # ===============================================
 # DATA SOURCES: Fetching the Layer-1 Foundation
 # ===============================================
-data "aws_caller_identity" "current" {}
+# data "aws_caller_identity" "current" {}
 
 data "aws_region" "current" {}
 
@@ -28,6 +28,13 @@ data "aws_vpc" "rr_vpc" {
   }
 }
 
+# Fetching Public Networking for the ALB Module ---
+data "aws_subnets" "public_subnets" {
+  filter {
+    name   = "tag:Name"
+    values = ["PublicSubnet-*"]
+  }
+}
 
 # Retrieve Frontend subnets
 data "aws_subnets" "web_subnets" {
@@ -48,13 +55,28 @@ data "aws_subnets" "AppSubnets" {
     }
 }
 
-# Retrieve Frontend ALB Target Group
-data "aws_alb_target_group" "frontend_tgt" {
-    name = "rr-${var.environment}-frontend-tg"
-}
 
 data "aws_security_group" "public_alb_sg" {
   name = "rr-${var.environment}-alb-sg"
 }
 
 
+data "aws_secretsmanager_secret" "rr_db_secret" {
+  name = "rr-${var.environment}-db-secret"
+}
+
+
+
+# data "aws_security_group" "public_alb_sg" {
+#   # Grabbing the public shell SG from Layer 1
+#   name = "rr-${var.environment}-public-alb-sg" 
+# }
+
+data "aws_lb" "gateway_alb" {
+  name = "rr-${var.environment}-public-alb"
+}
+
+data "aws_lb_listener" "gateway_http_listener" {
+  load_balancer_arn = data.aws_lb.gateway_alb.arn
+  port              = 80
+}

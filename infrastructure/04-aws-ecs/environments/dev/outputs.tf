@@ -1,7 +1,6 @@
-#--------------------------------------------------------------
-# 1. The Public Application URL (The most important output!)
-#--------------------------------------------------------------
 output "ritual_roast_public_url" {
-  description = "The DNS Name of the Public ALB to access the Next.js frontend."
-  value       = "http://${module.alb.public_alb_dns_name}"
+  description = "The public URL to access the Ritual Roast Application"
+  # Pulling the DNS name directly from the Layer 1 Gateway data fetch!
+
+  value = "http://${data.aws_lb.gateway_alb.dns_name}"
 }

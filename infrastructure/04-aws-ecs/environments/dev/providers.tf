@@ -4,7 +4,7 @@ terraform {
   # Remote Backend: This saves the state file to s3 instead of the local disk
   backend "s3" {
     bucket       = "rr-capstone-5b160b287a99a6d9"
-    key          = "dev/tier1/state/terraform.tfstate"
+    key          = "dev/ecs/state/terraform.tfstate"
     region       = "eu-west-2"
     encrypt      = true
     use_lockfile = true

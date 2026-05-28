@@ -12,37 +12,55 @@ resource "aws_lb" "rr_public" {
   })
 }
 
-#--- Target Group for Frontend ---
-resource "aws_lb_target_group" "rr_frontend" {
-  name        = "rr-${var.environment}-frontend-tg"
-  port        = 3000
-  protocol    = "HTTP" # Why is this not HTTPS, is it because we need an ssl certificate
-  vpc_id      = var.vpc_id
-  target_type = "ip" # Required for Fargate
+# #--- Target Group for Frontend ---
+# resource "aws_lb_target_group" "rr_frontend" {
+#   name        = "rr-${var.environment}-frontend-tg"
+#   port        = 3000
+#   protocol    = "HTTP" # Why is this not HTTPS, is it because we need an ssl certificate
+#   vpc_id      = var.vpc_id
+#   target_type = "ip" # Required for Fargate
 
-  health_check {
-    enabled             = true
-    path                = "/"
-    port                = "3000"
-    interval            = 30
-    timeout             = 5
-    healthy_threshold   = 2
-    unhealthy_threshold = 2
-  }
+#   health_check {
+#     enabled             = true
+#     path                = "/"
+#     port                = "3000"
+#     interval            = 30
+#     timeout             = 5
+#     healthy_threshold   = 2
+#     unhealthy_threshold = 2
+#   }
 
-  tags = merge(var.common_tags, {
-    Name = "rr-${var.environment}-frontend-tg"
-  })
-}
+#   tags = merge(var.common_tags, {
+#     Name = "rr-${var.environment}-frontend-tg"
+#   })
+# }
 
 #--- Listener for HTTP ---
-resource "aws_lb_listener" "public_http" {
-  load_balancer_arn = aws_lb.public.arn
-  port              = "80"
-  protocol          = "HTTP"
+# resource "aws_lb_listener" "public_http" {
+#   load_balancer_arn = aws_lb.public.arn
+#   port              = "80"
+#   protocol          = "HTTP"
+
+#   default_action {
+#     type             = "forward"
+#     target_group_arn = aws_lb_target_group.rr_frontend.arn
+#   }
+# }
+
+#--- Default Listener (The Catch-all) ---
+# This listener catches any traffic that DOES NOT match an ECS or K8s rule
+resource "aws_lb_listener" "rr_public_http" {
+  load_balancer_arn = aws_lb.rr_public.arn
+  port = "80"
+  protocol = "HTTP"
 
   default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.rr_frontend.arn
+    type = "fixed-response"
+
+    fixed_response {
+      content_type = "text/plain"
+      message_body = "404: Service Not Found. Welcome to the Ritual Roast Gateway."
+      status_code = "404"
+    }
   }
 }

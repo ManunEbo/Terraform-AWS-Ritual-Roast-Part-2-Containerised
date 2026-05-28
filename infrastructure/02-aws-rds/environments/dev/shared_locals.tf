@@ -3,7 +3,7 @@ locals {
   Project_owner  = "Elvy ManunEbo"
   Terraform      = "true"
   Environment    = var.environment
-  Region         = data.aws_region.current.name
+  Region         = data.aws_region.current.id
   aws_account_id = data.aws_caller_identity.current.account_id
 
   common_tags = {

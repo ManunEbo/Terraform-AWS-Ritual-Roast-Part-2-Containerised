@@ -28,7 +28,7 @@ resource "aws_security_group_rule" "backend_to_db" {
   to_port                  = 3306
   protocol                 = "tcp"
   security_group_id        = aws_security_group.rr_backend.id
-  source_security_group_id = aws_security_group.rr_database.id # <----- Retrieve this using data source
+  source_security_group_id = data.aws_security_group.database_sg.id 
 }
 
 # Egress: Backend -> Interface Endpoints (ECR/Secrets)
@@ -39,10 +39,9 @@ resource "aws_security_group_rule" "rr_backend_egress_to_endpoints" {
   to_port                  = 443
   protocol                 = "tcp"
   security_group_id        = aws_security_group.rr_backend.id
-  source_security_group_id = aws_security_group.rr_endpoints.id
+  source_security_group_id = aws_security_group.rr_endpoints_sg.id
 }
 
-# --- THE FIX ---
 # Egress: Backend -> S3 Gateway (Image Layers)
 resource "aws_security_group_rule" "rr_backend_egress_to_s3" {
   description       = "RR: Allow Backend to pull image layers from S3"
@@ -51,5 +50,5 @@ resource "aws_security_group_rule" "rr_backend_egress_to_s3" {
   to_port           = 443
   protocol          = "tcp"
   security_group_id = aws_security_group.rr_backend.id
-  prefix_list_ids   = [data.aws_prefix_list.s3.id] # <------ Need to re-create this s3 data source
+  prefix_list_ids   = [data.aws_prefix_list.s3.id]
 }

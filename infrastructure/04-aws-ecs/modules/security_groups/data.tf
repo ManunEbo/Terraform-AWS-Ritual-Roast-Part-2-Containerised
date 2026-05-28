@@ -1,7 +1,20 @@
-# Retrieve s3
-# data.aws_prefix_list.s3
-
+# 1. Fetching the AWS Managed S3 Prefix List (For VPC Endpoints)
 data "aws_prefix_list" "s3" {
-    # Please fill in the rest here to find the s3 resource ???
-    name = "rr-capstone-5b160b287a99a6d9" # Is this correct ???
+  name = "com.amazonaws.${var.aws_region}.s3"
+}
+
+# 2. Fetching Layer 1: Public ALB Security Group Shell
+data "aws_security_group" "public_alb_sg" {
+  name = "rr-${var.environment}-alb-sg"
+}
+
+
+# 3. Fetching Layer 2: Database Security Group Shell
+data "aws_security_group" "database_sg" {
+  name = "rr-${var.environment}-database-sg" 
+}
+
+# 4. Fetching Layer 2: Lambda Security Group Shell
+data "aws_security_group" "lambda_sg" {
+  name = "rr-${var.environment}-lambda-sg" 
 }

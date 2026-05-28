@@ -4,6 +4,6 @@ resource "aws_vpc" "rr_vpc" {
   enable_dns_hostnames = true
 
   tags = merge(var.common_tags, {
-    Name        = "rr-${var.environment}-${var.vpc_name}"
+    Name = "rr-${var.environment}-${var.vpc_name}"
   })
 }

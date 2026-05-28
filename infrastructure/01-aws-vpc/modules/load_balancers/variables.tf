@@ -11,20 +11,12 @@ variable "public_subnet_ids" {
   type        = list(string)
 }
 
-variable "app_subnet_ids" {
-  description = "List of App Subnet IDs for the Internal ALB"
-  type        = list(string)
-}
 
 variable "public_alb_sg_id" {
   description = "The Public ALB Security Group ID"
   type        = string
 }
 
-variable "internal_alb_sg_id" {
-  description = "The Internal ALB Security Group ID"
-  type        = string
-}
 
 variable "environment" {
   type = string

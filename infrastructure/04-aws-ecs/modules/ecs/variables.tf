@@ -57,8 +57,3 @@ variable "internal_alb_dns_name" {
   description = "The DNS name of the internal ALB for frontend routing"
   type        = string
 }
-
-# variable "db_secret_arn" {
-#   description = "The ARN of the Secrets Manager secret for the backend database"
-#   type        = string
-# }

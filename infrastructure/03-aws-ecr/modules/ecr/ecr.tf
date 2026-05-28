@@ -29,3 +29,50 @@ resource "aws_ecr_repository" "rr_backend_repo" {
     Name = "rr-${var.environment}-backend-repo"
   })
 }
+
+# Below are simple policies ensures that we only ever keep the 5 most recent images up in the ECR repo,
+# automatically purging the older ones and keeping our storage costs flat and predictable.
+
+# --- Frontend Lifecycle Policy ---
+resource "aws_ecr_lifecycle_policy" "frontend_lifecycle" {
+  repository = aws_ecr_repository.rr_frontend_repo.name
+
+  policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Keep last 5 images"
+        selection = {
+          tagStatus   = "any"
+          countType   = "imageCountMoreThan"
+          countNumber = 5
+        }
+        action = {
+          type = "expire"
+        }
+      }
+    ]
+  })
+}
+
+# --- Backend Lifecycle Policy ---
+resource "aws_ecr_lifecycle_policy" "backend_lifecycle" {
+  repository = aws_ecr_repository.rr_backend_repo.name
+
+  policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Keep last 5 images"
+        selection = {
+          tagStatus   = "any"
+          countType   = "imageCountMoreThan"
+          countNumber = 5
+        }
+        action = {
+          type = "expire"
+        }
+      }
+    ]
+  })
+}

@@ -30,40 +30,13 @@ module "security_groups" {
   vpc_name    = var.vpc_name
 }
 
-# --- 3. Shared Ingress Load Balancers ---
 module "alb" {
   source = "../../modules/load_balancers"
 
-  vpc_id             = module.vpc.vpc_id
-  vpc_name           = var.vpc_name
-  common_tags        = local.common_tags
-  environment        = var.environment
-  public_subnet_ids  = module.vpc.public_subnet_ids
-  app_subnet_ids     = module.vpc.app_subnet_ids
-  public_alb_sg_id   = module.security_groups.alb_sg_id
-  internal_alb_sg_id = module.security_groups.internal_alb_sg_id
-}
-
-# --- 4. Core Private VPC Endpoints ---
-module "endpoints" {
-  source      = "../../modules/endpoints"
-  environment = var.environment
-  vpc_id      = module.vpc.vpc_id
-  vpc_name    = var.vpc_name
-  aws_region  = var.aws_region
+  vpc_id = module.vpc.vpc_id
+  vpc_name = var.vpc_name
   common_tags = local.common_tags
-
-  endpoints_sg_id = module.security_groups.endpoints_sg_id
-  app_subnet_ids  = module.vpc.app_subnet_ids
-}
-
-# --- 5. Shared Core Operational IAM Structural Roles ---
-module "iam" {
-  source         = "../../modules/iam"
-  environment    = var.environment
-  aws_account_id = local.aws_account_id
-  aws_region     = var.aws_region
-  vpc_id         = module.vpc.vpc_id
-  common_tags    = local.common_tags
-  s3_bucket      = local.s3_bucket
+  environment = var.environment
+  public_subnet_ids = module.vpc.public_subnet_ids
+  public_alb_sg_id = module.security_groups.alb_sg_id  
 }
