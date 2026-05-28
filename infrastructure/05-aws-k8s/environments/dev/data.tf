@@ -61,7 +61,7 @@ data "aws_subnets" "rr_k8s_subnets" {
 # retrieve the private route table for K8s
 data "aws_route_table" "rr_k8s_private_rt" {
   tags = merge(local.common_tags_vpc, {
-    Name = "rr-${var.environment}-${data.aws_vpc.rr_vpc.vpc_name}-k8s-private-rt"
+    Name = "rr-${var.environment}-RR-vpc-k8s-private-rt"
   })
 }
 
@@ -77,18 +77,12 @@ data "aws_security_group" "rr_public_alb_sg" {
   })
 }
 
-# 4. Fetch Frontend (Web) Security Group
-data "aws_security_group" "rr_web_sg" {
 
-  tags = merge(local.common_tags_vpc, {
-    Name        = "rr-${var.environment}-frontend-sg" 
-  })
+data "aws_lb" "gateway_alb" {
+  name = "rr-${var.environment}-public-alb"
 }
 
-# 5. Fetch Backend (App) Security Group
-data "aws_security_group" "rr_app_sg" {
-  
-  tags = merge(local.common_tags_vpc, {
-    Name        = "rr-${var.environment}-backend-sg" 
-  })
+data "aws_lb_listener" "gateway_http_listener" {
+  load_balancer_arn = data.aws_lb.gateway_alb.arn
+  port              = 80
 }
