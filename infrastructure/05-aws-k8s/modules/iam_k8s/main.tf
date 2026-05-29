@@ -86,3 +86,30 @@ resource "aws_iam_instance_profile" "rr_k3s_worker_profile" {
     name = "rr-${var.environment}-k3s-worker-profile"
     role = aws_iam_role.rr_k3s_worker_role.name
 }
+
+# --- Custom Control Plane Policy: GitOps Token Only ---
+resource "aws_iam_policy" "rr_cp_argocd_policy" {
+    name = "rr-${var.environment}-k3s-cp-argocd-policy"
+    description = "Allow the K3s Control Plane to fetch the GitHub PAT for ArgoCD bootstrap"
+
+    policy = jsonencode({
+        Version = "2012-10-17"
+        Statement = [
+            {
+                Action = [
+                    "secretsmanager:GetSecretValue",
+                    "secretsmanager:DescribeSecret"
+                ]
+                Effect = "Allow"
+
+                # Strictly scoped ONLY to the ArgoCD token
+                Resource = "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:rr-${var.environment}-argocd-github-token-*"
+            }
+        ]
+    })
+}
+
+resource "aws_iam_role_policy_attachment" "rr_cp_argocd_attach" {
+  role = aws_iam_role.rr_k3s_control_plane_role.name
+  policy_arn = aws_iam_policy.rr_cp_argocd_policy.arn
+}

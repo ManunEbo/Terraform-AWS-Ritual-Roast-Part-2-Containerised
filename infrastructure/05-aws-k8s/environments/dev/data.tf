@@ -15,26 +15,22 @@ locals {
 # DATA SOURCES: Fetching the 01-aws-vpc resources
 # ================================================
 
-data "aws_caller_identity" "current" {}
-
 # 1. Fetch the existing 01-aws-vpc VPC
 data "aws_vpc" "rr_vpc" {
   tags = merge(local.common_tags_vpc, {
-    Name        = "rr-${var.environment}-RR-vpc"
+    Name = "rr-${var.environment}-RR-vpc"
   })
 }
 
 # 2. Fetch the existing RDS Security Group
 data "aws_security_group" "rr_rds_sg" {
   tags = merge(local.common_tags_vpc, {
-    Name        = "rr-${var.environment}-rds-sg"
+    Name = "rr-${var.environment}-rds-sg"
   })
 }
 
-
 # Fetch the Existing Internet gateway
 data "aws_internet_gateway" "rr_igw" {
-
   # These are the tags attached to the IGW from 01-aws-vpc, retrieved from the IGW itself
   tags = merge(local.common_tags_vpc, {
     Name = "${var.environment}-igw"
@@ -53,7 +49,7 @@ data "aws_subnets" "rr_k8s_subnets" {
   tags = local.common_tags_vpc
   
   filter {
-    name = "tag:Name"
+    name   = "tag:Name"
     values = ["K8sSubnet-*"]
   }
 }
@@ -69,14 +65,26 @@ data "aws_route_table" "rr_k8s_private_rt" {
 # DATA SOURCES: Fetching the 01-aws-vpc security groups
 # ======================================================
 
-# 3. Fetch 01-aws-vpc ALB Security Group
-data "aws_security_group" "rr_public_alb_sg" {
-
+# 3. Fetch 01-aws-vpc ALB Security Group (Name standardized)
+data "aws_security_group" "rr_alb_sg" {
   tags = merge(local.common_tags_vpc, {
-     Name        = "rr-${var.environment}-alb-sg"
+     Name = "rr-${var.environment}-alb-sg"
   })
 }
 
+# 4. Fetch 01-aws-vpc Web Security Group
+data "aws_security_group" "rr_web_sg" {
+  tags = merge(local.common_tags_vpc, {
+     Name = "rr-${var.environment}-web-sg"
+  })
+}
+
+# 5. Fetch 01-aws-vpc App Security Group
+data "aws_security_group" "rr_app_sg" {
+  tags = merge(local.common_tags_vpc, {
+     Name = "rr-${var.environment}-app-sg"
+  })
+}
 
 data "aws_lb" "gateway_alb" {
   name = "rr-${var.environment}-public-alb"

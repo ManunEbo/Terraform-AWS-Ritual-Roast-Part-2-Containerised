@@ -4,6 +4,12 @@ variable "environment" {
   default     = "dev"
 }
 
+variable "aws_region" {
+  description = "The AWS Region"
+  type        = string
+  default     = "eu-west-2"
+}
+
 # --- New Variables Required for K8s ---
 
 variable "control_plane_type" {

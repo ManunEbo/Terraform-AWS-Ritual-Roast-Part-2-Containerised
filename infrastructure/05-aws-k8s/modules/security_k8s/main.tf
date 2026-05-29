@@ -111,13 +111,13 @@ resource "aws_security_group_rule" "rr_cp_egress_all" {
 # 3. Worker Node Rules (Zero-Trust Ingress)
 # ==========================================
 
-# Allow control plane to communicate with workers (Logs, Exec, Metrics)
+# BUG 2 FIX: Locked down to Kubelet API port 10250 instead of blanket "-1"
 resource "aws_security_group_rule" "rr_worker_ingress_from_cp" {
-  description              = "Allow traffic from Control Plane"
+  description              = "Allow Control Plane to reach Worker Kubelet API (Logs/Exec/Metrics)"
   type                     = "ingress"
-  from_port                = 0
-  to_port                  = 0
-  protocol                 = "-1"
+  from_port                = 10250
+  to_port                  = 10250
+  protocol                 = "tcp"
   source_security_group_id = aws_security_group.rr_k8s_control_plane_sg.id
   security_group_id        = aws_security_group.rr_k8s_worker_sg.id
 }
@@ -166,13 +166,39 @@ resource "aws_security_group_rule" "rr_worker_egress_all" {
   security_group_id = aws_security_group.rr_k8s_worker_sg.id
 }
 
-# Inject an egress rule into the public ALB so it can route traffic to K8s Workers
+# ==========================================
+# 4. External Layer Wiring (ALB & RDS)
+# ==========================================
+
+# Inject an egress rule into the public ALB so it can route HTTP traffic to K8s Workers
 resource "aws_security_group_rule" "rr_alb_egress_to_k8s_http" {
-  description              = "Allow public ALB to route traffic to K3s worker Nodes"
+  description              = "Allow public ALB to route HTTP traffic to K3s worker Nodes"
   type                     = "egress"
   from_port                = 80
   to_port                  = 80
   protocol                 = "tcp"
   source_security_group_id = aws_security_group.rr_k8s_worker_sg.id
   security_group_id        = var.alb_sg_id
+}
+
+# BUG 3 FIX: Inject an egress rule into the public ALB for HTTPS routing (Asymmetric routing fix)
+resource "aws_security_group_rule" "rr_alb_egress_to_k8s_https" {
+  description              = "Allow public ALB to route HTTPS traffic to K3s worker Nodes"
+  type                     = "egress"
+  from_port                = 443
+  to_port                  = 443
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.rr_k8s_worker_sg.id
+  security_group_id        = var.alb_sg_id
+}
+
+# BUG 1 FIX: Allow Worker Nodes to communicate with the Layer 2 Database
+resource "aws_security_group_rule" "rr_rds_ingress_from_k8s_workers" {
+  description              = "Allow K3s worker nodes to access the RDS Database"
+  type                     = "ingress"
+  from_port                = 5432 # (Ensure this matches your database engine port, e.g., 5432 for Postgres)
+  to_port                  = 5432
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.rr_k8s_worker_sg.id
+  security_group_id        = var.rds_sg_id
 }
