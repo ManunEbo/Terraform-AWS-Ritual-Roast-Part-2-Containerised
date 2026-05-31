@@ -3,9 +3,9 @@ variable "environment" {
 }
 
 variable "aws_region" {
-    type = string
+  type = string
 }
 
 variable "common_tags" {
-    type = map(string)
+  type = map(string)
 }

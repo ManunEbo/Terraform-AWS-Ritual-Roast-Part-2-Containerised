@@ -1,3 +1,7 @@
+# ==========================================
+# Core Infrastructure Variables
+# ==========================================
+
 variable "vpc_id" {
   description = "The ID of the VPC"
   type        = string
@@ -24,13 +28,22 @@ variable "k8s_private_subnets" {
   type        = list(string)
 }
 
-variable "control_plane_sg_id" {
-  description = "Security Group ID for the Control Plane"
+variable "control_plane_type" {
+  description = "EC2 instance type for the K3s Control Plane"
   type        = string
 }
 
-variable "worker_sg_id" {
-  description = "Security Group ID for the Worker Nodes"
+variable "worker_node_type" {
+  description = "EC2 instance type for the K3s Worker Nodes"
+  type        = string
+}
+
+# ==========================================
+# Control Plane Identities
+# ==========================================
+
+variable "control_plane_sg_id" {
+  description = "Security Group ID for the Control Plane"
   type        = string
 }
 
@@ -39,17 +52,30 @@ variable "iam_profile_control_plane" {
   type        = string
 }
 
-variable "iam_profile_worker" {
-  description = "IAM Instance Profile name for the Worker Nodes"
+# ==========================================
+# Frontend Worker Identities (DMZ)
+# ==========================================
+
+variable "worker_frontend_sg_id" {
+  description = "Security Group ID for the Frontend Worker Nodes"
   type        = string
 }
 
-variable "control_plane_type" {
-  description = "EC2 instance type for the K3s Control Plane"
+variable "iam_profile_worker_frontend" {
+  description = "IAM Instance Profile name for the Frontend Worker Nodes"
   type        = string
 }
 
-variable "worker_node_type" {
-  description = "EC2 instance type for the K3s Worker Nodes"
+# ==========================================
+# Backend Worker Identities (Secure Tier)
+# ==========================================
+
+variable "worker_backend_sg_id" {
+  description = "Security Group ID for the Backend Worker Nodes"
+  type        = string
+}
+
+variable "iam_profile_worker_backend" {
+  description = "IAM Instance Profile name for the Backend Worker Nodes"
   type        = string
 }

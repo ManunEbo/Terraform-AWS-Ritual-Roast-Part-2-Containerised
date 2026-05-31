@@ -46,12 +46,18 @@ module "compute_k8s" {
   # Synchronized Compute Variables ---
   k8s_private_subnets = module.vpc_k8s.private_subnet_ids
   
-  control_plane_sg_id = module.security_k8s.control_plane_sg_id
-  worker_sg_id        = module.security_k8s.worker_node_sg_id
+  # 1. Control Plane Wiring (HA Datastore Access)
+  control_plane_sg_id       = module.security_k8s.control_plane_sg_id
+  iam_profile_control_plane = module.iam_k8s.control_plane_profile_name
+
+  # 2. Frontend Worker Wiring (DMZ / ALB Access)
+  worker_frontend_sg_id       = module.security_k8s.worker_frontend_sg_id
+  iam_profile_worker_frontend = module.iam_k8s.worker_frontend_profile_name
   
-  # Split IAM profiles for Zero-Trust token retrieval
-  iam_profile_control_plane = module.iam_k8s.k3s_control_plane_profile_name
-  iam_profile_worker        = module.iam_k8s.k3s_worker_profile_name
+  # 3. Backend Worker Wiring (Secure Tier / DB Access)
+  worker_backend_sg_id        = module.security_k8s.worker_backend_sg_id
+  iam_profile_worker_backend  = module.iam_k8s.worker_backend_profile_name
+
   control_plane_type = var.control_plane_type
   worker_node_type   = var.worker_node_type
   common_tags        = local.common_tags
