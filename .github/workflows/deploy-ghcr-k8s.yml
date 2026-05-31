@@ -4,10 +4,7 @@ on:
   push:
     branches: [ "main" ]
     paths:
-      - 'apps/v1-frontend-nextjs/**'
-      - 'apps/v1-backend-flask/**'
-      - 'apps/v2-frontend-vite/**'
-      - 'apps/v2-backend-go/**'
+      - 'apps/**'
   workflow_dispatch:
 
 env:
@@ -17,9 +14,35 @@ env:
 
 jobs:
   # ==========================================
-  # BASELINE: V1 Images (For Istio Comparison)
+  # STEP 1: Detect exactly which apps changed
+  # ==========================================
+  detect-changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      v1_frontend: ${{ steps.filter.outputs.v1_frontend }}
+      v1_backend: ${{ steps.filter.outputs.v1_backend }}
+      v2_frontend: ${{ steps.filter.outputs.v2_frontend }}
+      v2_backend: ${{ steps.filter.outputs.v2_backend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            v1_frontend: 'apps/v1-frontend-nextjs/**'
+            v1_backend: 'apps/v1-backend-flask/**'
+            v2_frontend: 'apps/v2-frontend-vite/**'
+            v2_backend: 'apps/v2-backend-go/**'
+
+  # ==========================================
+  # STEP 2: Build ONLY what changed
   # ==========================================
   build-v1-frontend:
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.v1_frontend == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -40,6 +63,8 @@ jobs:
           docker push --all-tags $IMAGE_NAME
 
   build-v1-backend:
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.v1_backend == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -59,10 +84,9 @@ jobs:
           docker build -t $IMAGE_NAME:latest -t $IMAGE_NAME:${{ github.sha }} .
           docker push --all-tags $IMAGE_NAME
 
-  # ==========================================
-  # CANARY: V2 Images (The High-Efficiency Workloads)
-  # ==========================================
   build-v2-frontend:
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.v2_frontend == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -83,6 +107,8 @@ jobs:
           docker push --all-tags $IMAGE_NAME
 
   build-v2-backend:
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.v2_backend == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read

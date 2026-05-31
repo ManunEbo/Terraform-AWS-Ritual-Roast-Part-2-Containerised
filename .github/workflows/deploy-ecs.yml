@@ -17,7 +17,32 @@ permissions:
   contents: read
 
 jobs:
+  # ==========================================
+  # STEP 1: Detect exactly which V1 apps changed
+  # ==========================================
+  detect-changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      v1_frontend: ${{ steps.filter.outputs.v1_frontend }}
+      v1_backend: ${{ steps.filter.outputs.v1_backend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            v1_frontend: 'apps/v1-frontend-nextjs/**'
+            v1_backend: 'apps/v1-backend-flask/**'
+
+  # ==========================================
+  # STEP 2: Build ONLY what changed
+  # ==========================================
   build-v1-frontend:
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.v1_frontend == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,7 +50,6 @@ jobs:
       - name: Configure AWS Credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          # Dynamically constructing the ARN to obfuscate the Account ID
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/rr-dev-github-frontend-role
           aws-region: ${{ env.AWS_REGION }}
           
@@ -35,7 +59,6 @@ jobs:
         
       - name: Build and Push Frontend
         env:
-          # The login action automatically pulls the registry URL, keeping the Account ID hidden here as well
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: rr-dev-frontend
           IMAGE_TAG: ${{ github.sha }}
@@ -45,6 +68,8 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY --all-tags
 
   build-v1-backend:
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.v1_backend == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -52,7 +77,6 @@ jobs:
       - name: Configure AWS Credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          # Dynamically constructing the ARN to obfuscate the Account ID
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/rr-dev-github-backend-role
           aws-region: ${{ env.AWS_REGION }}
           
