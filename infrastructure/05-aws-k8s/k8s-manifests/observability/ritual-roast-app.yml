@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ritual-roast-workloads
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised.git'
+    targetRevision: main
+    # ArgoCD will read every YAML file placed in this specific folder:
+    path: infrastructure/05-aws-k8s/k8s-manifests/dev-apps
+  destination:
+    server: 'https://kubernetes.default.svc'
+    # ArgoCD will force all workloads in that folder into the dev namespace:
+    namespace: dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
