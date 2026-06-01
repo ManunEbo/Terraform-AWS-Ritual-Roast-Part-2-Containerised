@@ -1,26 +1,25 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: v1-frontend
+  name: v1-frontend-nextjs
   namespace: dev
   labels:
-    app: rr-frontend
+    app: rr-frontend-nextjs
     version: v1
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: rr-frontend
+      app: rr-frontend-nextjs
       version: v1
   template:
     metadata:
       labels:
-        app: rr-frontend
+        app: rr-frontend-nextjs
         version: v1
     spec:
       imagePullSecrets:
         - name: ghcr-login-secret
-      # This hard-taints the workload to your Frontend DMZ nodes
       tolerations:
         - key: "dedicated"
           operator: "Equal"
@@ -40,16 +39,3 @@ spec:
           limits:
             cpu: 300m
             memory: 512Mi
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: rr-frontend-svc
-  namespace: dev
-spec:
-  selector:
-    app: rr-frontend
-  ports:
-    - protocol: TCP
-      port: 80
-      targetPort: 3000
