@@ -23,14 +23,12 @@ fi
 K3S_TOKEN=$(aws secretsmanager get-secret-value --region $REGION --secret-id $TOKEN_SECRET_ID --query SecretString --output text)
 
 # 3. HA Leader Election (Embedded etcd)
-# Find all running CP nodes and sort by IP to deterministically pick the "Leader"
 EXISTING_CP=$(aws ec2 describe-instances \
   --region $REGION \
   --filters "Name=tag:Name,Values=rr-${ENVIRONMENT}-k3s-control-plane" "Name=instance-state-name,Values=running" \
   --query "Reservations[*].Instances[*].PrivateIpAddress" \
   --output text | tr '\t' '\n' | sort | head -n 1)
 
-# Securely fetch my own private IP via IMDSv2
 TOKEN=$(curl -sX PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
 MY_IP=$(curl -sH "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/local-ipv4)
 
@@ -48,7 +46,7 @@ if [ -z "$EXISTING_CP" ] || [ "$EXISTING_CP" == "$MY_IP" ]; then
   sleep 20 # Wait for API server
   export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
-  # Install Calico (Only the leader needs to execute manifests)
+  # Install Calico
   kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/tigera-operator.yaml
   kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/custom-resources.yaml
   sleep 20
@@ -61,9 +59,20 @@ if [ -z "$EXISTING_CP" ] || [ "$EXISTING_CP" == "$MY_IP" ]; then
   kubectl create secret generic github-pat --namespace=argocd --from-literal=token=$GITHUB_PAT || true
   kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 
+  # 6. Bootstrap Observability Credentials for GitOps (LEADER ONLY)
+  echo "Staging Grafana Cloud credentials..."
+  GRAFANA_SECRET_ID="rr-${ENVIRONMENT}-grafana-cloud-token"
+  
+  GRAFANA_TOKEN=$(aws secretsmanager get-secret-value --region $REGION --secret-id $GRAFANA_SECRET_ID --query SecretString --output text 2>/dev/null || echo "PENDING_TOKEN")
+
+  kubectl create namespace observability || true
+  kubectl create secret generic grafana-auth \
+    --namespace=observability \
+    --from-literal=bearer-token=$GRAFANA_TOKEN || true
+
 else
   echo "Existing leader found at $EXISTING_CP. Joining HA cluster..."
-  sleep 30 # Give the leader a head start to initialize etcd
+  sleep 30 
   curl -sfL https://get.k3s.io | K3S_TOKEN=$K3S_TOKEN sh -s - server \
     --server https://$EXISTING_CP:6443 \
     --disable-network-policy \
@@ -72,15 +81,3 @@ else
     --cluster-cidr=192.168.0.0/16 \
     --tls-san="${NLB_DNS}"
 fi
-
-# 6. Bootstrap Observability Credentials for GitOps
-  echo "Staging Grafana Cloud credentials..."
-  GRAFANA_SECRET_ID="rr-${ENVIRONMENT}-grafana-cloud-token"
-  
-  # Fetch the token safely. If it doesn't exist yet, we create a placeholder so the script doesn't fail.
-  GRAFANA_TOKEN=$(aws secretsmanager get-secret-value --region $REGION --secret-id $GRAFANA_SECRET_ID --query SecretString --output text 2>/dev/null || echo "PENDING_TOKEN")
-
-  kubectl create namespace observability || true
-  kubectl create secret generic grafana-auth \
-    --namespace=observability \
-    --from-literal=bearer-token=$GRAFANA_TOKEN || true
