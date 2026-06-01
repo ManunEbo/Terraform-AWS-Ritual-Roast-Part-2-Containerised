@@ -26,7 +26,7 @@ module "security_k8s" {
   alb_sg_id = data.aws_security_group.rr_alb_sg.id
   web_sg_id = data.aws_security_group.rr_web_sg.id
   app_sg_id = data.aws_security_group.rr_app_sg.id
-
+  
   # --- NEW: Passing the Sensitive Tokens ---
   github_pat    = var.github_pat
   grafana_token = var.grafana_token  
