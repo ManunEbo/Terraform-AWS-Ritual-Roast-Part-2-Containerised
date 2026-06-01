@@ -23,3 +23,16 @@ variable "worker_node_type" {
   type        = string
   default     = "t3.medium"
 }
+
+variable "github_pat" {
+  description = "GitHub Personal Access Token for ArgoCD"
+  type        = string
+  sensitive   = true
+}
+
+variable "grafana_token" {
+  description = "Grafana Cloud Token for Observability"
+  type        = string
+  sensitive   = true
+  default     = "PENDING_TOKEN"
+}

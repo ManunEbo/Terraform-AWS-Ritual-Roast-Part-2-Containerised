@@ -9,17 +9,8 @@ REGION="${aws_region}"
 ENVIRONMENT="${environment}"
 NLB_DNS="${nlb_dns_name}"
 
-# 2. Manage the K3s Cluster Join Token (Secrets Manager)
+# 2. Fetch the K3s Cluster Join Token (Now pre-created by Terraform!)
 TOKEN_SECRET_ID="rr-${ENVIRONMENT}-k3s-join-token"
-
-# If the secret doesn't exist, the first node to boot will create it
-if ! aws secretsmanager describe-secret --region $REGION --secret-id $TOKEN_SECRET_ID > /dev/null 2>&1; then
-  echo "Creating new K3s join token..."
-  NEW_TOKEN=$(openssl rand -hex 16)
-  aws secretsmanager create-secret --region $REGION --name $TOKEN_SECRET_ID --secret-string "$NEW_TOKEN" || true
-fi
-
-# Fetch the established token
 K3S_TOKEN=$(aws secretsmanager get-secret-value --region $REGION --secret-id $TOKEN_SECRET_ID --query SecretString --output text)
 
 # 3. HA Leader Election (Embedded etcd)
@@ -51,19 +42,27 @@ if [ -z "$EXISTING_CP" ] || [ "$EXISTING_CP" == "$MY_IP" ]; then
   kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/custom-resources.yaml
   sleep 20
 
-  # 5. Bootstrap ArgoCD
+  # 5. Bootstrap ArgoCD & GHCR Credentials
   GITHUB_SECRET_ID="rr-${ENVIRONMENT}-argocd-github-token"
   GITHUB_PAT=$(aws secretsmanager get-secret-value --region $REGION --secret-id $GITHUB_SECRET_ID --query SecretString --output text)
 
+  # Setup ArgoCD
   kubectl create namespace argocd || true
   kubectl create secret generic github-pat --namespace=argocd --from-literal=token=$GITHUB_PAT || true
   kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 
-  # 6. Bootstrap Observability Credentials for GitOps (LEADER ONLY)
+  # Create the dev namespace and inject the GHCR image pull secret
+  kubectl create namespace dev || true
+  kubectl create secret docker-registry ghcr-login-secret \
+    --namespace=dev \
+    --docker-server=ghcr.io \
+    --docker-username=ManunEbo \
+    --docker-password=$GITHUB_PAT || true
+
+  # 6. Bootstrap Observability Credentials for GitOps
   echo "Staging Grafana Cloud credentials..."
   GRAFANA_SECRET_ID="rr-${ENVIRONMENT}-grafana-cloud-token"
-  
-  GRAFANA_TOKEN=$(aws secretsmanager get-secret-value --region $REGION --secret-id $GRAFANA_SECRET_ID --query SecretString --output text 2>/dev/null || echo "PENDING_TOKEN")
+  GRAFANA_TOKEN=$(aws secretsmanager get-secret-value --region $REGION --secret-id $GRAFANA_SECRET_ID --query SecretString --output text)
 
   kubectl create namespace observability || true
   kubectl create secret generic grafana-auth \

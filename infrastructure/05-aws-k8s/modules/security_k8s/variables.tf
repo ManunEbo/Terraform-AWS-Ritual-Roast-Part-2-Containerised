@@ -32,3 +32,13 @@ variable "app_sg_id" {
   description = "Security Group ID of the V1 Backend App tasks"
   type = string
 }
+
+variable "github_pat" {
+  type      = string
+  sensitive = true
+}
+
+variable "grafana_token" {
+  type      = string
+  sensitive = true
+}
