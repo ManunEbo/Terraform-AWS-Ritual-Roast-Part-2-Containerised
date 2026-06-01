@@ -53,7 +53,7 @@ if [ -z "$EXISTING_CP" ] || [ "$EXISTING_CP" == "$MY_IP" ]; then
   kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/custom-resources.yaml
   sleep 20
 
-  # Bootstrap ArgoCD
+  # 5. Bootstrap ArgoCD
   GITHUB_SECRET_ID="rr-${ENVIRONMENT}-argocd-github-token"
   GITHUB_PAT=$(aws secretsmanager get-secret-value --region $REGION --secret-id $GITHUB_SECRET_ID --query SecretString --output text)
 
@@ -72,3 +72,15 @@ else
     --cluster-cidr=192.168.0.0/16 \
     --tls-san="${NLB_DNS}"
 fi
+
+# 6. Bootstrap Observability Credentials for GitOps
+  echo "Staging Grafana Cloud credentials..."
+  GRAFANA_SECRET_ID="rr-${ENVIRONMENT}-grafana-cloud-token"
+  
+  # Fetch the token safely. If it doesn't exist yet, we create a placeholder so the script doesn't fail.
+  GRAFANA_TOKEN=$(aws secretsmanager get-secret-value --region $REGION --secret-id $GRAFANA_SECRET_ID --query SecretString --output text 2>/dev/null || echo "PENDING_TOKEN")
+
+  kubectl create namespace observability || true
+  kubectl create secret generic grafana-auth \
+    --namespace=observability \
+    --from-literal=bearer-token=$GRAFANA_TOKEN || true

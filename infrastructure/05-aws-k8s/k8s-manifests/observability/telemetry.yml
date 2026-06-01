@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: grafana-alloy-agent
+  namespace: observability
+spec:
+  selector:
+    matchLabels:
+      app: grafana-alloy
+  template:
+    metadata:
+      labels:
+        app: grafana-alloy
+    spec:
+      containers:
+      - name: alloy
+        image: grafana/alloy:latest
+        env:
+        # The agent dynamically pulls the secret injected by your AWS user_data script!
+        - name: GRAFANA_CLOUD_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: grafana-auth
+              key: bearer-token
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
