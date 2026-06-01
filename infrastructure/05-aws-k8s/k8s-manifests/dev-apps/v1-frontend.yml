@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: v1-frontend
+  namespace: dev
+  labels:
+    app: rr-frontend
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: rr-frontend
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: rr-frontend
+        version: v1
+    spec:
+      imagePullSecrets:
+        - name: ghcr-login-secret
+      # This hard-taints the workload to your Frontend DMZ nodes
+      tolerations:
+        - key: "dedicated"
+          operator: "Equal"
+          value: "frontend"
+          effect: "NoSchedule"
+      nodeSelector:
+        tier: frontend
+      containers:
+      - name: nextjs-frontend
+        image: ghcr.io/manunebo/rr-v1-frontend:latest
+        ports:
+        - containerPort: 3000
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 300m
+            memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rr-frontend-svc
+  namespace: dev
+spec:
+  selector:
+    app: rr-frontend
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 3000

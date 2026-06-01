@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: v1-backend
+  namespace: dev
+  labels:
+    app: rr-backend
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: rr-backend
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: rr-backend
+        version: v1
+    spec:
+      # This unlocks your private GHCR registry
+      imagePullSecrets:
+        - name: ghcr-login-secret
+      # This hard-taints the workload to your Backend DMZ nodes
+      tolerations:
+        - key: "dedicated"
+          operator: "Equal"
+          value: "backend"
+          effect: "NoSchedule"
+      nodeSelector:
+        tier: backend
+      containers:
+      - name: flask-backend
+        image: ghcr.io/manunebo/rr-v1-backend:latest
+        ports:
+        - containerPort: 5000
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 250m
+            memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rr-backend-svc
+  namespace: dev
+spec:
+  selector:
+    app: rr-backend
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 5000
