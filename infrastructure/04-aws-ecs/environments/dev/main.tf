@@ -59,9 +59,10 @@ module "ecs" {
   frontend_subnets = data.aws_subnets.web_subnets.ids
   backend_subnets  = data.aws_subnets.AppSubnets.ids
 
-  # IAM Roles
-  ecs_execution_role_arn = module.iam.ecs_execution_role_arn
-  ecs_task_role_arn      = module.iam.ecs_task_role_arn
+  # IAM Roles (ZERO-TRUST SPLIT)
+  ecs_execution_role_arn     = module.iam.ecs_execution_role_arn
+  ecs_frontend_task_role_arn = module.iam.ecs_frontend_task_role_arn
+  ecs_backend_task_role_arn  = module.iam.ecs_backend_task_role_arn
 
   # Security Groups
   frontend_sg_id = module.security_groups.frontend_sg.id

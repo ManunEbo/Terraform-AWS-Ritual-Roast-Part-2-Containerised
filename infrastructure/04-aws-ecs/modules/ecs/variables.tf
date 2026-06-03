@@ -15,10 +15,17 @@ variable "ecs_execution_role_arn" {
   type        = string
 }
 
-variable "ecs_task_role_arn" {
-  description = "The ARN of the IAM  role used by the application code"
+# --- ZERO-TRUST FIX: Split Task Roles ---
+variable "ecs_frontend_task_role_arn" {
+  description = "The ARN of the IAM role used by the Next.js application code"
   type        = string
 }
+
+variable "ecs_backend_task_role_arn" {
+  description = "The ARN of the IAM role used by the Flask backend code (Database Access)"
+  type        = string
+}
+# ----------------------------------------
 
 # --- CORRECTED: Description now accurately reflects the private architecture ---
 variable "frontend_subnets" {
@@ -52,7 +59,6 @@ variable "backend_tg_arn" {
 }
 
 # --- NEW VARIABLES FOR CONTAINER ENVIRONMENTS ---
-
 variable "internal_alb_dns_name" {
   description = "The DNS name of the internal ALB for frontend routing"
   type        = string

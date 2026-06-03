@@ -8,6 +8,10 @@ resource "aws_ecs_service" "rr_frontend_service" {
   task_definition = aws_ecs_task_definition.rr_frontend_task.arn
   desired_count   = 2
 
+  # --- THE BREATHING ROOM SHIELD ---
+  # Tells ECS to ignore ALB health check failures for the first 120 seconds of boot
+  health_check_grace_period_seconds = 120
+
   network_configuration {
     subnets         = var.frontend_subnets
     security_groups = [var.frontend_sg_id]
@@ -47,6 +51,10 @@ resource "aws_ecs_service" "rr_backend_service" {
   cluster         = aws_ecs_cluster.rr_ecs_cluster.id
   task_definition = aws_ecs_task_definition.rr_backend_task.arn
   desired_count   = 2
+
+  # --- THE BREATHING ROOM SHIELD ---
+  # Tells ECS to ignore ALB health check failures for the first 120 seconds of boot
+  health_check_grace_period_seconds = 120
 
   network_configuration {
     subnets         = var.backend_subnets

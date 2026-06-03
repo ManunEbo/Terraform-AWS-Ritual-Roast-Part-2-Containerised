@@ -19,11 +19,9 @@ resource "aws_cloudwatch_log_group" "rr_backend_logs" {
 }
 
 #--------------------------------------------------------------
-# 2. Frontend Task Definition (The RR Web Blueprint)
+# 2. Frontend Task Definition (The RR Web Greenprint)
 #--------------------------------------------------------------
-#--------------------------------------------------------------
-# 2. Frontend Task Definition (The RR Web Blueprint)
-#--------------------------------------------------------------
+
 resource "aws_ecs_task_definition" "rr_frontend_task" {
   family                   = "rr-${var.environment}-frontend-task"
   network_mode             = "awsvpc"
@@ -31,7 +29,9 @@ resource "aws_ecs_task_definition" "rr_frontend_task" {
   cpu                      = 512   # Upgraded compute
   memory                   = 1024  # Upgraded compute
   execution_role_arn       = var.ecs_execution_role_arn
-  task_role_arn            = var.ecs_task_role_arn
+  
+  # ZERO-TRUST FIX: Frontend gets its own isolated role (No DB Secret Access)
+  task_role_arn            = var.ecs_frontend_task_role_arn
 
   # 1. Carve out a block of Fargate's ephemeral storage
   volume {
@@ -90,7 +90,7 @@ resource "aws_ecs_task_definition" "rr_frontend_task" {
 }
 
 #--------------------------------------------------------------
-# 3. Backend Task Definition (The RR API Blueprint)
+# 3. Backend Task Definition (The RR API Greenprint)
 #--------------------------------------------------------------
 resource "aws_ecs_task_definition" "rr_backend_task" {
   family                   = "rr-${var.environment}-backend-task"
@@ -99,7 +99,9 @@ resource "aws_ecs_task_definition" "rr_backend_task" {
   cpu                      = 256
   memory                   = 512
   execution_role_arn       = var.ecs_execution_role_arn
-  task_role_arn            = var.ecs_task_role_arn
+  
+  # ZERO-TRUST FIX: Backend gets its own isolated role (Has DB Secret Access)
+  task_role_arn            = var.ecs_backend_task_role_arn
 
   container_definitions = jsonencode([
     {
@@ -107,7 +109,7 @@ resource "aws_ecs_task_definition" "rr_backend_task" {
       image     = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.id}.amazonaws.com/rr-${var.environment}-backend:latest"
       essential = true
 
-      # OS Unlocked: Allowing Gunicorn to write heartbeat files to /tmp securely
+      # OS Unlocked: Allowing Gunicorn to write heartbeat files to /tmp securely via Docker /dev/shm
       readonlyRootFilesystem = true
 
       portMappings = [
