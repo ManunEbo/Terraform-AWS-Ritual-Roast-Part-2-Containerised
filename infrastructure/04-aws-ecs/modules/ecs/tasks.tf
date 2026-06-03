@@ -21,23 +21,42 @@ resource "aws_cloudwatch_log_group" "rr_backend_logs" {
 #--------------------------------------------------------------
 # 2. Frontend Task Definition (The RR Web Blueprint)
 #--------------------------------------------------------------
+#--------------------------------------------------------------
+# 2. Frontend Task Definition (The RR Web Blueprint)
+#--------------------------------------------------------------
 resource "aws_ecs_task_definition" "rr_frontend_task" {
   family                   = "rr-${var.environment}-frontend-task"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = 256
-  memory                   = 512
+  cpu                      = 512   # Upgraded compute
+  memory                   = 1024  # Upgraded compute
   execution_role_arn       = var.ecs_execution_role_arn
   task_role_arn            = var.ecs_task_role_arn
+
+  # 1. Carve out a block of Fargate's ephemeral storage
+  volume {
+    name = "nextjs-cache"
+  }
 
   container_definitions = jsonencode([
     {
       name      = "rr-frontend-container-01"
+      
+      # RESTORED: Pulling securely from ECR via VPC Endpoints
       image     = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.id}.amazonaws.com/rr-${var.environment}-frontend:latest"
       essential = true
 
-      # OS Unlocked: Using Fargate's native 20GB ephemeral storage
-      readonlyRootFilesystem = true
+      # The OS remains mathematically locked
+      readonlyRootFilesystem = true 
+
+      # 2. Mount the empty volume exclusively to the cache path
+      mountPoints = [
+        {
+          sourceVolume  = "nextjs-cache"
+          containerPath = "/app/.next/cache"
+          readOnly      = false
+        }
+      ]
 
       portMappings = [
         {
@@ -47,8 +66,6 @@ resource "aws_ecs_task_definition" "rr_frontend_task" {
         }
       ]
 
-      # --- MAJOR ARCHITECTURAL UPGRADE ---
-      # Injecting specific environment variables to securely bridge the network tier.
       environment = [
         {
           name  = "BACKEND_URL"
@@ -66,6 +83,7 @@ resource "aws_ecs_task_definition" "rr_frontend_task" {
       }
     }
   ])
+  
   tags = merge(var.common_tags, {
     Name = "rr-${var.environment}-frontend-task"
   })

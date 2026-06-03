@@ -2,18 +2,6 @@
 # MODULES: The V2 K3s Infrastructure
 # ==========================================
 
-module "vpc_k8s" {
-  source = "../../modules/vpc_k8s"
-
-  environment           = var.environment
-  vpc_id                = data.aws_vpc.rr_vpc.id
-  rr_igw                = data.aws_internet_gateway.rr_igw
-  rr_public_subnet_1_id = data.aws_subnet.rr_public_subnet_1.id
-  rr_k8s_subnets_ids    = data.aws_subnets.rr_k8s_subnets.ids
-  common_tags           = local.common_tags
-  rr_k8s_private_rt_id  = data.aws_route_table.rr_k8s_private_rt.id
-}
-
 module "security_k8s" {
   source = "../../modules/security_k8s"
 
@@ -48,7 +36,7 @@ module "compute_k8s" {
   vpc_id      = data.aws_vpc.rr_vpc.id
   
   # Synchronized Compute Variables ---
-  k8s_private_subnets = module.vpc_k8s.private_subnet_ids
+  k8s_private_subnets = data.aws_subnets.rr_k8s_subnets.ids
   
   # 1. Control Plane Wiring (HA Datastore Access)
   control_plane_sg_id       = module.security_k8s.control_plane_sg_id
