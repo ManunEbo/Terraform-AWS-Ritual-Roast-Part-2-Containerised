@@ -17,7 +17,7 @@ resource "aws_launch_template" "rr_k3s_worker_frontend" {
     http_put_response_hop_limit = 1
   }
 
-  user_data = base64encode(templatefile("${path.module}/user_data_worker.sh", {
+  user_data = base64encode(templatefile("${path.module}/user_data_worker_frontend.sh", {
     control_plane_endpoint = aws_lb.rr_k3s_cp_nlb.dns_name
     environment            = var.environment
     aws_region             = var.aws_region

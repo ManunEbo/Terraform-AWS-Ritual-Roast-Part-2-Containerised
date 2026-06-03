@@ -5,13 +5,15 @@ set -e
 dnf update -y
 dnf install -y jq tar
 
+# Terraform strictly injects these values here
 REGION="${aws_region}"
 ENVIRONMENT="${environment}"
 NLB_DNS="${control_plane_endpoint}"
 NODE_ROLE="frontend"
 
 # 2. Fetch the K3s Cluster Join Token from Secrets Manager
-TOKEN_SECRET_ID="rr-${ENVIRONMENT}-k3s-join-token"
+# (Curly braces removed)
+TOKEN_SECRET_ID="rr-$ENVIRONMENT-k3s-join-token"
 
 echo "Waiting for Control Plane to publish K3s join token..."
 CLUSTER_TOKEN=""
@@ -25,7 +27,8 @@ while [ -z "$CLUSTER_TOKEN" ] || [ "$CLUSTER_TOKEN" == "None" ]; do
 done
 
 # 3. Join the HA K3s Cluster with Frontend Taints
+# (Curly braces removed from NLB_DNS, CLUSTER_TOKEN, and NODE_ROLE)
 echo "Joining K3s cluster via NLB: $NLB_DNS"
-curl -sfL https://get.k3s.io | K3S_URL=https://${NLB_DNS}:6443 K3S_TOKEN=${CLUSTER_TOKEN} sh -s - agent \
-  --node-taint dedicated=${NODE_ROLE}:NoSchedule \
-  --node-label tier=${NODE_ROLE}
+curl -sfL https://get.k3s.io | K3S_URL=https://$NLB_DNS:6443 K3S_TOKEN=$CLUSTER_TOKEN sh -s - agent \
+  --node-taint dedicated=$NODE_ROLE:NoSchedule \
+  --node-label tier=$NODE_ROLE

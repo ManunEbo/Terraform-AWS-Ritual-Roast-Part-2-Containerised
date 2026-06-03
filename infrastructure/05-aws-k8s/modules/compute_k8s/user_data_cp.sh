@@ -5,18 +5,20 @@ set -e
 dnf update -y
 dnf install -y jq tar openssl
 
+# Terraform strictly injects these values here
 REGION="${aws_region}"
 ENVIRONMENT="${environment}"
 NLB_DNS="${nlb_dns_name}"
 
-# 2. Fetch the K3s Cluster Join Token (Now pre-created by Terraform!)
-TOKEN_SECRET_ID="rr-${ENVIRONMENT}-k3s-join-token"
+# 2. Fetch the K3s Cluster Join Token 
+# (Curly braces removed so Terraform ignores this bash variable)
+TOKEN_SECRET_ID="rr-$ENVIRONMENT-k3s-join-token"
 K3S_TOKEN=$(aws secretsmanager get-secret-value --region $REGION --secret-id $TOKEN_SECRET_ID --query SecretString --output text)
 
 # 3. HA Leader Election (Embedded etcd)
 EXISTING_CP=$(aws ec2 describe-instances \
   --region $REGION \
-  --filters "Name=tag:Name,Values=rr-${ENVIRONMENT}-k3s-control-plane" "Name=instance-state-name,Values=running" \
+  --filters "Name=tag:Name,Values=rr-$ENVIRONMENT-k3s-control-plane" "Name=instance-state-name,Values=running" \
   --query "Reservations[*].Instances[*].PrivateIpAddress" \
   --output text | tr '\t' '\n' | sort | head -n 1)
 
@@ -32,7 +34,7 @@ if [ -z "$EXISTING_CP" ] || [ "$EXISTING_CP" == "$MY_IP" ]; then
     --flannel-backend=none \
     --write-kubeconfig-mode 644 \
     --cluster-cidr=192.168.0.0/16 \
-    --tls-san="${NLB_DNS}"
+    --tls-san="$NLB_DNS"
     
   sleep 20 # Wait for API server
   export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
@@ -43,7 +45,7 @@ if [ -z "$EXISTING_CP" ] || [ "$EXISTING_CP" == "$MY_IP" ]; then
   sleep 20
 
   # 5. Bootstrap ArgoCD & GHCR Credentials
-  GITHUB_SECRET_ID="rr-${ENVIRONMENT}-argocd-github-token"
+  GITHUB_SECRET_ID="rr-$ENVIRONMENT-argocd-github-token"
   GITHUB_PAT=$(aws secretsmanager get-secret-value --region $REGION --secret-id $GITHUB_SECRET_ID --query SecretString --output text)
 
   # Setup ArgoCD
@@ -61,7 +63,7 @@ if [ -z "$EXISTING_CP" ] || [ "$EXISTING_CP" == "$MY_IP" ]; then
 
   # 6. Bootstrap Observability Credentials for GitOps
   echo "Staging Grafana Cloud credentials..."
-  GRAFANA_SECRET_ID="rr-${ENVIRONMENT}-grafana-cloud-token"
+  GRAFANA_SECRET_ID="rr-$ENVIRONMENT-grafana-cloud-token"
   GRAFANA_TOKEN=$(aws secretsmanager get-secret-value --region $REGION --secret-id $GRAFANA_SECRET_ID --query SecretString --output text)
 
   kubectl create namespace observability || true
@@ -78,5 +80,5 @@ else
     --flannel-backend=none \
     --write-kubeconfig-mode 644 \
     --cluster-cidr=192.168.0.0/16 \
-    --tls-san="${NLB_DNS}"
+    --tls-san="$NLB_DNS"
 fi

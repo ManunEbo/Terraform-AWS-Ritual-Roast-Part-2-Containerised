@@ -3,11 +3,11 @@
 # ==========================================
 locals {
   common_tags_vpc = {
-    Project        = "ritual-roast-ECS"
-    Project_owner  = "Elvy ManunEbo"
-    Terraform      = "true"
-    Environment    = "dev"
-    Region         = "eu-west-2"
+    Project       = "ritual-roast-ECS"
+    Project_owner = "Elvy ManunEbo"
+    Terraform     = "true"
+    Environment   = "dev"
+    Region        = "eu-west-2"
   }
 }
 
@@ -47,7 +47,7 @@ data "aws_subnet" "rr_public_subnet_1" {
 # Fetching the k8s subnets
 data "aws_subnets" "rr_k8s_subnets" {
   tags = local.common_tags_vpc
-  
+
   filter {
     name   = "tag:Name"
     values = ["K8sSubnet-*"]
@@ -68,21 +68,21 @@ data "aws_route_table" "rr_k8s_private_rt" {
 # 3. Fetch 01-aws-vpc ALB Security Group (Name standardized)
 data "aws_security_group" "rr_alb_sg" {
   tags = merge(local.common_tags_vpc, {
-     Name = "rr-${var.environment}-alb-sg"
+    Name = "rr-${var.environment}-alb-sg"
   })
 }
 
 # 4. Fetch 01-aws-vpc Web Security Group
 data "aws_security_group" "rr_web_sg" {
   tags = merge(local.common_tags_vpc, {
-     Name = "rr-${var.environment}-web-sg"
+    Name = "rr-${var.environment}-web-sg"
   })
 }
 
 # 5. Fetch 01-aws-vpc App Security Group
 data "aws_security_group" "rr_app_sg" {
   tags = merge(local.common_tags_vpc, {
-     Name = "rr-${var.environment}-app-sg"
+    Name = "rr-${var.environment}-app-sg"
   })
 }
 
