@@ -13,6 +13,8 @@ resource "aws_lb" "rr_public" {
 }
 
 # #--- Target Group for Frontend ---
+# We commented this out because we were going to use the target groups from ECS
+# This made the ALB a flexible front door for both ECS and K8S
 # resource "aws_lb_target_group" "rr_frontend" {
 #   name        = "rr-${var.environment}-frontend-tg"
 #   port        = 3000

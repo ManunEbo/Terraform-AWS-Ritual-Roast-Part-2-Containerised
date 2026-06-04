@@ -2,6 +2,8 @@
 # 1. Frontend ECS Service
 #--------------------------------------------------------------
 
+# Where are the ECS Target groups kept?????
+
 resource "aws_ecs_service" "rr_frontend_service" {
   name            = "rr-${var.environment}-frontend-service"
   cluster         = aws_ecs_cluster.rr_ecs_cluster.id
@@ -10,6 +12,8 @@ resource "aws_ecs_service" "rr_frontend_service" {
 
   # --- THE BREATHING ROOM SHIELD ---
   # Tells ECS to ignore ALB health check failures for the first 120 seconds of boot
+  # This is a huge culprit for the failures
+  # The ALB needs to know to wait for 120 seconds other wise it will think the containers are unresponsive
   health_check_grace_period_seconds = 120
 
   network_configuration {

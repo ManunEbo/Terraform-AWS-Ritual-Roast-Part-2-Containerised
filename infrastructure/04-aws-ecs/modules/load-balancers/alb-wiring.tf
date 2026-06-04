@@ -1,19 +1,20 @@
 #--- Target Group for Frontend ECS Containers ---
 resource "aws_lb_target_group" "rr_frontend" {
-    name = "rr-${var.environment}-ecs-frontend-tg"
-    port = 3000
-    protocol = "HTTP"
-    vpc_id = var.vpc_id
+    name        = "rr-${var.environment}-ecs-frontend-tg"
+    port        = 3000
+    protocol    = "HTTP"
+    vpc_id      = var.vpc_id
     target_type = "ip"
 
     health_check {
-      enabled = true
-      path = "/"
-      port = "3000"
-      interval = 30
-      timeout = 5
-      healthy_threshold = 2
+      enabled             = true
+      path                = "/api/health" # <-- THE FIX: Point to the shallow route
+      port                = "3000"
+      interval            = 30
+      timeout             = 5
+      healthy_threshold   = 2
       unhealthy_threshold = 2
+      matcher             = "200"         # <-- THE GUARDRAIL: Accept only perfection
     }
 }
 

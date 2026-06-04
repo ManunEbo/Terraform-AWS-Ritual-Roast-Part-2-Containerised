@@ -161,16 +161,23 @@ def add_recipe():
 
 # --- FIX: Match the Internal ALB Target Group Path ---
 @app.route('/health')
-def health_check():
-    """Fargate Health Check"""
-    global db_pool
-    # Self-healing: Try to reconnect if the pool died or failed at startup
-    if not db_pool:
-        init_connection_pool()
+# def health_check():
+#     """Fargate Health Check"""
+#     global db_pool
+#     # Self-healing: Try to reconnect if the pool died or failed at startup
+#     if not db_pool:
+#         init_connection_pool()
         
-    if db_pool:
-        return "OK", 200
-    return "Disconnected", 503
+#     if db_pool:
+#         return "OK", 200
+#     return "Disconnected", 503
+def health_check():
+    """
+    SHALLOW Fargate Health Check
+    Only proves the network and Flask server are alive. 
+    Do NOT check the DB here to avoid ALB container assassination.
+    """
+    return "OK", 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
