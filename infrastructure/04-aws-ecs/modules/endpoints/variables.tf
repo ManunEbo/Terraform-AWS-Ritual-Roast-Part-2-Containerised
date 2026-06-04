@@ -28,7 +28,29 @@ variable "app_subnet_ids" {
   type        = list(string)
 }
 
-# variable "private_route_table_id" {
-#   description = "Route tables id to inject the s3 gateway route into"
-#   type        = list(string)
-# }
+variable "route_table_ids" {
+  description = "A list of route table IDs to inject the S3 gateway route into"
+  type        = list(string)
+}
+
+variable "app_s3_bucket" {
+  description = "The name of the specific S3 bucket the application is allowed to write to"
+  type        = string
+}
+
+# --- Variables for tightening IAM policy for S3 endpoints ---
+
+variable "ecs_execution_role_arn" {
+  description = "IAM Role ARN used by Fargate to pull images"
+  type        = string
+}
+
+variable "ecs_backend_task_role_arn" {
+  description = "IAM Role ARN used by the backend application"
+  type        = string
+}
+
+variable "ecs_frontend_task_role_arn" {
+  description = "IAM Role ARN used by the frontend application"
+  type        = string
+}

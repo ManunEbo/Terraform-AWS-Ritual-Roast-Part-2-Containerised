@@ -73,3 +73,23 @@ module "ecs" {
   backend_tg_arn        = module.alb.backend_tg_arn
   internal_alb_dns_name = module.alb.internal_alb_dns_name
 }
+
+module "endpoints" {
+  source          = "../../modules/endpoints"
+  
+  vpc_id          = data.aws_vpc.rr_vpc.id
+  vpc_name        = data.aws_vpc.rr_vpc.tags["Name"]
+  aws_region      = data.aws_region.current.name
+  environment     = var.environment
+  common_tags     = local.common_tags
+  
+  endpoints_sg_id = module.security_groups.rr_endpoints_sg_id
+  app_subnet_ids  = data.aws_subnets.AppSubnets.ids
+  route_table_ids = data.aws_route_tables.private_rts.ids
+  app_s3_bucket   = local.s3_bucket 
+  
+  # Injecting specific identities for the Zero-Trust S3 policy
+  ecs_execution_role_arn     = module.iam.ecs_execution_role_arn
+  ecs_backend_task_role_arn  = module.iam.ecs_backend_task_role_arn
+  ecs_frontend_task_role_arn = module.iam.ecs_frontend_task_role_arn
+}

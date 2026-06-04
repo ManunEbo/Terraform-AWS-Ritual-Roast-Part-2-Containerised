@@ -11,7 +11,10 @@ data "aws_security_group" "public_alb_sg" {
 
 # 3. Fetching Layer 2: Database Security Group Shell
 data "aws_security_group" "database_sg" {
-  name = "rr-${var.environment}-database-sg" 
+  filter {
+    name   = "tag:Name"
+    values = ["rr-${var.environment}-database-sg"]
+  }
 }
 
 # 4. Fetching Layer 2: Lambda Security Group Shell

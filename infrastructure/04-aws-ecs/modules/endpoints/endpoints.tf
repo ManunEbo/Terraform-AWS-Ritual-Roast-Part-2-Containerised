@@ -1,5 +1,5 @@
 #--------------------------------------------------------------
-#  Interface Endpoints (Secrets Manager, ECR, ECS)
+#  Interface Endpoints (Secrets Manager, ECR, ECS, Logs)
 #--------------------------------------------------------------
 
 # Secrets Manager: For lambda rotation and App secret retrieval
@@ -49,13 +49,8 @@ resource "aws_vpc_endpoint" "logs" {
   vpc_id              = var.vpc_id
   service_name        = "com.amazonaws.${var.aws_region}.logs"
   vpc_endpoint_type   = "Interface"
-  
-  # Deploying into the App subnets where the Fargate tasks live
   subnet_ids          = var.app_subnet_ids
-  
-  # Attaching to the same endpoints security group you already built
   security_group_ids  = [var.endpoints_sg_id]
-  
   private_dns_enabled = true
 
   tags = merge(var.common_tags, {
@@ -63,17 +58,35 @@ resource "aws_vpc_endpoint" "logs" {
   })
 }
 
-# This Gateway is what makes your private subnets "NAT-less" for ECR pulls.
-# It injects a private route into your PRIVATE route table only.
+#--------------------------------------------------------------
+#  Gateway Endpoint (S3)
+#--------------------------------------------------------------
+
+# This Gateway is what makes your private subnets "NAT-less" for ECR layer pulls.
 # resource "aws_vpc_endpoint" "s3" {
 #   vpc_id            = var.vpc_id
 #   service_name      = "com.amazonaws.${var.aws_region}.s3"
 #   vpc_endpoint_type = "Gateway"
-
-#   # Assign the list variable directly without brackets
-#   route_table_ids   = var.private_route_table_id
+  
+#   # Clean, explicit variable injection
+#   route_table_ids   = var.route_table_ids
 
 #   tags = merge(var.common_tags, {
 #     Name = "rr-${var.environment}-s3-gateway"
 #   })
 # }
+
+# locked down using IAM Policies
+resource "aws_vpc_endpoint" "s3" {
+  vpc_id            = var.vpc_id
+  service_name      = "com.amazonaws.${var.aws_region}.s3"
+  vpc_endpoint_type = "Gateway"
+  route_table_ids   = var.route_table_ids
+
+  # Attach the Zero-Trust Policy
+  policy = data.aws_iam_policy_document.s3_gateway.json
+
+  tags = merge(var.common_tags, {
+    Name = "rr-${var.environment}-s3-gateway"
+  })
+}
