@@ -79,7 +79,7 @@ module "endpoints" {
   
   vpc_id          = data.aws_vpc.rr_vpc.id
   vpc_name        = data.aws_vpc.rr_vpc.tags["Name"]
-  aws_region      = data.aws_region.current.name
+  aws_region      = data.aws_region.current.id
   environment     = var.environment
   common_tags     = local.common_tags
   
