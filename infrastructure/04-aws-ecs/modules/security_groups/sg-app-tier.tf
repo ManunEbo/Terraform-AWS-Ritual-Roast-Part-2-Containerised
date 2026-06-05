@@ -31,6 +31,23 @@ resource "aws_security_group_rule" "backend_to_db" {
   source_security_group_id = data.aws_security_group.database_sg.id 
 }
 
+# -------------------------------------------------------------------------
+# INJECTED BACK INTO LAYER 2: Backend -> Database Ingress (MySQL)
+# -------------------------------------------------------------------------
+resource "aws_security_group_rule" "db_ingress_from_backend" {
+  description              = "RR: Retroactively injected by Layer 4 to allow Backend to access MySQL"
+  type                     = "ingress"
+  from_port                = 3306
+  to_port                  = 3306
+  protocol                 = "tcp"
+
+  # 1. The Security Group being modified (The Database SG from Layer 2)
+  security_group_id        = data.aws_security_group.database_sg.id
+
+  # 2. The source allowed to enter (The Backend SG in Layer 4)
+  source_security_group_id = aws_security_group.rr_backend.id
+}
+
 # Egress: Backend -> Interface Endpoints (ECR/Secrets)
 resource "aws_security_group_rule" "rr_backend_egress_to_endpoints" {
   description              = "RR: Allow Backend to pull from ECR and fetch Secrets"
@@ -52,3 +69,4 @@ resource "aws_security_group_rule" "rr_backend_egress_to_s3" {
   security_group_id = aws_security_group.rr_backend.id
   prefix_list_ids   = [data.aws_prefix_list.s3.id]
 }
+
