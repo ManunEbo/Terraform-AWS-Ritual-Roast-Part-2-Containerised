@@ -2,19 +2,19 @@
 #  Interface Endpoints (Secrets Manager, ECR, ECS, Logs)
 #--------------------------------------------------------------
 
-# Secrets Manager: For lambda rotation and App secret retrieval
-resource "aws_vpc_endpoint" "secretsmanager" {
-  vpc_id              = var.vpc_id
-  service_name        = "com.amazonaws.${var.aws_region}.secretsmanager"
-  vpc_endpoint_type   = "Interface"
-  security_group_ids  = [var.endpoints_sg_id]
-  subnet_ids          = var.app_subnet_ids
-  private_dns_enabled = true
+# # Secrets Manager: For lambda rotation and App secret retrieval
+# resource "aws_vpc_endpoint" "secretsmanager" {
+#   vpc_id              = var.vpc_id
+#   service_name        = "com.amazonaws.${var.aws_region}.secretsmanager"
+#   vpc_endpoint_type   = "Interface"
+#   security_group_ids  = [var.endpoints_sg_id]
+#   subnet_ids          = var.app_subnet_ids
+#   private_dns_enabled = true
 
-  tags = merge(var.common_tags, {
-    Name = "${var.vpc_name}-secrets-endpoint"
-  })
-}
+#   tags = merge(var.common_tags, {
+#     Name = "${var.environment}-secrets-endpoint"
+#   })
+# }
 
 # ECR API: for ECS to describe images
 resource "aws_vpc_endpoint" "ecr_api" {
@@ -26,7 +26,7 @@ resource "aws_vpc_endpoint" "ecr_api" {
   private_dns_enabled = true
 
   tags = merge(var.common_tags, {
-    Name = "${var.vpc_name}-ecr-api-endpoint"
+    Name = "${var.environment}-ecr-api-endpoint"
   })
 }
 
@@ -40,7 +40,7 @@ resource "aws_vpc_endpoint" "ecr_dkr" {
   private_dns_enabled = true
 
   tags = merge(var.common_tags, {
-    Name = "${var.vpc_name}-ecr-dkr-endpoint"
+    Name = "${var.environment}-ecr-dkr-endpoint"
   })
 }
 

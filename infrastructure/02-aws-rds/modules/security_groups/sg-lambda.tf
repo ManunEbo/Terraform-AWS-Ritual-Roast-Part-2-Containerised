@@ -27,14 +27,28 @@ resource "aws_security_group_rule" "rr_lambda_egress_to_db" {
   source_security_group_id = aws_security_group.rr_database.id
 }
 
-# Egress: Lambda -> VPC Endpoints (HTTPS Port 443)
-# This security group rule belongs in ECS
-# resource "aws_security_group_rule" "rr_lambda_egress_to_endpoints" {
-#   type                     = "egress"
-#   description              = "RR: Allow Lambda to reach Secrets Manager via VPC Endpoint"
-#   from_port                = 443
-#   to_port                  = 443
-#   protocol                 = "tcp"
-#   security_group_id        = aws_security_group.rr_lambda.id
-#   source_security_group_id = aws_security_group.rr_endpoints.id # Referenced from sg-endpoints.tf
-# }
+# 1. EGRESS: Lambda -> VPC Endpoints (Outbound)
+resource "aws_security_group_rule" "rr_lambda_egress_to_endpoints" {
+  type                     = "egress"
+  description              = "RR: Allow Lambda to reach Secrets Manager via VPC Endpoint"
+  from_port                = 443
+  to_port                  = 443
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.rr_lambda.id
+  source_security_group_id = data.aws_security_group.rr_endpoints_sg.id
+}
+
+# 2. INJECTED INGRESS: VPC Endpoints <- Lambda (Inbound)
+resource "aws_security_group_rule" "endpoints_ingress_from_lambda" {
+  type                     = "ingress"
+  description              = "RR: Injected by Layer 2 - Allow Lambda into Endpoints SG"
+  from_port                = 443
+  to_port                  = 443
+  protocol                 = "tcp"
+  
+  # The Target being modified (Layer 1 Endpoint SG)
+  security_group_id        = data.aws_security_group.rr_endpoints_sg.id
+  
+  # The Source allowed in (This Lambda)
+  source_security_group_id = aws_security_group.rr_lambda.id
+}

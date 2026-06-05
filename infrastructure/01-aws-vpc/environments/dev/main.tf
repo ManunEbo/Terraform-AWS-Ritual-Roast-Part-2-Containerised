@@ -40,3 +40,26 @@ module "alb" {
   public_subnet_ids = module.vpc.public_subnet_ids
   public_alb_sg_id = module.security_groups.alb_sg_id  
 }
+
+# module "endpoints" {
+#   source = "../../modules/endpoints"
+
+#   vpc_id = module.vpc.vpc_id
+#   environment = var.environment
+#   common_tags = local.common_tags
+#   aws_region = var.aws_region
+#   app_subnet_ids = module.vpc.app_subnet_ids
+# }
+
+module "endpoints" {
+  source = "../../modules/endpoints"
+
+  vpc_id          = module.vpc.vpc_id
+  environment     = var.environment
+  common_tags     = local.common_tags
+  aws_region      = var.aws_region
+  app_subnet_ids  = module.vpc.app_subnet_ids
+  
+  # THE CRITICAL LINK: This forces Terraform to build the SG before the Endpoint
+  endpoints_sg_id = module.security_groups.endpoints_sg_id 
+}

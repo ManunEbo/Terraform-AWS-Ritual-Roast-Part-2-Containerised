@@ -22,3 +22,9 @@ output "public_alb_sg_id" {
   description = "The public load balancer boundary security identity"
   value       = module.security_groups.alb_sg_id
 }
+
+# We don't need to output this because it is retrieved using data source in different layers
+# output "endpoints_sg_id" {
+#   description = "The ID of the VPC Endpoints Security Group"
+#   value       = module.security_groups.endpoints_sg_id
+# }

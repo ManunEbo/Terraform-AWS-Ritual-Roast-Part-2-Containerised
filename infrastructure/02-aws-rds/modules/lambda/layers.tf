@@ -11,17 +11,20 @@ resource "null_resource" "rr_build_and_clean_layer" {
   provisioner "local-exec" {
     command = <<EOT
         set -e
-        # 1. Ensure the directory structure exists
+        # 1. Clean up any previous builds
+        rm -rf ${path.module}/layers/python
+        rm -f ${path.module}/layers/db_driver.zip
+        
         mkdir -p ${path.module}/layers/python
 
-        # 2. Install the pure-python dependency into the target folder
-        pip install pymysql -t ${path.module}/layers/python/
+        # 2. Install purely from source, ignore caches
+        pip install pymysql -t ${path.module}/layers/python/ --no-cache-dir --upgrade
 
-        # 3. Create the ZIP file (Ensure the 'python/' folder is at the root of the zip)
+        # 3. Zip while STRICTLY preserving permissions (-r = recursive, -q = quiet, -y = preserve symlinks)
         cd ${path.module}/layers
-        zip -rq db_driver.zip python/
+        zip -rqy db_driver.zip python/
 
-        # 4. CLEANUP: Delete the folder so it doesn't clutter your git/disk
+        # 4. Clean up the unzipped folder
         rm -rf python/
     EOT
   }
