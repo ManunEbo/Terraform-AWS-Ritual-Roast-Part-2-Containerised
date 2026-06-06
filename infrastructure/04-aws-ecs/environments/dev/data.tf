@@ -91,3 +91,10 @@ data "aws_route_tables" "private_rts" {
     values = ["app"] 
   }
 }
+
+data "aws_security_group" "rr_endpoints_sg" {
+  filter {
+    name   = "tag:Name"
+    values = ["rr-${var.environment}-vpc-endpoints-sg"]
+  }
+}

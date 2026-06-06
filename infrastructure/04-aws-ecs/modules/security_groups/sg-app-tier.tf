@@ -56,7 +56,7 @@ resource "aws_security_group_rule" "rr_backend_egress_to_endpoints" {
   to_port                  = 443
   protocol                 = "tcp"
   security_group_id        = aws_security_group.rr_backend.id
-  source_security_group_id = aws_security_group.rr_endpoints_sg.id
+  source_security_group_id = data.aws_security_group.rr_endpoints_sg.id
 }
 
 # Egress: Backend -> S3 Gateway (Image Layers)

@@ -83,7 +83,7 @@ module "endpoints" {
   environment     = var.environment
   common_tags     = local.common_tags
   
-  endpoints_sg_id = module.security_groups.rr_endpoints_sg_id
+  endpoints_sg_id = data.aws_security_group.rr_endpoints_sg.id
   app_subnet_ids  = data.aws_subnets.AppSubnets.ids
   route_table_ids = data.aws_route_tables.private_rts.ids
   app_s3_bucket   = local.s3_bucket 

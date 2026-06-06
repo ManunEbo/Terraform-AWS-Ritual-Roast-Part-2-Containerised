@@ -32,18 +32,7 @@ resource "aws_security_group_rule" "rr_endpoints_ingress_from_backend" {
   source_security_group_id = aws_security_group.rr_backend.id
 }
 
-# Rule 2: Identity - Lambda Tier
-resource "aws_security_group_rule" "rr_endpoints_ingress_from_lambda" {
-  type                     = "ingress"
-  description              = "RR: Auth only for Rotation Lambda (Secrets API)"
-  from_port                = 443
-  to_port                  = 443
-  protocol                 = "tcp"
-  security_group_id        = data.aws_security_group.rr_endpoints_sg.id
-  source_security_group_id = data.aws_security_group.lambda_sg.id 
-}
-
-# Rule 3: Identity - Frontend Tier
+# # Rule 3: Identity - Frontend Tier
 resource "aws_security_group_rule" "rr_endpoints_ingress_from_frontend" {
   type                     = "ingress"
   description              = "RR: Auth only for Frontend containers (ECR)"
