@@ -24,9 +24,10 @@ data "aws_vpc" "rr_vpc" {
 
 # 2. Fetch the existing RDS Security Group
 data "aws_security_group" "rr_rds_sg" {
-  tags = merge(local.common_tags_vpc, {
-    Name = "rr-${var.environment}-rds-sg"
-  })
+  filter {
+    name   = "tag:Name"
+    values = ["rr-${var.environment}-database-sg"] # <--- FIXED
+  }
 }
 
 # Fetch the Existing Internet gateway
@@ -73,18 +74,18 @@ data "aws_security_group" "rr_alb_sg" {
 }
 
 # 4. Fetch 01-aws-vpc Web Security Group
-data "aws_security_group" "rr_web_sg" {
-  tags = merge(local.common_tags_vpc, {
-    Name = "rr-${var.environment}-web-sg"
-  })
-}
+# data "aws_security_group" "rr_web_sg" {
+#   tags = merge(local.common_tags_vpc, {
+#     Name = "rr-${var.environment}-web-sg"
+#   })
+# }
 
 # 5. Fetch 01-aws-vpc App Security Group
-data "aws_security_group" "rr_app_sg" {
-  tags = merge(local.common_tags_vpc, {
-    Name = "rr-${var.environment}-app-sg"
-  })
-}
+# data "aws_security_group" "rr_app_sg" {
+#   tags = merge(local.common_tags_vpc, {
+#     Name = "rr-${var.environment}-app-sg"
+#   })
+# }
 
 data "aws_lb" "gateway_alb" {
   name = "rr-${var.environment}-public-alb"

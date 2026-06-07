@@ -23,15 +23,15 @@ variable "alb_sg_id" {
   type = string
 }
 
-variable "web_sg_id" {
-  description = "Security Group ID of the V1 Frontend Web tasks"
-  type = string
-}
+# variable "web_sg_id" {
+#   description = "Security Group ID of the V1 Frontend Web tasks"
+#   type = string
+# }
 
-variable "app_sg_id" {
-  description = "Security Group ID of the V1 Backend App tasks"
-  type = string
-}
+# variable "app_sg_id" {
+#   description = "Security Group ID of the V1 Backend App tasks"
+#   type = string
+# }
 
 variable "github_pat" {
   type      = string
