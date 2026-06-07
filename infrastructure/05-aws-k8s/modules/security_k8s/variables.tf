@@ -42,3 +42,8 @@ variable "grafana_token" {
   type      = string
   sensitive = true
 }
+
+variable "endpoints_sg_id" {
+  description = "Layer 1 VPC Endpoints Security Group ID"
+  type        = string
+}

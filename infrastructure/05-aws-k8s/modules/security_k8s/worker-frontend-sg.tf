@@ -10,10 +10,10 @@ resource "aws_security_group" "rr_k8s_worker_frontend_sg" {
 
 # Istio HTTP Ingress from Public ALB
 resource "aws_security_group_rule" "rr_frontend_ingress_http_alb" {
-  description              = "HTTP Ingress strictly from V1 Public ALB"
+  description              = "HTTP Ingress strictly from V1 Public ALB onto Istio NodePort"
   type                     = "ingress"
-  from_port                = 80
-  to_port                  = 80
+  from_port                = 30080
+  to_port                  = 30080
   protocol                 = "tcp"
   source_security_group_id = var.alb_sg_id
   security_group_id        = aws_security_group.rr_k8s_worker_frontend_sg.id
@@ -46,25 +46,25 @@ resource "aws_security_group_rule" "rr_frontend_ingress_istio_webhook" {
 # =========================================================
 # CALICO OVERLAY: CP RECEIVING FROM FRONTEND
 # =========================================================
-resource "aws_security_group_rule" "rr_cp_ingress_calico_bgp_frontend" {
-  description              = "Allow Frontend Calico BGP to Control Plane"
-  type                     = "ingress"
-  from_port                = 179
-  to_port                  = 179
-  protocol                 = "tcp"
-  security_group_id        = aws_security_group.rr_k8s_control_plane_sg.id
-  source_security_group_id = aws_security_group.rr_k8s_worker_frontend_sg.id
-}
+# resource "aws_security_group_rule" "rr_cp_ingress_calico_bgp_frontend" {
+#   description              = "Allow Frontend Calico BGP to Control Plane"
+#   type                     = "ingress"
+#   from_port                = 179
+#   to_port                  = 179
+#   protocol                 = "tcp"
+#   security_group_id        = aws_security_group.rr_k8s_control_plane_sg.id
+#   source_security_group_id = aws_security_group.rr_k8s_worker_frontend_sg.id
+# }
 
-resource "aws_security_group_rule" "rr_cp_ingress_calico_vxlan_frontend" {
-  description              = "Allow Frontend Calico VXLAN to Control Plane"
-  type                     = "ingress"
-  from_port                = 4789
-  to_port                  = 4789
-  protocol                 = "udp"
-  security_group_id        = aws_security_group.rr_k8s_control_plane_sg.id
-  source_security_group_id = aws_security_group.rr_k8s_worker_frontend_sg.id
-}
+# resource "aws_security_group_rule" "rr_cp_ingress_calico_vxlan_frontend" {
+#   description              = "Allow Frontend Calico VXLAN to Control Plane"
+#   type                     = "ingress"
+#   from_port                = 4789
+#   to_port                  = 4789
+#   protocol                 = "udp"
+#   security_group_id        = aws_security_group.rr_k8s_control_plane_sg.id
+#   source_security_group_id = aws_security_group.rr_k8s_worker_frontend_sg.id
+# }
 
 # =========================================================
 # CALICO OVERLAY: FRONTEND RECEIVING FROM CP
@@ -161,11 +161,30 @@ resource "aws_security_group_rule" "rr_frontend_egress_http" {
 
 # Inject Egress rules into ALB to route to Frontend Workers
 resource "aws_security_group_rule" "rr_alb_egress_to_frontend_http" {
-  description              = "Allow public ALB to route HTTP traffic to Frontend Workers"
+  description              = "Allow public ALB to route HTTP traffic to Frontend Workers on NodePort"
   type                     = "egress"
-  from_port                = 80
-  to_port                  = 80
+  from_port                = 30080
+  to_port                  = 30080
   protocol                 = "tcp"
   source_security_group_id = aws_security_group.rr_k8s_worker_frontend_sg.id
   security_group_id        = var.alb_sg_id
+}
+
+# =========================================================
+# ENDPOINT SG - Frontend
+# =========================================================
+
+# INJECTED INGRESS: Let Control Plane into Layer 1 Endpoints SG (Port 443)
+resource "aws_security_group_rule" "rr_endpoints_ingress_from_wkr_frontend" {
+  description              = "RR: Allow frontend worker to reach Secrets Manager via VPC Endpoint"
+  type                     = "ingress"
+  from_port                = 443
+  to_port                  = 443
+  protocol                 = "tcp"
+  
+  # 1. The Target being modified (Layer 1)
+  security_group_id        = var.endpoints_sg_id
+  
+  # 2. The Source allowed in (Layer 5)
+  source_security_group_id = aws_security_group.rr_k8s_worker_frontend_sg.id 
 }

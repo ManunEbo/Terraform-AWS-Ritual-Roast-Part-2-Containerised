@@ -10,6 +10,11 @@ variable "aws_region" {
   default     = "eu-west-2"
 }
 
+variable "vpc_name" {
+  type    = string
+  default = "RR-vpc"
+}
+
 # --- New Variables Required for K8s ---
 
 variable "control_plane_type" {

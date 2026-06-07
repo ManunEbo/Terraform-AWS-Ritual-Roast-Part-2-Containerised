@@ -7,19 +7,6 @@
 # (App and Lambda) can talk to the Secrets Manager, ECS, and ECR APIs.
 # It sits on the "receiving" end of all those internal HTTPS calls.
 
-# resource "aws_security_group" "rr_endpoints_sg" {
-#   name_prefix = "rr-${var.environment}-vpc-endpoints-sg-"
-#   description = "RR: Receiving HTTPS traffic for VPC Interface Endpoints"
-#   vpc_id      = var.vpc_id
-
-#   lifecycle {
-#     create_before_destroy = true
-#   }
-
-#   tags = merge(var.common_tags, {
-#     Name = "rr-${var.environment}-vpc-endpoints-sg"
-#   })
-# }
 
 # Rule 1: Identity - Backend Tier
 resource "aws_security_group_rule" "rr_endpoints_ingress_from_backend" {

@@ -31,6 +31,7 @@ if [ -z "$EXISTING_CP" ] || [ "$EXISTING_CP" == "$MY_IP" ]; then
   curl -sfL https://get.k3s.io | K3S_TOKEN=$K3S_TOKEN sh -s - server \
     --cluster-init \
     --disable-network-policy \
+    --disable traefik \
     --flannel-backend=none \
     --write-kubeconfig-mode 644 \
     --cluster-cidr=192.168.0.0/16 \
@@ -77,6 +78,7 @@ else
   curl -sfL https://get.k3s.io | K3S_TOKEN=$K3S_TOKEN sh -s - server \
     --server https://$EXISTING_CP:6443 \
     --disable-network-policy \
+    --disable traefik \
     --flannel-backend=none \
     --write-kubeconfig-mode 644 \
     --cluster-cidr=192.168.0.0/16 \

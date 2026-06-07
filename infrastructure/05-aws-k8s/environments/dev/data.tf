@@ -94,3 +94,10 @@ data "aws_lb_listener" "gateway_http_listener" {
   load_balancer_arn = data.aws_lb.gateway_alb.arn
   port              = 80
 }
+# Fetch the Endpoints Security Group from Layer 1
+data "aws_security_group" "rr_endpoints_sg" {
+  filter {
+    name   = "tag:Name"
+    values = ["rr-${var.environment}-vpc-endpoints-sg"]
+  }
+}

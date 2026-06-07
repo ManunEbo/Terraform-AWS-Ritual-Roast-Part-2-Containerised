@@ -46,25 +46,25 @@ resource "aws_security_group_rule" "rr_backend_ingress_istio_webhook" {
 # =========================================================
 # CALICO OVERLAY MESH
 # =========================================================
-resource "aws_security_group_rule" "rr_cp_ingress_calico_bgp_backend" {
-  description              = "Allow Backend Calico BGP to Control Plane"
-  type                     = "ingress"
-  from_port                = 179
-  to_port                  = 179
-  protocol                 = "tcp"
-  security_group_id        = aws_security_group.rr_k8s_control_plane_sg.id
-  source_security_group_id = aws_security_group.rr_k8s_worker_backend_sg.id
-}
+# resource "aws_security_group_rule" "rr_cp_ingress_calico_bgp_backend" {
+#   description              = "Allow Backend Calico BGP to Control Plane"
+#   type                     = "ingress"
+#   from_port                = 179
+#   to_port                  = 179
+#   protocol                 = "tcp"
+#   security_group_id        = aws_security_group.rr_k8s_control_plane_sg.id
+#   source_security_group_id = aws_security_group.rr_k8s_worker_backend_sg.id
+# }
 
-resource "aws_security_group_rule" "rr_cp_ingress_calico_vxlan_backend" {
-  description              = "Allow Backend Calico VXLAN to Control Plane"
-  type                     = "ingress"
-  from_port                = 4789
-  to_port                  = 4789
-  protocol                 = "udp"
-  security_group_id        = aws_security_group.rr_k8s_control_plane_sg.id
-  source_security_group_id = aws_security_group.rr_k8s_worker_backend_sg.id
-}
+# resource "aws_security_group_rule" "rr_cp_ingress_calico_vxlan_backend" {
+#   description              = "Allow Backend Calico VXLAN to Control Plane"
+#   type                     = "ingress"
+#   from_port                = 4789
+#   to_port                  = 4789
+#   protocol                 = "udp"
+#   security_group_id        = aws_security_group.rr_k8s_control_plane_sg.id
+#   source_security_group_id = aws_security_group.rr_k8s_worker_backend_sg.id
+# }
 
 resource "aws_security_group_rule" "rr_backend_ingress_calico_bgp_cp" {
   description              = "Allow Control Plane Calico BGP to Backend"
@@ -142,4 +142,23 @@ resource "aws_security_group_rule" "rr_backend_egress_http" {
   protocol          = "tcp"
   cidr_blocks       = ["0.0.0.0/0"]
   security_group_id = aws_security_group.rr_k8s_worker_backend_sg.id
+}
+
+# =========================================================
+# ENDPOINT SG - Backend
+# =========================================================
+
+# INJECTED INGRESS: Let Control Plane into Layer 1 Endpoints SG (Port 443)
+resource "aws_security_group_rule" "rr_endpoints_ingress_from_wkr_backend" {
+  description              = "RR: Allow Backend worker to reach Secrets Manager via VPC Endpoint"
+  type                     = "ingress"
+  from_port                = 443
+  to_port                  = 443
+  protocol                 = "tcp"
+  
+  # 1. The Target being modified (Layer 1)
+  security_group_id        = var.endpoints_sg_id
+  
+  # 2. The Source allowed in (Layer 5)
+  source_security_group_id = aws_security_group.rr_k8s_worker_backend_sg.id 
 }
