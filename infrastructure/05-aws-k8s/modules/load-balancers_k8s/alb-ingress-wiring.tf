@@ -10,7 +10,7 @@ resource "aws_lb_target_group" "rr_k8s_frontend_tg" {
 
   health_check {
     enabled             = true
-    path                = "/healthz/ready" 
+    path                = "/" 
     port                = "30080"
     interval            = 15               
     timeout             = 5
