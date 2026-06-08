@@ -79,3 +79,8 @@ variable "iam_profile_worker_backend" {
   description = "IAM Instance Profile name for the Backend Worker Nodes"
   type        = string
 }
+
+variable "nlb_sg_id" {
+  description = "Security Group ID for the Network Load Balancer"
+  type        = string
+}

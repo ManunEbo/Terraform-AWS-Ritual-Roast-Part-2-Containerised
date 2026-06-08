@@ -12,3 +12,7 @@ output "worker_backend_sg_id" {
   description = "Security Group ID for the Backend Worker Nodes"
   value       = aws_security_group.rr_k8s_worker_backend_sg.id
 }
+
+output "nlb_sg_id" {
+  value = aws_security_group.rr_k8s_nlb_sg.id
+}

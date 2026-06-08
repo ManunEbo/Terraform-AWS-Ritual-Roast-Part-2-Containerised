@@ -5,6 +5,9 @@ resource "aws_lb" "rr_k3s_cp_nlb" {
   internal           = true
   load_balancer_type = "network"
   subnets            = var.k8s_private_subnets
+  
+  # THE FIX: Wire the security group to the NLB
+  security_groups    = [var.nlb_sg_id]
 
   tags = merge(var.common_tags, {
     Name = "rr-${var.environment}-k3s-cp-nlb"

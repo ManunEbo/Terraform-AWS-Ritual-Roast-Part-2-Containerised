@@ -58,6 +58,9 @@ module "compute_k8s" {
 
   # DO NOT BOOT INSTANCES UNTIL THE INTERNET BRIDGE IS UP
   depends_on = [ module.network_k8s ]
+
+  # Add this line to bridge the modules:
+  nlb_sg_id = module.security_k8s.nlb_sg_id
 }
 
 module "network_k8s" {
