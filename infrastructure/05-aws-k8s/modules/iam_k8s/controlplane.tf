@@ -42,14 +42,14 @@ resource "aws_iam_policy" "rr_cp_custom_policy" {
         # Required to read ArgoCD token, DB credentials, and manage the Cluster Join Token
         Action   = [
           "secretsmanager:GetSecretValue", 
-          "secretsmanager:DescribeSecret",
-          "secretsmanager:CreateSecret",
-          "secretsmanager:PutSecretValue"
+          "secretsmanager:DescribeSecret"
+          # "secretsmanager:CreateSecret",
+          # "secretsmanager:PutSecretValue"
         ]
         Effect   = "Allow"
         Resource = [
           "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:rr-${var.environment}-argocd-github-token-*",
-          "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:rr-${var.environment}-db-secret-*",
+          # "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:rr-${var.environment}-db-secret-*",
           "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:rr-${var.environment}-k3s-join-token-*",
           "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:rr-${var.environment}-grafana-cloud-token-*"
         ]
