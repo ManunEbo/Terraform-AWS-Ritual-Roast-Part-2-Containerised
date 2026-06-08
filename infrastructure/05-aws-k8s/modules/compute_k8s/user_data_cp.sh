@@ -4,6 +4,8 @@ set -e
 # 1. System Updates & Prerequisites
 dnf update -y
 dnf install -y jq tar openssl
+# Add Helm install here
+curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
 # Terraform strictly injects these values here
 REGION="${aws_region}"
@@ -45,17 +47,17 @@ if [ -z "$EXISTING_CP" ] || [ "$EXISTING_CP" == "$MY_IP" ]; then
   kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/custom-resources.yaml
   sleep 20
 
-  # 5. Bootstrap ArgoCD & GHCR Credentials
+# 5. Bootstrap ArgoCD via Helm (The reproducible way)
+  kubectl create namespace argocd || true
+  helm repo add argo https://argoproj.github.io/argo-helm
+  helm repo update
+  helm install argocd argo/argo-cd -n argocd --set server.service.type=ClusterIP
+
+  # Inject GHCR login secret
   GITHUB_SECRET_ID="rr-$ENVIRONMENT-argocd-github-token"
   GITHUB_PAT=$(aws secretsmanager get-secret-value --region $REGION --secret-id $GITHUB_SECRET_ID --query SecretString --output text)
-
-  # Setup ArgoCD
-  kubectl create namespace argocd || true
+  
   kubectl create secret generic github-pat --namespace=argocd --from-literal=token=$GITHUB_PAT || true
-  kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
-
-  # Create the dev namespace and inject the GHCR image pull secret
-  kubectl create namespace dev || true
   kubectl create secret docker-registry ghcr-login-secret \
     --namespace=dev \
     --docker-server=ghcr.io \
@@ -71,6 +73,57 @@ if [ -z "$EXISTING_CP" ] || [ "$EXISTING_CP" == "$MY_IP" ]; then
   kubectl create secret generic grafana-auth \
     --namespace=observability \
     --from-literal=bearer-token=$GRAFANA_TOKEN || true
+
+  # =========================================================================
+  # 7. IGNITE GITOPS (THE HANDOVER)
+  # =========================================================================
+  echo "Waiting for ArgoCD CRDs to register in the cluster..."
+  until kubectl get crd applications.argoproj.io >/dev/null 2>&1; do sleep 5; echo "Waiting..."; done
+
+  echo "Injecting Root ArgoCD Applications..."
+  cat <<EOF | kubectl apply -f -
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-observability
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised.git'
+    targetRevision: main
+    path: infrastructure/05-aws-k8s/k8s-manifests/observability
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-dev-apps
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised.git'
+    targetRevision: main
+    path: infrastructure/05-aws-k8s/k8s-manifests/dev-apps
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+EOF
 
 else
   echo "Existing leader found at $EXISTING_CP. Joining HA cluster..."
