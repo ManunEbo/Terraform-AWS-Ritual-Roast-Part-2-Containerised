@@ -12,11 +12,13 @@ spec:
       labels:
         app: grafana-alloy
     spec:
+      # THE FIX: Tolerate ALL taints so the agent runs on every node
+      tolerations:
+        - operator: "Exists"
       containers:
       - name: alloy
         image: grafana/alloy:latest
         env:
-        # The agent dynamically pulls the secret injected by your AWS user_data script!
         - name: GRAFANA_CLOUD_TOKEN
           valueFrom:
             secretKeyRef:
