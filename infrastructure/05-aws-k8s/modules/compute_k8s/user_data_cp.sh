@@ -145,6 +145,12 @@ spec:
     repoURL: 'https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised.git'
     targetRevision: main
     path: infrastructure/05-aws-k8s/k8s-manifests/dev-apps
+    # ---------------------------------------------------------------------
+    # MODIFIED HERE: Added directory config block to look into subdirectories
+    # ---------------------------------------------------------------------
+    directory:
+      recurse: true
+    # ---------------------------------------------------------------------
   destination:
     server: 'https://kubernetes.default.svc'
     namespace: dev
