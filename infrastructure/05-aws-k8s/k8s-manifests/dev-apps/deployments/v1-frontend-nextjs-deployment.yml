@@ -32,6 +32,13 @@ spec:
         image: ghcr.io/manunebo/rr-v1-frontend:latest
         ports:
         - containerPort: 3000
+        # =========================================================================
+        # MODIFIED HERE: Passing the exact variable the ECS-built image expects
+        # =========================================================================
+        env:
+        - name: BACKEND_URL
+          value: "http://rr-backend-flask-svc:80"
+        # =========================================================================
         resources:
           requests:
             cpu: 100m
