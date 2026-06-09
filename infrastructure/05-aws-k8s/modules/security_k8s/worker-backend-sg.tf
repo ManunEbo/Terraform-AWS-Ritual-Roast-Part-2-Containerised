@@ -162,3 +162,16 @@ resource "aws_security_group_rule" "rr_endpoints_ingress_from_wkr_backend" {
   # 2. The Source allowed in (Layer 5)
   source_security_group_id = aws_security_group.rr_k8s_worker_backend_sg.id 
 }
+
+# =========================================================
+# CALICO TYPHA (PORT 5473)
+# =========================================================
+resource "aws_security_group_rule" "rr_backend_ingress_typha_cp" {
+  description              = "Allow CP Calico Node to reach Typha on Backend"
+  type                     = "ingress"
+  from_port                = 5473
+  to_port                  = 5473
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.rr_k8s_worker_backend_sg.id
+  source_security_group_id = aws_security_group.rr_k8s_control_plane_sg.id
+}

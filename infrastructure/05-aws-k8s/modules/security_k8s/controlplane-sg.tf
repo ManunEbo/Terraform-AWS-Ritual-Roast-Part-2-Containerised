@@ -160,3 +160,26 @@ resource "aws_security_group_rule" "rr_cp_ingress_calico_vxlan_backend" {
   security_group_id        = aws_security_group.rr_k8s_control_plane_sg.id
   source_security_group_id = aws_security_group.rr_k8s_worker_backend_sg.id
 }
+
+# =========================================================
+# CALICO TYPHA (PORT 5473)
+# =========================================================
+resource "aws_security_group_rule" "rr_cp_ingress_typha_frontend" {
+  description              = "Allow Frontend Calico Node to reach Typha on CP"
+  type                     = "ingress"
+  from_port                = 5473
+  to_port                  = 5473
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.rr_k8s_control_plane_sg.id
+  source_security_group_id = aws_security_group.rr_k8s_worker_frontend_sg.id
+}
+
+resource "aws_security_group_rule" "rr_cp_ingress_typha_backend" {
+  description              = "Allow Backend Calico Node to reach Typha on CP"
+  type                     = "ingress"
+  from_port                = 5473
+  to_port                  = 5473
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.rr_k8s_control_plane_sg.id
+  source_security_group_id = aws_security_group.rr_k8s_worker_backend_sg.id
+}
