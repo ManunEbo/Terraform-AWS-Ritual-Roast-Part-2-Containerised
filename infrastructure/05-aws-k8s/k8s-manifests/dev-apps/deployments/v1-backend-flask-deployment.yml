@@ -32,6 +32,13 @@ spec:
         image: ghcr.io/manunebo/rr-v1-backend:latest
         ports:
         - containerPort: 5000
+        # =========================================================
+        # PROXY: Pulls from the Terraform-generated ConfigMap
+        # =========================================================
+        envFrom:
+        - configMapRef:
+            name: backend-config
+        # =========================================================
         resources:
           requests:
             cpu: 100m

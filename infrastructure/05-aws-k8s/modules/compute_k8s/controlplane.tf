@@ -69,6 +69,7 @@ resource "aws_launch_template" "rr_k3s_cp" {
     environment  = var.environment
     aws_region   = var.aws_region
     nlb_dns_name = aws_lb.rr_k3s_cp_nlb.dns_name
+    DB_SECRET_ARN = data.aws_secretsmanager_secret.rr_db_secret.arn
   }))
 
   tags = merge(var.common_tags, {

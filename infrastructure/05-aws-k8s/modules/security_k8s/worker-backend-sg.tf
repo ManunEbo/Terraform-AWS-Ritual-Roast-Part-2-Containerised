@@ -175,3 +175,29 @@ resource "aws_security_group_rule" "rr_backend_ingress_typha_cp" {
   security_group_id        = aws_security_group.rr_k8s_worker_backend_sg.id
   source_security_group_id = aws_security_group.rr_k8s_control_plane_sg.id
 }
+
+# =========================================================
+# ZERO-TRUST OVERLAY FALLBACKS & METRICS
+# =========================================================
+
+# Protocol 4 (IPIP) from Control Plane
+resource "aws_security_group_rule" "rr_backend_ingress_ipip_cp" {
+  description              = "Allow Calico IPIP from Control Plane"
+  type                     = "ingress"
+  from_port                = 0
+  to_port                  = 0
+  protocol                 = "4"
+  security_group_id        = aws_security_group.rr_k8s_worker_backend_sg.id
+  source_security_group_id = aws_security_group.rr_k8s_control_plane_sg.id
+}
+
+# Metrics Server (CP scraping Workers)
+resource "aws_security_group_rule" "rr_backend_ingress_metrics_cp" {
+  description              = "Allow Control Plane to scrape Metrics Server"
+  type                     = "ingress"
+  from_port                = 4443
+  to_port                  = 4443
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.rr_k8s_worker_backend_sg.id
+  source_security_group_id = aws_security_group.rr_k8s_control_plane_sg.id
+}

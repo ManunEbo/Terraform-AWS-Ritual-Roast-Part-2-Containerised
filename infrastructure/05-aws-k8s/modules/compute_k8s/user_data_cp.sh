@@ -69,7 +69,7 @@ if [ -z "$EXISTING_CP" ] || [ "$EXISTING_CP" == "$MY_IP" ]; then
   GITHUB_PAT=$(aws secretsmanager get-secret-value --region $REGION --secret-id $GITHUB_SECRET_ID --query SecretString --output text)
 
   # Explicitly structure and label the secret so ArgoCD matches it to the private repo
-  cat <<EOF | kubectl apply -f -
+cat <<EOF | kubectl apply -f -
 apiVersion: v1
 kind: Secret
 metadata:
@@ -93,6 +93,20 @@ EOF
     --docker-password=$GITHUB_PAT || true
 
   # =========================================================================
+  # INFRASTRUCTURE HANDOFF: Pass the exact Secret ARN to the Dev namespace
+  # =========================================================================
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: dev
+data:
+  SECRET_ARN: "${DB_SECRET_ARN}"
+  AWS_REGION: "$REGION"
+EOF
+  
+  # =========================================================================
   # 6. BOOTSTRAP OBSERVABILITY CREDENTIALS
   # =========================================================================
   GRAFANA_SECRET_ID="rr-$ENVIRONMENT-grafana-cloud-token"
@@ -112,7 +126,7 @@ EOF
   done
 
   echo "Injecting Root Application Controllers..."
-  cat <<EOF | kubectl apply -f -
+cat <<EOF | kubectl apply -f -
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:

@@ -183,3 +183,50 @@ resource "aws_security_group_rule" "rr_cp_ingress_typha_backend" {
   security_group_id        = aws_security_group.rr_k8s_control_plane_sg.id
   source_security_group_id = aws_security_group.rr_k8s_worker_backend_sg.id
 }
+
+# =========================================================
+# ZERO-TRUST OVERLAY FALLBACKS & ISTIO DISCOVERY
+# =========================================================
+
+# Protocol 4 (IPIP)
+resource "aws_security_group_rule" "rr_cp_ingress_ipip_frontend" {
+  description              = "Allow Calico IPIP from Frontend"
+  type                     = "ingress"
+  from_port                = 0
+  to_port                  = 0
+  protocol                 = "4"
+  security_group_id        = aws_security_group.rr_k8s_control_plane_sg.id
+  source_security_group_id = aws_security_group.rr_k8s_worker_frontend_sg.id
+}
+
+resource "aws_security_group_rule" "rr_cp_ingress_ipip_backend" {
+  description              = "Allow Calico IPIP from Backend"
+  type                     = "ingress"
+  from_port                = 0
+  to_port                  = 0
+  protocol                 = "4"
+  security_group_id        = aws_security_group.rr_k8s_control_plane_sg.id
+  source_security_group_id = aws_security_group.rr_k8s_worker_backend_sg.id
+}
+
+# Istiod xDS Discovery Port
+resource "aws_security_group_rule" "rr_cp_ingress_istiod_frontend" {
+  description              = "Allow Frontend Gateway to reach Istiod xDS"
+  type                     = "ingress"
+  from_port                = 15012
+  to_port                  = 15012
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.rr_k8s_control_plane_sg.id
+  source_security_group_id = aws_security_group.rr_k8s_worker_frontend_sg.id
+}
+
+# Istiod xDS Discovery Port from Backend
+resource "aws_security_group_rule" "rr_cp_ingress_istiod_backend" {
+  description              = "Allow Backend Proxies to reach Istiod xDS"
+  type                     = "ingress"
+  from_port                = 15012
+  to_port                  = 15012
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.rr_k8s_control_plane_sg.id
+  source_security_group_id = aws_security_group.rr_k8s_worker_backend_sg.id
+}
