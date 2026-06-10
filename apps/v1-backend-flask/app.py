@@ -4,6 +4,7 @@ from mysql.connector import pooling
 from flask_cors import CORS
 import json
 import boto3
+from botocore.config import Config # --- ADDED: Import botocore Config ---
 import os
 import sys
 import time
@@ -32,8 +33,24 @@ def get_mysql_secrets():
         logger.error("❌ SECRET_ARN environment variable is missing!")
         return None
     
+    # =====================================================================
+    # FIX: Network idle connection drop
+    # Configure Boto3 to send TCP Keepalives to prevent AWS from silently
+    # dropping the connection pool to the Secrets Manager VPC Endpoint
+    # =====================================================================
+    boto3_config = Config(
+        region_name = region,
+        tcp_keepalive = True,
+        retries = {
+            'max_attempts': 3,
+            'mode': 'standard'
+        }
+    )
+    
     session = boto3.Session()
-    client = session.client(service_name="secretsmanager", region_name=region)
+    # Apply the config here
+    client = session.client(service_name="secretsmanager", config=boto3_config)
+    # =====================================================================
     
     try:
         response = client.get_secret_value(SecretId=secret_arn)
@@ -105,9 +122,18 @@ startup_db_connection()
 
 @app.route('/api/get_recipe', methods=['GET'])
 def get_recipes():
+    # =====================================================================
+    # FIX: Intermittent Connection Recovery
+    # If the global pool is null when a request arrives, force a reconnection.
+    # This prevents the app from permanently hanging if the first boot failed.
+    # =====================================================================
+    global db_pool
     if not db_pool:
-        return jsonify({"error": "DB not ready"}), 503
-    
+        logger.warning("⚠️ Database pool not found during GET. Attempting reconnection...")
+        if not init_connection_pool():
+            return jsonify({"error": "DB not ready"}), 503
+    # =====================================================================
+            
     try:
         conn = db_pool.get_connection()
         cursor = conn.cursor(dictionary=True)
@@ -134,9 +160,17 @@ def get_recipes():
 
 @app.route('/api/add_recipe', methods=['POST'])
 def add_recipe():
+    # =====================================================================
+    # FIX: Intermittent Connection Recovery
+    # Same as above, ensure we try to reconnect before outright failing a POST.
+    # =====================================================================
+    global db_pool
     if not db_pool:
-        return jsonify({"error": "DB not ready"}), 503
-    
+        logger.warning("⚠️ Database pool not found during POST. Attempting reconnection...")
+        if not init_connection_pool():
+            return jsonify({"error": "DB not ready"}), 503
+    # =====================================================================
+            
     data = request.get_json()
     try:
         conn = db_pool.get_connection()
@@ -161,16 +195,6 @@ def add_recipe():
 
 # --- FIX: Match the Internal ALB Target Group Path ---
 @app.route('/health')
-# def health_check():
-#     """Fargate Health Check"""
-#     global db_pool
-#     # Self-healing: Try to reconnect if the pool died or failed at startup
-#     if not db_pool:
-#         init_connection_pool()
-        
-#     if db_pool:
-#         return "OK", 200
-#     return "Disconnected", 503
 def health_check():
     """
     SHALLOW Fargate Health Check

@@ -14,7 +14,10 @@ resource "aws_launch_template" "rr_k3s_worker_backend" {
   metadata_options {
     http_endpoint               = "enabled"
     http_tokens                 = "required"
-    http_put_response_hop_limit = 1
+    # =========================================================
+    # THE FIX: Kubernetes pods require 2 hops to reach IMDSv2
+    # =========================================================
+    http_put_response_hop_limit = 2
   }
 
   user_data = base64encode(templatefile("${path.module}/user_data_worker_backend.sh", {
@@ -39,6 +42,16 @@ resource "aws_autoscaling_group" "rr_k3s_worker_backend_asg" {
   launch_template {
     id      = aws_launch_template.rr_k3s_worker_backend.id
     version = "$Latest"
+  }
+
+  # =========================================================
+  # THE AUTOMATION: Forces TF to gracefully roll the instances
+  # =========================================================
+  instance_refresh {
+    strategy = "Rolling"
+    preferences {
+      min_healthy_percentage = 50
+    }
   }
 
   tag {

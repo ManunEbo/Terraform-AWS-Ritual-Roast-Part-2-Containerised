@@ -8,3 +8,8 @@ data "aws_ami" "rr_al2023" {
       values = ["al2023-ami-2023.*-x86_64"]
     }
 }
+
+data "aws_secretsmanager_secret" "rr_db_secret" {
+  # This dynamically targets the exact secret name based on the environment
+  name = "rr-${var.environment}-db-secret" 
+}
