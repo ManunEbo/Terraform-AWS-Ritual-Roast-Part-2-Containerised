@@ -65,6 +65,8 @@ Thumbs.db
 *.swo
 
 # =========================
-# Tar Zip files
+# Tar Zip files and other files
 # =========================
 *.tar.gz
+rotation.zip
+db_driver.zip
