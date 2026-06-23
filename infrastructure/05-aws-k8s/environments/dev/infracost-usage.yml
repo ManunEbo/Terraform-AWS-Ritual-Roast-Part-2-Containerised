@@ -1,0 +1,8 @@
+version: 0.1
+# Layer 5: K3s on EC2. EC2 instance-hours and EBS GB are flat-rate (no usage entry needed).
+# Usage-driven here: the single NAT gateway and the API NLB.
+resource_type_default_usage:
+  aws_nat_gateway:
+    monthly_data_processed_gb: 100
+  aws_lb:                       # the K3s API NLB (network type)
+    monthly_data_processed_gb: 100

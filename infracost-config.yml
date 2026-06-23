@@ -1,12 +1,24 @@
 version: 0.1
 
+# One project per layer, so infracost reports per-layer costs we aggregate at the root.
+# Paths match this repo's real tree (layers live under infrastructure/).
 projects:
-  # 1. The Foundational Infrastructure (Tier-0)
-  - path: tier-0/environments/dev
-    name: Tier-0-Foundation
-    usage_file: tier-0/environments/dev/infracost-usage.yml
+  - path: infrastructure/01-aws-vpc/environments/dev
+    name: 01-aws-vpc
+    usage_file: infrastructure/01-aws-vpc/environments/dev/infracost-usage.yml
 
-  # 2. The Application Architecture (Tier-1)
-  - path: terraform/environments/dev
-    name: Tier-1-Application
-    usage_file: terraform/environments/dev/infracost-usage.yml
+  - path: infrastructure/02-aws-rds/environments/dev
+    name: 02-aws-rds
+    usage_file: infrastructure/02-aws-rds/environments/dev/infracost-usage.yml
+
+  - path: infrastructure/03-aws-ecr/environments/dev
+    name: 03-aws-ecr
+    usage_file: infrastructure/03-aws-ecr/environments/dev/infracost-usage.yml
+
+  - path: infrastructure/04-aws-ecs/environments/dev
+    name: 04-aws-ecs
+    usage_file: infrastructure/04-aws-ecs/environments/dev/infracost-usage.yml
+
+  - path: infrastructure/05-aws-k8s/environments/dev
+    name: 05-aws-k8s
+    usage_file: infrastructure/05-aws-k8s/environments/dev/infracost-usage.yml

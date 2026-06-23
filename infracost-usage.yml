@@ -1,0 +1,16 @@
+version: 0.1
+
+# -----------------------------------------------------------------------------
+# Layer 05 (K3s on EC2) usage profile.
+# Place at: infrastructure/05-aws-k8s/environments/dev/infracost-usage.yml
+#
+# Most of Layer 5's cost is FLAT-rate (EC2 instance-hours, EBS GB, NLB hours) and needs
+# no usage entries - infracost prices those without help. The usage-driven line here is
+# the single NAT gateway's data processing. Adjust the GB figure to your traffic.
+#
+# NOTE: kept deliberately minimal. I have not seen layers 01-04's own usage files, so this
+# does not mirror their exact entries - paste one of them and I'll align this to match.
+# -----------------------------------------------------------------------------
+resource_type_default_usage:
+  aws_nat_gateway:
+    monthly_data_processed_gb: 100

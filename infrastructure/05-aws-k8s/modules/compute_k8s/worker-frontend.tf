@@ -32,9 +32,9 @@ resource "aws_launch_template" "rr_k3s_worker_frontend" {
 resource "aws_autoscaling_group" "rr_k3s_worker_frontend_asg" {
   name                = "rr-${var.environment}-k3s-worker-frontend-asg"
   vpc_zone_identifier = var.k8s_private_subnets
-  desired_capacity    = 2
-  max_size            = 5
-  min_size            = 2
+  desired_capacity    = 1
+  max_size            = 4
+  min_size            = 1
 
   launch_template {
     id      = aws_launch_template.rr_k3s_worker_frontend.id
