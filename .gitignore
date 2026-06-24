@@ -70,3 +70,4 @@ Thumbs.db
 *.tar.gz
 rotation.zip
 db_driver.zip
+apps/v2-backend-go/ritual-roast-backend

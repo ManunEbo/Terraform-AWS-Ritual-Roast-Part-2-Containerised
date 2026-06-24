@@ -143,6 +143,12 @@ func enableCORS(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// livenessCheck is shallow: proves the process/HTTP server is up without touching the DB.
+func livenessCheck(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("OK"))
+}
+
 func healthCheck(w http.ResponseWriter, r *http.Request) {
 	if db == nil {
 		if err := initDB(); err != nil {
@@ -226,6 +232,7 @@ func main() {
 	}
 
 	http.HandleFunc("/health", healthCheck)
+	http.HandleFunc("/livez", livenessCheck)
 	http.HandleFunc("/api/get_recipe", enableCORS(getRecipes))
 	http.HandleFunc("/api/add_recipe", enableCORS(addRecipe))
 

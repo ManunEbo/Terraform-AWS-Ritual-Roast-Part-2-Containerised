@@ -12,6 +12,9 @@ env:
   IMAGE_OWNER: ${{ github.repository_owner }}
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
+permissions:
+  contents: read
+
 jobs:
   # ==========================================
   # STEP 1: Detect exactly which apps changed
@@ -127,3 +130,73 @@ jobs:
           IMAGE_NAME=$(echo "${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/rr-v2-backend" | tr '[:upper:]' '[:lower:]')
           docker build -t $IMAGE_NAME:latest -t $IMAGE_NAME:${{ github.sha }} .
           docker push --all-tags $IMAGE_NAME
+
+  # ==========================================
+  # STEP 3: Write the new SHA back into the K8s manifests (single commit)
+  # ==========================================
+  update-manifests:
+    needs:
+      - detect-changes
+      - build-v1-frontend
+      - build-v1-backend
+      - build-v2-frontend
+      - build-v2-backend
+    if: |
+      always() &&
+      github.ref == 'refs/heads/main' &&
+      !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled') &&
+      (needs.detect-changes.outputs.v1_frontend == 'true' ||
+       needs.detect-changes.outputs.v1_backend == 'true' ||
+       needs.detect-changes.outputs.v2_frontend == 'true' ||
+       needs.detect-changes.outputs.v2_backend == 'true')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      MANIFEST_DIR: infrastructure/05-aws-k8s/k8s-manifests/dev-apps/deployments
+      IMAGE_TAG: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+      - name: Install yq
+        uses: mikefarah/yq@v4
+      - name: Pin changed apps to the new SHA
+        run: |
+          set -euo pipefail
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REG="ghcr.io/${OWNER}"
+          pin() {
+            local file="$1" repo="$2"
+            if [ -f "$file" ]; then
+              yq -i ".spec.template.spec.containers[0].image = \"${REG}/${repo}:${IMAGE_TAG}\"" "$file"
+              echo "Pinned $file -> ${REG}/${repo}:${IMAGE_TAG}"
+            else
+              echo "Skip (manifest absent): $file"
+            fi
+          }
+          if [ "${{ needs.detect-changes.outputs.v1_frontend }}" = "true" ]; then
+            pin "${MANIFEST_DIR}/v1-frontend-nextjs-deployment.yml" "rr-v1-frontend"
+          fi
+          if [ "${{ needs.detect-changes.outputs.v1_backend }}" = "true" ]; then
+            pin "${MANIFEST_DIR}/v1-backend-flask-deployment.yml" "rr-v1-backend"
+          fi
+          if [ "${{ needs.detect-changes.outputs.v2_frontend }}" = "true" ]; then
+            pin "${MANIFEST_DIR}/v2-frontend-vite-deployment.yml" "rr-v2-frontend"
+          fi
+          if [ "${{ needs.detect-changes.outputs.v2_backend }}" = "true" ]; then
+            pin "${MANIFEST_DIR}/v2-backend-go-deployment.yml" "rr-v2-backend"
+          fi
+      - name: Commit and push the pinned manifests (once)
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- "${MANIFEST_DIR}"; then
+            echo "No manifest changes to commit."
+            exit 0
+          fi
+          git add "${MANIFEST_DIR}"
+          git commit -m "ci: pin changed app images to ${IMAGE_TAG} [skip ci]"
+          git push origin HEAD:main
