@@ -37,6 +37,24 @@ spec:
     repoURL: 'https://istio-release.storage.googleapis.com/charts'
     chart: istiod
     targetRevision: 1.30.1 # SYNCHRONIZED
+    helm:
+      values: |
+        # Pin istiod onto a frontend worker, OFF the untainted control-plane node,
+        # so it cannot starve etcd / ArgoCD on the small CP instance.
+        tolerations:
+          - key: "dedicated"
+            operator: "Equal"
+            value: "frontend"
+            effect: "NoSchedule"
+        nodeSelector:
+          tier: frontend
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
   destination:
     server: 'https://kubernetes.default.svc'
     namespace: istio-system

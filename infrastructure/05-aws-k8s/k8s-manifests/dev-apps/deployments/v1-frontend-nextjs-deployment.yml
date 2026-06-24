@@ -32,6 +32,23 @@ spec:
         image: ghcr.io/manunebo/rr-v1-frontend:latest
         ports:
         - containerPort: 3000
+        # Shallow /api/health (200, no DB touch) — safe for BOTH probes per v1 contract.
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          timeoutSeconds: 2
+          failureThreshold: 3
         # =========================================================================
         # MODIFIED HERE: Passing the exact variable the ECS-built image expects
         # =========================================================================

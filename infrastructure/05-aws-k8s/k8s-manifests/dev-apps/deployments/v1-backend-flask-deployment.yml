@@ -32,6 +32,23 @@ spec:
         image: ghcr.io/manunebo/rr-v1-backend:latest
         ports:
         - containerPort: 5000
+        # Shallow /health (200, no DB touch) — safe for BOTH probes per v1 contract.
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          timeoutSeconds: 2
+          failureThreshold: 3
         # =========================================================
         # PROXY: Pulls from the Terraform-generated ConfigMap
         # =========================================================

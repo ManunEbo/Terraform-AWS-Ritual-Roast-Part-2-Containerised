@@ -86,6 +86,9 @@ EOF
 
   # Deploy secure container registry mapping secret inside target runtime namespace
   kubectl create namespace dev || true
+  # Enrol the dev namespace in the mesh so every pod gets an Envoy sidecar (2/2).
+  # Idempotent: --overwrite is a no-op if the label is already present.
+  kubectl label namespace dev istio-injection=enabled --overwrite || true
   kubectl create secret docker-registry ghcr-login-secret \
     --namespace=dev \
     --docker-server=ghcr.io \
@@ -141,33 +144,6 @@ spec:
   destination:
     server: 'https://kubernetes.default.svc'
     namespace: observability
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
----
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: root-dev-apps
-  namespace: argocd
-spec:
-  project: default
-  source:
-    repoURL: 'https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised.git'
-    targetRevision: main
-    path: infrastructure/05-aws-k8s/k8s-manifests/dev-apps
-    # ---------------------------------------------------------------------
-    # MODIFIED HERE: Added directory config block to look into subdirectories
-    # ---------------------------------------------------------------------
-    directory:
-      recurse: true
-    # ---------------------------------------------------------------------
-  destination:
-    server: 'https://kubernetes.default.svc'
-    namespace: dev
   syncPolicy:
     automated:
       prune: true
