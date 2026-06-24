@@ -28,6 +28,6 @@ done
 # 3. Join the HA K3s Cluster with Backend Taints
 # (Curly braces removed from NLB_DNS, CLUSTER_TOKEN, and NODE_ROLE)
 echo "Joining K3s cluster via NLB: $NLB_DNS"
-curl -sfL https://get.k3s.io | K3S_URL=https://$NLB_DNS:6443 K3S_TOKEN=$CLUSTER_TOKEN sh -s - agent \
+curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="v1.28.15+k3s1" K3S_URL=https://$NLB_DNS:6443 K3S_TOKEN=$CLUSTER_TOKEN sh -s - agent \
   --node-taint dedicated=$NODE_ROLE:NoSchedule \
   --node-label tier=$NODE_ROLE

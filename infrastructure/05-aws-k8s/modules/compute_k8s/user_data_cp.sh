@@ -39,7 +39,7 @@ MY_IP=$(curl -sH "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/
 # =========================================================================
 if [ -z "$EXISTING_CP" ] || [ "$EXISTING_CP" == "$MY_IP" ]; then
   echo "Designated cluster leader state matched. Initializing database cluster root..."
-  curl -sfL https://get.k3s.io | K3S_TOKEN=$K3S_TOKEN sh -s - server \
+  curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="v1.28.15+k3s1" K3S_TOKEN=$K3S_TOKEN sh -s - server \
     --cluster-init \
     --disable-network-policy \
     --disable traefik \
@@ -179,7 +179,7 @@ EOF
 else
   echo "Active environment leader discovered at $EXISTING_CP. Executing cluster join link..."
   sleep 30 
-  curl -sfL https://get.k3s.io | K3S_TOKEN=$K3S_TOKEN sh -s - server \
+  curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="v1.28.15+k3s1" K3S_TOKEN=$K3S_TOKEN sh -s - server \
     --server https://$EXISTING_CP:6443 \
     --disable-network-policy \
     --disable traefik \
