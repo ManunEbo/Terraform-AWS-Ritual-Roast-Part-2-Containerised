@@ -1,0 +1,28 @@
+# FRONTEND CANARY - new sessions: 50% v2 (Vite), 50% v1 (Next.js)
+# Established sessions stay pinned by their x-frontend cookie (rules 1-2).
+# Only the cookie-less ENTRY weight (rule 3) changes between steps.
+# Apply:  kubectl apply -f vs-frontend-canary-50.yml
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: frontend-route
+  namespace: dev
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - ritual-roast-gateway
+  http:
+  - match:
+    - headers: { cookie: { regex: ".*x-frontend=v1.*" } }
+    route:
+    - destination: { host: rr-frontend-svc, subset: v1, port: { number: 80 } }
+  - match:
+    - headers: { cookie: { regex: ".*x-frontend=v2.*" } }
+    route:
+    - destination: { host: rr-frontend-svc, subset: v2, port: { number: 80 } }
+  - route:
+    - destination: { host: rr-frontend-svc, subset: v1, port: { number: 80 } }
+      weight: 50
+    - destination: { host: rr-frontend-svc, subset: v2, port: { number: 80 } }
+      weight: 50

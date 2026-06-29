@@ -1,0 +1,33 @@
+# BACKEND SHADOW - 100% real traffic to v1; mirror a COPY of GET reads
+# to v2. v2's response is discarded; users only ever see v1.
+#
+# CRITICAL: mirror is scoped to GET so /api/get_recipe (SELECT) is
+# duplicated harmlessly, but POST /api/add_recipe (INSERT) is NOT
+# mirrored - mirroring writes would DOUBLE rows in the shared DB.
+# Rule 1 = GET + mirror; Rule 2 = everything else, no mirror.
+#
+# v2 must be deployed/running to receive the mirrored copies.
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: backend-route
+  namespace: dev
+spec:
+  hosts:
+  - ritual-roast-backend
+  http:
+  - match:
+    - method:
+        exact: GET
+    route:
+    - destination: { host: ritual-roast-backend, subset: v1, port: { number: 5000 } }
+      weight: 100
+    mirror:
+      host: ritual-roast-backend
+      subset: v2
+      port: { number: 5000 }
+    mirrorPercentage:
+      value: 100.0
+  - route:
+    - destination: { host: ritual-roast-backend, subset: v1, port: { number: 5000 } }
+      weight: 100

@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: v2-frontend-vite
+  namespace: dev
+  labels:
+    app: rr-frontend         # D4: same app as v1 Next.js, differs only by version
+    version: v2
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: rr-frontend
+      version: v2
+  template:
+    metadata:
+      labels:
+        app: rr-frontend
+        version: v2
+    spec:
+      imagePullSecrets:
+        - name: ghcr-login-secret
+      tolerations:
+        - key: "dedicated"
+          operator: "Equal"
+          value: "frontend"
+          effect: "NoSchedule"
+      nodeSelector:
+        tier: frontend
+      containers:
+      - name: vite-frontend
+        # REBUILD REQUIRED: nginx.conf must (a) listen 3000 [D4] and
+        # (b) set x-frontend=v2 cookie [D5]. See revised nginx.conf.
+        # Dockerfile EXPOSE should also change 80 -> 3000.
+        image: ghcr.io/manunebo/rr-v2-frontend:latest
+        ports:
+        - containerPort: 3000        # Vite/nginx rebuilt to listen on 3000
+        # v2 frontend probe contract: nginx serves static files, so it is
+        # alive as long as the container runs regardless of backend state.
+        # Both probes hit / (returns 200). If the backend is down the SPA
+        # shell still serves; the browser fetch fails gracefully in-page.
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 20
+          timeoutSeconds: 2
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 3
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 250m
+            memory: 256Mi

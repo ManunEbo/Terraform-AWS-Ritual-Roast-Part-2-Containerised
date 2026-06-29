@@ -1,0 +1,26 @@
+# FRONTEND SHADOW - 100% to v1; mirror a copy of page loads to v2.
+# PEDAGOGICAL ONLY / LOW VALUE: static serving rarely fails and the
+# discarded-response model doesn't map to a browser session. The
+# mirror MECHANISM is identical to vs-backend-shadow.yml (where it is
+# useful). Included for completeness so you can see the syntax on the
+# frontend route; prefer doing shadow properly on the backend.
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: frontend-route
+  namespace: dev
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - ritual-roast-gateway
+  http:
+  - route:
+    - destination: { host: rr-frontend-svc, subset: v1, port: { number: 80 } }
+      weight: 100
+    mirror:
+      host: rr-frontend-svc
+      subset: v2
+      port: { number: 80 }
+    mirrorPercentage:
+      value: 100.0

@@ -7,6 +7,10 @@ on:
       - 'apps/**'
   workflow_dispatch:
 
+concurrency:
+  group: update-manifests
+  cancel-in-progress: false
+
 env:
   REGISTRY: ghcr.io
   IMAGE_OWNER: ${{ github.repository_owner }}
@@ -155,6 +159,7 @@ jobs:
       contents: write
     env:
       MANIFEST_DIR: infrastructure/05-aws-k8s/k8s-manifests/dev-apps/deployments
+      CANARY_MANIFEST_DIR: infrastructure/05-aws-k8s/k8s-manifests/canary-staging
       IMAGE_TAG: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
@@ -183,20 +188,20 @@ jobs:
             pin "${MANIFEST_DIR}/v1-backend-flask-deployment.yml" "rr-v1-backend"
           fi
           if [ "${{ needs.detect-changes.outputs.v2_frontend }}" = "true" ]; then
-            pin "${MANIFEST_DIR}/v2-frontend-vite-deployment.yml" "rr-v2-frontend"
+            pin "${CANARY_MANIFEST_DIR}/v2-frontend-vite-deployment.yml" "rr-v2-frontend"
           fi
           if [ "${{ needs.detect-changes.outputs.v2_backend }}" = "true" ]; then
-            pin "${MANIFEST_DIR}/v2-backend-go-deployment.yml" "rr-v2-backend"
+            pin "${CANARY_MANIFEST_DIR}/v2-backend-go-deployment.yml" "rr-v2-backend"
           fi
       - name: Commit and push the pinned manifests (once)
         run: |
           set -euo pipefail
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet -- "${MANIFEST_DIR}"; then
+          if git diff --quiet -- "${MANIFEST_DIR}" "${CANARY_MANIFEST_DIR}"; then
             echo "No manifest changes to commit."
             exit 0
           fi
-          git add "${MANIFEST_DIR}"
+          git add "${MANIFEST_DIR}" "${CANARY_MANIFEST_DIR}"
           git commit -m "ci: pin changed app images to ${IMAGE_TAG} [skip ci]"
           git push origin HEAD:main

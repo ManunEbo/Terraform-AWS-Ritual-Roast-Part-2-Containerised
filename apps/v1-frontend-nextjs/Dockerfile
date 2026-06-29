@@ -3,10 +3,12 @@ FROM node:20-alpine AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# Copy package files and install ONLY what is needed to build
-# NOTE: Building natively in the cloud without a lockfile
-COPY package.json ./
-RUN npm install
+# Copy package files and install ONLY what is needed to build.
+# Deterministic install from the committed lockfile.
+# NOTE: package-lock.json must be generated locally (run `npm install` in
+#       this app dir) and committed before this build will succeed.
+COPY package.json package-lock.json ./
+RUN npm ci
 
 # --- STAGE 2: Builder ---
 FROM node:20-alpine AS builder

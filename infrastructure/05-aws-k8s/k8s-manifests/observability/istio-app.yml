@@ -54,7 +54,7 @@ spec:
             memory: 128Mi
           limits:
             cpu: 500m
-            memory: 256Mi
+            memory: 512Mi
   destination:
     server: 'https://kubernetes.default.svc'
     namespace: istio-system
@@ -88,6 +88,13 @@ spec:
             effect: "NoSchedule"
         nodeSelector:
           tier: frontend
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: "1"
+            memory: 256Mi
         service:
           type: NodePort
           ports:

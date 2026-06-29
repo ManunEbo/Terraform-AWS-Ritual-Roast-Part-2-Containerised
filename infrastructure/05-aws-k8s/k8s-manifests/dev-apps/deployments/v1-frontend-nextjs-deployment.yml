@@ -4,18 +4,18 @@ metadata:
   name: v1-frontend-nextjs
   namespace: dev
   labels:
-    app: rr-frontend-nextjs
+    app: rr-frontend         # D4: canonical relabel (was rr-frontend-nextjs)
     version: v1
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: rr-frontend-nextjs
+      app: rr-frontend       # D4: must match new pod labels
       version: v1
   template:
     metadata:
       labels:
-        app: rr-frontend-nextjs
+        app: rr-frontend     # D4
         version: v1
     spec:
       imagePullSecrets:
@@ -29,10 +29,14 @@ spec:
         tier: frontend
       containers:
       - name: nextjs-frontend
+        # REBUILD REQUIRED: image must add the x-frontend=v1 cookie via
+        # next.config.ts headers() (D5). Tag stays :latest; CI write-back
+        # will seed the SHA. See next.config.ts snippet in the handover.
         image: ghcr.io/manunebo/rr-v1-frontend:latest
         ports:
         - containerPort: 3000
-        # Shallow /api/health (200, no DB touch) — safe for BOTH probes per v1 contract.
+        # v1 single-endpoint probe contract (UNCHANGED). /api/health is
+        # shallow (200, no DB touch), safe for BOTH probes.
         readinessProbe:
           httpGet:
             path: /api/health
@@ -49,13 +53,12 @@ spec:
           periodSeconds: 20
           timeoutSeconds: 2
           failureThreshold: 3
-        # =========================================================================
-        # MODIFIED HERE: Passing the exact variable the ECS-built image expects
-        # =========================================================================
         env:
+        # CHANGED: points at the unified backend Service (D1), was
+        # http://rr-backend-flask-svc:80. Server-side fetch, no rebuild
+        # needed for THIS change (runtime env var).
         - name: BACKEND_URL
-          value: "http://rr-backend-flask-svc:80"
-        # =========================================================================
+          value: "http://ritual-roast-backend:5000"
         resources:
           requests:
             cpu: 100m

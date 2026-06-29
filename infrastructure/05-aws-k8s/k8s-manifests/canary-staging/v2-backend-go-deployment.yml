@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: v2-backend-go
+  namespace: dev
+  labels:
+    app: rr-backend          # D2: same app as v1, differs only by version
+    version: v2
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: rr-backend
+      version: v2
+  template:
+    metadata:
+      labels:
+        app: rr-backend
+        version: v2
+    spec:
+      imagePullSecrets:
+        - name: ghcr-login-secret
+      tolerations:
+        - key: "dedicated"
+          operator: "Equal"
+          value: "backend"
+          effect: "NoSchedule"
+      nodeSelector:
+        tier: backend
+      containers:
+      - name: go-backend
+        image: ghcr.io/manunebo/rr-v2-backend:latest
+        ports:
+        - containerPort: 5000        # confirmed: main.go ListenAndServe("0.0.0.0:5000")
+        # =========================================================
+        # SPLIT-ENDPOINT PROBE CONTRACT (v2 ONLY - never copy to v1)
+        #   liveness  -> /livez  : shallow, returns 200, no DB touch
+        #   readiness -> /health : deep, runs db.Ping(), 503 on failure
+        #
+        # WHY: on Multi-AZ RDS failover /health returns 503, so the pod
+        # is pulled from Service endpoints (correct) but /livez stays
+        # green so kubelet does NOT restart it. A deep LIVENESS probe
+        # would kill every pod at once on failover -> fleet crash-loop
+        # ("container assassination").
+        # =========================================================
+        livenessProbe:
+          httpGet:
+            path: /livez
+            port: 5000
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          timeoutSeconds: 2
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 3
+        # Same ConfigMap as v1: provides SECRET_ARN + AWS_REGION, which
+        # main.go reads in getMySQLSecrets(). Both backends share it.
+        envFrom:
+        - configMapRef:
+            name: backend-config
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 250m
+            memory: 256Mi

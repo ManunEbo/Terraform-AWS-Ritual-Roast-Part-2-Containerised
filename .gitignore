@@ -71,3 +71,8 @@ Thumbs.db
 rotation.zip
 db_driver.zip
 apps/v2-backend-go/ritual-roast-backend
+
+# =========================
+# Windows Alternate Data Stream metadata
+# =========================
+*:Zone.Identifier

@@ -1,24 +1,85 @@
-# 1. The Gateway (Opens Istio's door inside the cluster)
-apiVersion: networking.istio.io/v1alpha3
+# =================================================================
+# ISTIO ROUTING - Ritual Roast v2  (STEADY STATE: 100% v1, 0% v2)
+# =================================================================
+# This is the GitOps-synced baseline (ArgoCD ritual-roast-workloads
+# syncs dev-apps/ recursively). It defines the Gateway, both
+# DestinationRules, and both VirtualServices at their resting weights.
+#
+# DO NOT put canary step files in this folder - two files defining the
+# same-named VirtualService would collide under recursive sync. Step
+# files live in ../../canary-variants/ and are applied by hand during a
+# live session (see that folder's README).
+#
+# Cookie note (frontend): each frontend image stamps its own
+# x-frontend cookie (v1=Next.js, v2=Vite). The VirtualService matches
+# that cookie FIRST so an established session always returns to the
+# same version; only NEW (cookie-less) sessions hit the weighted entry.
+# The cookie regex assumes v1/v2 are distinct, non-substring tokens.
+# =================================================================
+
+# -----------------------------------------------------------------
+# 1. GATEWAY  (unchanged - port 80 is the gateway SERVICE port, which
+#    the ingress gateway Service maps from nodePort 30080; do NOT
+#    change this to 30080)
+# -----------------------------------------------------------------
+apiVersion: networking.istio.io/v1beta1
 kind: Gateway
 metadata:
   name: ritual-roast-gateway
   namespace: dev
 spec:
   selector:
-    # This automatically targets the istio-ingressgateway pods
-    istio: ingressgateway 
+    istio: ingressgateway
   servers:
   - port:
       number: 80
       name: http
       protocol: HTTP
     hosts:
-    - "*" # Accepts all traffic originating from the AWS ALB
-
+    - "*"
 ---
-# 2. The VirtualService (The Routing Logic)
-apiVersion: networking.istio.io/v1alpha3
+# -----------------------------------------------------------------
+# 2a. DESTINATION RULE - Frontend subsets by version label
+# -----------------------------------------------------------------
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: frontend-destination-rule
+  namespace: dev
+spec:
+  host: rr-frontend-svc
+  subsets:
+  - name: v1
+    labels:
+      version: v1          # selects v1-frontend-nextjs pods
+  - name: v2
+    labels:
+      version: v2          # selects v2-frontend-vite pods
+---
+# -----------------------------------------------------------------
+# 2b. DESTINATION RULE - Backend subsets by version label
+# -----------------------------------------------------------------
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: backend-destination-rule
+  namespace: dev
+spec:
+  host: ritual-roast-backend
+  subsets:
+  - name: v1
+    labels:
+      version: v1          # selects v1-backend-flask pods
+  - name: v2
+    labels:
+      version: v2          # selects v2-backend-go pods
+---
+# -----------------------------------------------------------------
+# 3a. VIRTUAL SERVICE - Frontend (ingress -> frontend)
+#     Rule order matters: cookie matches must come BEFORE the
+#     weighted entry, or established sessions would be re-split.
+# -----------------------------------------------------------------
+apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
   name: frontend-route
@@ -29,13 +90,72 @@ spec:
   gateways:
   - ritual-roast-gateway
   http:
+  # (1) Established v1 session -> always v1
   - match:
-    - uri:
-        prefix: /
+    - headers:
+        cookie:
+          regex: ".*x-frontend=v1.*"
     route:
     - destination:
-        # ALIGNED: Exactly matches your Service metadata.name
-        host: rr-frontend-nextjs-svc 
+        host: rr-frontend-svc
+        subset: v1
         port:
-          # ALIGNED: Exactly matches your Service port (not targetPort)
           number: 80
+  # (2) Established v2 session -> always v2
+  - match:
+    - headers:
+        cookie:
+          regex: ".*x-frontend=v2.*"
+    route:
+    - destination:
+        host: rr-frontend-svc
+        subset: v2
+        port:
+          number: 80
+  # (3) New session (no cookie) -> weighted entry. STEADY STATE = 100/0.
+  #     Canary changes ONLY these two weights (via ../../canary-variants/).
+  - route:
+    - destination:
+        host: rr-frontend-svc
+        subset: v1
+        port:
+          number: 80
+      weight: 100
+    - destination:
+        host: rr-frontend-svc
+        subset: v2
+        port:
+          number: 80
+      weight: 0
+---
+# -----------------------------------------------------------------
+# 3b. VIRTUAL SERVICE - Backend (mesh-internal: frontend -> backend)
+#     No gateway: this governs in-cluster calls. The frontend pod's
+#     sidecar intercepts the call to ritual-roast-backend:5000 because
+#     the dev namespace has istio-injection=enabled.
+#
+#     Stateless JSON API -> no cookie needed; pure weighted split is
+#     safe per-request. STEADY STATE = 100/0.
+# -----------------------------------------------------------------
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: backend-route
+  namespace: dev
+spec:
+  hosts:
+  - ritual-roast-backend
+  http:
+  - route:
+    - destination:
+        host: ritual-roast-backend
+        subset: v1
+        port:
+          number: 5000
+      weight: 100
+    - destination:
+        host: ritual-roast-backend
+        subset: v2
+        port:
+          number: 5000
+      weight: 0

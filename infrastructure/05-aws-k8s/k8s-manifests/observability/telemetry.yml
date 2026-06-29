@@ -1,3 +1,209 @@
+# =================================================================
+# GRAFANA ALLOY TELEMETRY - Ritual Roast v2
+# =================================================================
+# Alloy DaemonSet (one pod per node), remote-writes to Grafana Cloud.
+# No local Prometheus -> no OOM risk on the t3.medium nodes.
+#
+# Scrape jobs:
+#   1. App sidecars        (dev)            port 15020 /stats/prometheus
+#   2. Ingress gateway      (istio-ingress) port 15020 /stats/prometheus
+#   3. Annotated pods       (any ns)        prometheus.io/* annotations
+#   4. Node cAdvisor        (kubelet)       container CPU/mem/restarts
+#
+# Jobs 1+2 are what populate the Istio dashboards and make the canary
+# split visible: istio_requests_total{destination_version=...}.
+# The gateway scrape (job 2) gives the edge-level frontend split;
+# the sidecar scrape (job 1) gives backend split + per-pod inbound.
+#
+# BEFORE DEPLOY: user_data_cp.sh substitutes the two placeholders via
+# sed at node boot, sourced from Terraform vars:
+#   export TF_VAR_grafana_remote_write_url="https://prometheus-prod-XX-..."
+#   export TF_VAR_grafana_instance_id="123456"
+# Values: grafana.com -> your org -> Details on the Prometheus tile.
+# =================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alloy-config
+  namespace: observability
+data:
+  config.alloy: |
+    // ---------- REMOTE WRITE: Grafana Cloud ----------
+    prometheus.remote_write "grafana_cloud" {
+      endpoint {
+        url = env("GRAFANA_REMOTE_WRITE_URL")
+        basic_auth {
+          username = env("GRAFANA_INSTANCE_ID")
+          password = env("GRAFANA_CLOUD_TOKEN")
+        }
+      }
+      external_labels = {
+        cluster = "ritual-roast-dev",
+        env     = "dev",
+      }
+    }
+
+    // ---------- JOB 1: APP SIDECARS (dev) ----------
+    // Pods with an injected Envoy sidecar expose mesh metrics on 15020.
+    discovery.kubernetes "sidecar_pods" {
+      role = "pod"
+      namespaces { names = ["dev"] }
+    }
+    discovery.relabel "sidecar_pods" {
+      targets = discovery.kubernetes.sidecar_pods.targets
+      rule {
+        source_labels = ["__meta_kubernetes_pod_annotation_sidecar_istio_io_status"]
+        action = "keep"
+        regex  = ".+"
+      }
+      rule {
+        source_labels = ["__address__"]
+        action = "replace"
+        regex  = "([^:]+)(?::\\d+)?"
+        replacement = "$1:15020"
+        target_label = "__address__"
+      }
+      rule { source_labels = ["__meta_kubernetes_namespace"]        target_label = "namespace" }
+      rule { source_labels = ["__meta_kubernetes_pod_name"]         target_label = "pod" }
+      rule { source_labels = ["__meta_kubernetes_pod_label_app"]    target_label = "app" }
+      rule { source_labels = ["__meta_kubernetes_pod_label_version"] target_label = "version" }
+    }
+    prometheus.scrape "sidecar_pods" {
+      targets = discovery.relabel.sidecar_pods.output
+      scrape_interval = "15s"
+      metrics_path = "/stats/prometheus"
+      forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+    }
+
+    // ---------- JOB 2: INGRESS GATEWAY (istio-ingress) ----------
+    // The gateway pod IS an Envoy but is NOT sidecar-annotated, so it
+    // needs its own scrape. Selected by the istio=ingressgateway label.
+    // This gives the edge view of the FRONTEND v1/v2 split.
+    discovery.kubernetes "gateway_pods" {
+      role = "pod"
+      namespaces { names = ["istio-ingress"] }
+    }
+    discovery.relabel "gateway_pods" {
+      targets = discovery.kubernetes.gateway_pods.targets
+      rule {
+        source_labels = ["__meta_kubernetes_pod_label_istio"]
+        action = "keep"
+        regex  = "ingressgateway"
+      }
+      rule {
+        source_labels = ["__address__"]
+        action = "replace"
+        regex  = "([^:]+)(?::\\d+)?"
+        replacement = "$1:15020"
+        target_label = "__address__"
+      }
+      rule { source_labels = ["__meta_kubernetes_namespace"] target_label = "namespace" }
+      rule { source_labels = ["__meta_kubernetes_pod_name"]  target_label = "pod" }
+    }
+    prometheus.scrape "gateway_pods" {
+      targets = discovery.relabel.gateway_pods.output
+      scrape_interval = "15s"
+      metrics_path = "/stats/prometheus"
+      forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+    }
+
+    // ---------- JOB 3: ANNOTATED PODS (any ns) ----------
+    discovery.kubernetes "annotated_pods" {
+      role = "pod"
+    }
+    discovery.relabel "annotated_pods" {
+      targets = discovery.kubernetes.annotated_pods.targets
+      rule {
+        source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_scrape"]
+        action = "keep"
+        regex  = "true"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_path"]
+        action = "replace"
+        target_label = "__metrics_path__"
+        regex  = "(.+)"
+      }
+      rule {
+        source_labels = ["__address__", "__meta_kubernetes_pod_annotation_prometheus_io_port"]
+        action = "replace"
+        regex  = "([^:]+)(?::\\d+)?;(\\d+)"
+        replacement = "$1:$2"
+        target_label = "__address__"
+      }
+      rule { source_labels = ["__meta_kubernetes_namespace"]        target_label = "namespace" }
+      rule { source_labels = ["__meta_kubernetes_pod_name"]         target_label = "pod" }
+      rule { source_labels = ["__meta_kubernetes_pod_label_app"]    target_label = "app" }
+      rule { source_labels = ["__meta_kubernetes_pod_label_version"] target_label = "version" }
+    }
+    prometheus.scrape "annotated_pods" {
+      targets = discovery.relabel.annotated_pods.output
+      scrape_interval = "30s"
+      forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+    }
+
+    // ---------- JOB 4: NODE cADVISOR ----------
+    // Catches OOM kills / resource pressure during the canary.
+    discovery.kubernetes "nodes" {
+      role = "node"
+    }
+    discovery.relabel "cadvisor" {
+      targets = discovery.kubernetes.nodes.targets
+      rule {
+        action = "replace"
+        target_label = "__address__"
+        replacement = "kubernetes.default.svc:443"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_node_name"]
+        action = "replace"
+        target_label = "__metrics_path__"
+        regex  = "(.+)"
+        replacement = "/api/v1/nodes/$1/proxy/metrics/cadvisor"
+      }
+      rule { source_labels = ["__meta_kubernetes_node_name"] target_label = "node" }
+    }
+    prometheus.scrape "cadvisor" {
+      targets = discovery.relabel.cadvisor.output
+      scrape_interval = "30s"
+      bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+      tls_config {
+        ca_file = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+        insecure_skip_verify = true
+      }
+      forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+    }
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: alloy
+  namespace: observability
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: alloy
+rules:
+- apiGroups: [""]
+  resources: ["nodes", "nodes/proxy", "nodes/metrics", "services", "endpoints", "pods"]
+  verbs: ["get", "list", "watch"]
+- nonResourceURLs: ["/metrics", "/metrics/cadvisor"]
+  verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: alloy
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: alloy
+subjects:
+- kind: ServiceAccount
+  name: alloy
+  namespace: observability
+---
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -12,18 +218,36 @@ spec:
       labels:
         app: grafana-alloy
     spec:
-      # THE FIX: Tolerate ALL taints so the agent runs on every node
+      serviceAccountName: alloy
       tolerations:
-        - operator: "Exists"
+        - operator: "Exists"   # run on every node, including tainted ones
       containers:
       - name: alloy
-        image: grafana/alloy:latest
+        image: grafana/alloy:v1.3.1   # pinned (was :latest)
+        args:
+          - run
+          - /etc/alloy/config.alloy
+          - --storage.path=/tmp/alloy
         env:
         - name: GRAFANA_CLOUD_TOKEN
           valueFrom:
             secretKeyRef:
               name: grafana-auth
               key: bearer-token
+        - name: GRAFANA_REMOTE_WRITE_URL
+          valueFrom:
+            secretKeyRef:
+              name: grafana-auth
+              key: remote-write-url
+        - name: GRAFANA_INSTANCE_ID
+          valueFrom:
+            secretKeyRef:
+              name: grafana-auth
+              key: instance-id
+        volumeMounts:
+        - name: alloy-config
+          mountPath: /etc/alloy
+          readOnly: true
         resources:
           requests:
             cpu: 100m
@@ -31,3 +255,7 @@ spec:
           limits:
             cpu: 200m
             memory: 256Mi
+      volumes:
+      - name: alloy-config
+        configMap:
+          name: alloy-config

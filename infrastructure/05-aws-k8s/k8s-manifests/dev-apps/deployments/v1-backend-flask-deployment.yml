@@ -4,18 +4,18 @@ metadata:
   name: v1-backend-flask
   namespace: dev
   labels:
-    app: rr-backend-flask
+    app: rr-backend          # D2: canonical relabel (was rr-backend-flask)
     version: v1
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: rr-backend-flask
+      app: rr-backend        # D2: must match new pod labels
       version: v1
   template:
     metadata:
       labels:
-        app: rr-backend-flask
+        app: rr-backend      # D2
         version: v1
     spec:
       imagePullSecrets:
@@ -32,7 +32,8 @@ spec:
         image: ghcr.io/manunebo/rr-v1-backend:latest
         ports:
         - containerPort: 5000
-        # Shallow /health (200, no DB touch) — safe for BOTH probes per v1 contract.
+        # v1 single-endpoint probe contract (UNCHANGED - do NOT copy to v2).
+        # /health is shallow (200, no DB touch), safe for BOTH probes.
         readinessProbe:
           httpGet:
             path: /health
@@ -49,13 +50,9 @@ spec:
           periodSeconds: 20
           timeoutSeconds: 2
           failureThreshold: 3
-        # =========================================================
-        # PROXY: Pulls from the Terraform-generated ConfigMap
-        # =========================================================
         envFrom:
         - configMapRef:
             name: backend-config
-        # =========================================================
         resources:
           requests:
             cpu: 100m

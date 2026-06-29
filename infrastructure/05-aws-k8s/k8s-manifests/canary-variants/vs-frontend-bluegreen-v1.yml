@@ -1,0 +1,19 @@
+# FRONTEND BLUE/GREEN -> v1. Clean rollback of a v2 flip: ALL traffic
+# to v1, cookies ignored, so v2-cookied browsers are forced back to v1.
+# Once stable, re-apply ../dev-apps/routing/istio-routing.yml to restore
+# the normal cookie-sticky steady state (new v1 sessions re-acquire the
+# v1 cookie naturally).
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: frontend-route
+  namespace: dev
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - ritual-roast-gateway
+  http:
+  - route:
+    - destination: { host: rr-frontend-svc, subset: v1, port: { number: 80 } }
+      weight: 100

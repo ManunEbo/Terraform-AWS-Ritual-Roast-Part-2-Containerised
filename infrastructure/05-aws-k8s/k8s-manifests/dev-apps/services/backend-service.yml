@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ritual-roast-backend
+  namespace: dev
+  # D1: single backend Service fronting BOTH versions.
+  # Name matches Vite nginx.conf proxy_pass (no Vite rebuild needed for this).
+  # selector is app-only on purpose: the Service spans v1 + v2; the
+  # DestinationRule in istio-routing.yml splits them by `version` subset.
+spec:
+  selector:
+    app: rr-backend          # matches both v1 Flask and v2 Go pods (D2 canonical relabel)
+  ports:
+    - name: http             # named port REQUIRED for Istio L7 routing
+      protocol: TCP
+      port: 5000             # callers use :5000 (Vite nginx + Next.js BACKEND_URL)
+      targetPort: 5000       # both Flask and Go listen on 5000 -> one targetPort works

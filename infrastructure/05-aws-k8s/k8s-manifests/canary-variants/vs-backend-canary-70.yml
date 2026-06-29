@@ -1,0 +1,17 @@
+# BACKEND CANARY - 70% to v2 (Go), 30% to v1 (Flask)
+# Apply:  kubectl apply -f vs-backend-canary-70.yml
+# Backend is stateless JSON -> pure weighted split is safe per-request.
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: backend-route
+  namespace: dev
+spec:
+  hosts:
+  - ritual-roast-backend
+  http:
+  - route:
+    - destination: { host: ritual-roast-backend, subset: v1, port: { number: 5000 } }
+      weight: 30
+    - destination: { host: ritual-roast-backend, subset: v2, port: { number: 5000 } }
+      weight: 70

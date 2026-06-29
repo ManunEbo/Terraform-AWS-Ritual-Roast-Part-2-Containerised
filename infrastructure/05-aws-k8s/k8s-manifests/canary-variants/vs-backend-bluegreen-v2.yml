@@ -1,0 +1,18 @@
+# BACKEND BLUE/GREEN - instant 100% cutover to v2 (Go).
+# Identical end-state to vs-backend-canary-100; named separately to
+# express intent (jump straight here from steady state, no ramp).
+# ROLLBACK: re-apply ../dev-apps/routing/istio-routing.yml (v1 100%).
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: backend-route
+  namespace: dev
+spec:
+  hosts:
+  - ritual-roast-backend
+  http:
+  - route:
+    - destination: { host: ritual-roast-backend, subset: v1, port: { number: 5000 } }
+      weight: 0
+    - destination: { host: ritual-roast-backend, subset: v2, port: { number: 5000 } }
+      weight: 100

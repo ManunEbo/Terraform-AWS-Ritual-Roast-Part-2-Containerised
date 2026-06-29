@@ -8,7 +8,7 @@ dnf update -y
 dnf install -y jq tar openssl
 
 # Install Helm CLI natively on the host OS
-curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | DESIRED_VERSION=v3.14.4 bash
 
 # Variables injected dynamically via Terraform interpolation
 REGION="${aws_region}"
@@ -24,6 +24,27 @@ K3S_TOKEN=$(aws secretsmanager get-secret-value --region $REGION --secret-id $TO
 # =========================================================================
 # 3. HIGH-AVAILABILITY LEADER ELECTION (EMBEDDED ETCD)
 # =========================================================================
+# Gate the leader election: wait until ALL 3 CP instances are 'running' so every
+# node sees the same IP set and deterministically agrees on the same lowest-IP
+# leader. Without this gate an early-booting node sees only itself and runs
+# --cluster-init, racing a peer doing the same -> split-brain etcd, no cluster.
+# NOTE: braces are intentionally omitted ($REGION not ${REGION}) because this
+# file is rendered by Terraform templatefile(); a literal ${...} would be parsed
+# as a Terraform interpolation and fail the render.
+echo "Waiting for all 3 control-plane instances to reach running state..."
+while true; do
+  CP_COUNT=$(aws ec2 describe-instances \
+    --region "$REGION" \
+    --filters "Name=tag:Name,Values=rr-$ENVIRONMENT-k3s-control-plane" \
+              "Name=instance-state-name,Values=running" \
+    --query 'length(Reservations[*].Instances[*])' \
+    --output text 2>/dev/null || echo 0)
+  [ "$CP_COUNT" -ge 3 ] && break
+  echo "  $CP_COUNT/3 running — retrying in 15 s..."
+  sleep 15
+done
+echo "All 3 CP instances running. Proceeding with leader election."
+
 EXISTING_CP=$(aws ec2 describe-instances \
   --region $REGION \
   --filters "Name=tag:Name,Values=rr-$ENVIRONMENT-k3s-control-plane" "Name=instance-state-name,Values=running" \
@@ -52,8 +73,8 @@ if [ -z "$EXISTING_CP" ] || [ "$EXISTING_CP" == "$MY_IP" ]; then
   export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
   # Deploy Calico operator and custom infrastructure manifests
-  kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/tigera-operator.yaml
-  kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/custom-resources.yaml
+  kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/tigera-operator.yaml
+  kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/custom-resources.yaml
   sleep 20
 
   # =========================================================================
@@ -62,7 +83,7 @@ if [ -z "$EXISTING_CP" ] || [ "$EXISTING_CP" == "$MY_IP" ]; then
   kubectl create namespace argocd || true
   helm repo add argo https://argoproj.github.io/argo-helm
   helm repo update
-  helm install argocd argo/argo-cd -n argocd --set server.service.type=ClusterIP
+  helm upgrade --install argocd argo/argo-cd -n argocd --version 7.3.11 --set server.service.type=ClusterIP
 
   # Fetch Personal Access Token from AWS Secrets Manager
   GITHUB_SECRET_ID="rr-$ENVIRONMENT-argocd-github-token"

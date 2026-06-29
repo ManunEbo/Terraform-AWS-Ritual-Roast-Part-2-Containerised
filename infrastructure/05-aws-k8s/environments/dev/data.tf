@@ -55,13 +55,6 @@ data "aws_subnets" "rr_k8s_subnets" {
   }
 }
 
-# retrieve the private route table for K8s
-data "aws_route_table" "rr_k8s_private_rt" {
-  tags = merge(local.common_tags_vpc, {
-    Name = "rr-${var.environment}-RR-vpc-k8s-private-rt"
-  })
-}
-
 # ======================================================
 # DATA SOURCES: Fetching the 01-aws-vpc security groups
 # ======================================================
