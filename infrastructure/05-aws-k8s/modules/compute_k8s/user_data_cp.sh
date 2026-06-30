@@ -139,13 +139,16 @@ EOF
   # =========================================================================
   # 6. BOOTSTRAP OBSERVABILITY CREDENTIALS
   # =========================================================================
-  GRAFANA_SECRET_ID="rr-$ENVIRONMENT-grafana-cloud-token"
-  GRAFANA_TOKEN=$(aws secretsmanager get-secret-value --region $REGION --secret-id $GRAFANA_SECRET_ID --query SecretString --output text)
+  GRAFANA_TOKEN=$(aws secretsmanager get-secret-value --region $REGION --secret-id rr-$ENVIRONMENT-grafana-cloud-token --query SecretString --output text)
+  GRAFANA_REMOTE_WRITE_URL=$(aws secretsmanager get-secret-value --region $REGION --secret-id rr-$ENVIRONMENT-grafana-remote-write-url --query SecretString --output text)
+  GRAFANA_INSTANCE_ID=$(aws secretsmanager get-secret-value --region $REGION --secret-id rr-$ENVIRONMENT-grafana-instance-id --query SecretString --output text)
 
   kubectl create namespace observability || true
   kubectl create secret generic grafana-auth \
     --namespace=observability \
-    --from-literal=bearer-token=$GRAFANA_TOKEN || true
+    --from-literal=bearer-token=$GRAFANA_TOKEN \
+    --from-literal=remote-write-url=$GRAFANA_REMOTE_WRITE_URL \
+    --from-literal=instance-id=$GRAFANA_INSTANCE_ID || true
 
   # =========================================================================
   # 7. IGNITE GITOPS HANDOVER

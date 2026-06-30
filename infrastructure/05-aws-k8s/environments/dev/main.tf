@@ -16,8 +16,10 @@ module "security_k8s" {
   # app_sg_id = data.aws_security_group.rr_app_sg.id
 
   # --- NEW: Passing the Sensitive Tokens ---
-  github_pat    = var.github_pat
-  grafana_token = var.grafana_token
+  github_pat               = var.github_pat
+  grafana_token            = var.grafana_token
+  grafana_remote_write_url = var.grafana_remote_write_url
+  grafana_instance_id      = var.grafana_instance_id
 
   endpoints_sg_id = data.aws_security_group.rr_endpoints_sg.id
 }

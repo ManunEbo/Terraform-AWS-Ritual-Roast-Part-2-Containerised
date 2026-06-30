@@ -43,6 +43,16 @@ variable "grafana_token" {
   sensitive = true
 }
 
+variable "grafana_remote_write_url" {
+  type      = string
+  sensitive = true
+}
+
+variable "grafana_instance_id" {
+  type      = string
+  sensitive = true
+}
+
 variable "endpoints_sg_id" {
   description = "Layer 1 VPC Endpoints Security Group ID"
   type        = string

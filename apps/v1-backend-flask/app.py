@@ -77,10 +77,9 @@ def init_connection_pool():
             database=secrets["dbname"],
             port=int(secrets.get("port", 3306)),
             autocommit=True,
-            # --- SSL ENFORCEMENT START ---
-            ssl_ca='/app/global-bundle.pem', 
-            ssl_verify_cert=True 
-            # --- SSL ENFORCEMENT END ---
+            connection_timeout=5,
+            ssl_ca='/app/global-bundle.pem',
+            ssl_verify_cert=True
         )
         
         # Verify the table exists

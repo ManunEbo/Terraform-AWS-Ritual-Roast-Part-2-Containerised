@@ -34,6 +34,16 @@ spec:
         - containerPort: 5000
         # v1 single-endpoint probe contract (UNCHANGED - do NOT copy to v2).
         # /health is shallow (200, no DB touch), safe for BOTH probes.
+        # startupProbe holds liveness at bay during the Secrets Manager + MySQL
+        # cold-start (mirrors the 120s ECS health_check_grace_period_seconds).
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          failureThreshold: 30
+          timeoutSeconds: 2
         readinessProbe:
           httpGet:
             path: /health
@@ -46,7 +56,7 @@ spec:
           httpGet:
             path: /health
             port: 5000
-          initialDelaySeconds: 15
+          initialDelaySeconds: 5
           periodSeconds: 20
           timeoutSeconds: 2
           failureThreshold: 3

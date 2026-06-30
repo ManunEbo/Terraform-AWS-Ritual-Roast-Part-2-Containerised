@@ -36,8 +36,22 @@ variable "github_pat" {
 }
 
 variable "grafana_token" {
-  description = "Grafana Cloud Token for Observability"
+  description = "Grafana Cloud API token (bearer token)"
   type        = string
   sensitive   = true
   default     = "PENDING_TOKEN"
+}
+
+variable "grafana_remote_write_url" {
+  description = "Grafana Cloud Prometheus remote write URL"
+  type        = string
+  sensitive   = true
+  default     = "PENDING_URL"
+}
+
+variable "grafana_instance_id" {
+  description = "Grafana Cloud Prometheus instance ID (numeric)"
+  type        = string
+  sensitive   = true
+  default     = "PENDING_ID"
 }
