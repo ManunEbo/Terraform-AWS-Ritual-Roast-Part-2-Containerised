@@ -51,7 +51,9 @@ resource "aws_iam_policy" "rr_cp_custom_policy" {
           "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:rr-${var.environment}-argocd-github-token-*",
           # "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:rr-${var.environment}-db-secret-*",
           "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:rr-${var.environment}-k3s-join-token-*",
-          "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:rr-${var.environment}-grafana-cloud-token-*"
+          "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:rr-${var.environment}-grafana-cloud-token-*",
+          "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:rr-${var.environment}-grafana-remote-write-url-*",
+          "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:rr-${var.environment}-grafana-instance-id-*"
         ]
       }
     ]
