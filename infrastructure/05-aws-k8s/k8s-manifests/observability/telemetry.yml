@@ -63,10 +63,22 @@ data:
         replacement = "$1:15020"
         target_label = "__address__"
       }
-      rule { source_labels = ["__meta_kubernetes_namespace"]        target_label = "namespace" }
-      rule { source_labels = ["__meta_kubernetes_pod_name"]         target_label = "pod" }
-      rule { source_labels = ["__meta_kubernetes_pod_label_app"]    target_label = "app" }
-      rule { source_labels = ["__meta_kubernetes_pod_label_version"] target_label = "version" }
+      rule {
+        source_labels = ["__meta_kubernetes_namespace"]
+        target_label = "namespace"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_name"]
+        target_label = "pod"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_label_app"]
+        target_label = "app"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_label_version"]
+        target_label = "version"
+      }
     }
     prometheus.scrape "sidecar_pods" {
       targets = discovery.relabel.sidecar_pods.output
@@ -97,8 +109,14 @@ data:
         replacement = "$1:15020"
         target_label = "__address__"
       }
-      rule { source_labels = ["__meta_kubernetes_namespace"] target_label = "namespace" }
-      rule { source_labels = ["__meta_kubernetes_pod_name"]  target_label = "pod" }
+      rule {
+        source_labels = ["__meta_kubernetes_namespace"]
+        target_label = "namespace"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_name"]
+        target_label = "pod"
+      }
     }
     prometheus.scrape "gateway_pods" {
       targets = discovery.relabel.gateway_pods.output
@@ -131,10 +149,22 @@ data:
         replacement = "$1:$2"
         target_label = "__address__"
       }
-      rule { source_labels = ["__meta_kubernetes_namespace"]        target_label = "namespace" }
-      rule { source_labels = ["__meta_kubernetes_pod_name"]         target_label = "pod" }
-      rule { source_labels = ["__meta_kubernetes_pod_label_app"]    target_label = "app" }
-      rule { source_labels = ["__meta_kubernetes_pod_label_version"] target_label = "version" }
+      rule {
+        source_labels = ["__meta_kubernetes_namespace"]
+        target_label = "namespace"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_name"]
+        target_label = "pod"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_label_app"]
+        target_label = "app"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_label_version"]
+        target_label = "version"
+      }
     }
     prometheus.scrape "annotated_pods" {
       targets = discovery.relabel.annotated_pods.output
@@ -161,7 +191,10 @@ data:
         regex  = "(.+)"
         replacement = "/api/v1/nodes/$1/proxy/metrics/cadvisor"
       }
-      rule { source_labels = ["__meta_kubernetes_node_name"] target_label = "node" }
+      rule {
+        source_labels = ["__meta_kubernetes_node_name"]
+        target_label = "node"
+      }
     }
     prometheus.scrape "cadvisor" {
       targets = discovery.relabel.cadvisor.output
@@ -209,6 +242,8 @@ kind: DaemonSet
 metadata:
   name: grafana-alloy-agent
   namespace: observability
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
 spec:
   selector:
     matchLabels:
