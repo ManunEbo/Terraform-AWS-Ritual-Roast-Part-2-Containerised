@@ -4,18 +4,18 @@ metadata:
   name: v1-backend-flask
   namespace: dev
   labels:
-    app: rr-backend          # D2: canonical relabel (was rr-backend-flask)
+    app: rr-backend # D2: canonical relabel (was rr-backend-flask)
     version: v1
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: rr-backend        # D2: must match new pod labels
+      app: rr-backend # D2: must match new pod labels
       version: v1
   template:
     metadata:
       labels:
-        app: rr-backend      # D2
+        app: rr-backend # D2
         version: v1
     spec:
       imagePullSecrets:
@@ -28,45 +28,45 @@ spec:
       nodeSelector:
         tier: backend
       containers:
-      - name: flask-backend
-        image: ghcr.io/manunebo/rr-v1-backend:latest
-        ports:
-        - containerPort: 5000
-        # v1 single-endpoint probe contract (UNCHANGED - do NOT copy to v2).
-        # /health is shallow (200, no DB touch), safe for BOTH probes.
-        # startupProbe holds liveness at bay during the Secrets Manager + MySQL
-        # cold-start (mirrors the 120s ECS health_check_grace_period_seconds).
-        startupProbe:
-          httpGet:
-            path: /health
-            port: 5000
-          initialDelaySeconds: 5
-          periodSeconds: 5
-          failureThreshold: 30
-          timeoutSeconds: 2
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 5000
-          initialDelaySeconds: 5
-          periodSeconds: 10
-          timeoutSeconds: 2
-          failureThreshold: 3
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 5000
-          initialDelaySeconds: 5
-          periodSeconds: 20
-          timeoutSeconds: 2
-          failureThreshold: 3
-        envFrom:
-        - configMapRef:
-            name: backend-config
-        resources:
-          requests:
-            cpu: 100m
-            memory: 128Mi
-          limits:
-            cpu: 250m
-            memory: 256Mi
+        - name: flask-backend
+          image: ghcr.io/manunebo/rr-v1-backend:0ba5fb4e9f212a6ff5998742b64a5bf5c32c2e0e
+          ports:
+            - containerPort: 5000
+          # v1 single-endpoint probe contract (UNCHANGED - do NOT copy to v2).
+          # /health is shallow (200, no DB touch), safe for BOTH probes.
+          # startupProbe holds liveness at bay during the Secrets Manager + MySQL
+          # cold-start (mirrors the 120s ECS health_check_grace_period_seconds).
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 30
+            timeoutSeconds: 2
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 20
+            timeoutSeconds: 2
+            failureThreshold: 3
+          envFrom:
+            - configMapRef:
+                name: backend-config
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
