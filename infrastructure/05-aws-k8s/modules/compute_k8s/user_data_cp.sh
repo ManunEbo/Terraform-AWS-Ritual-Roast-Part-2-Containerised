@@ -28,8 +28,8 @@ K3S_TOKEN=$(aws secretsmanager get-secret-value --region $REGION --secret-id $TO
 # node sees the same IP set and deterministically agrees on the same lowest-IP
 # leader. Without this gate an early-booting node sees only itself and runs
 # --cluster-init, racing a peer doing the same -> split-brain etcd, no cluster.
-# NOTE: braces are intentionally omitted ($REGION not ${REGION}) because this
-# file is rendered by Terraform templatefile(); a literal ${...} would be parsed
+# NOTE: braces are intentionally omitted ($REGION not $${REGION}) because this
+# file is rendered by Terraform templatefile(); a literal $${...} would be parsed
 # as a Terraform interpolation and fail the render.
 echo "Waiting for all 3 control-plane instances to reach running state..."
 while true; do
@@ -72,8 +72,14 @@ if [ -z "$EXISTING_CP" ] || [ "$EXISTING_CP" == "$MY_IP" ]; then
   sleep 20
   export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
-  # Deploy Calico operator and custom infrastructure manifests
-  kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/tigera-operator.yaml
+  # Deploy Calico operator and custom infrastructure manifests.
+  # --server-side avoids the client-side annotation size limit that silently drops
+  # large CRDs (the tigera-operator manifest is ~600KB with embedded OpenAPI schemas).
+  # Without it the Deployment is created but CRDs are missing, causing the operator
+  # to crash-loop on every boot.
+  kubectl apply --server-side -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/tigera-operator.yaml
+  # Wait for the Installation CRD to be fully established before applying the CR.
+  kubectl wait --for=condition=Established crd/installations.operator.tigera.io --timeout=120s
   kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/custom-resources.yaml
   sleep 20
 
