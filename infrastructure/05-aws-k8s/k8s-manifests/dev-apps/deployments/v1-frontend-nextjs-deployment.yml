@@ -4,18 +4,18 @@ metadata:
   name: v1-frontend-nextjs
   namespace: dev
   labels:
-    app: rr-frontend         # D4: canonical relabel (was rr-frontend-nextjs)
+    app: rr-frontend # D4: canonical relabel (was rr-frontend-nextjs)
     version: v1
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: rr-frontend       # D4: must match new pod labels
+      app: rr-frontend # D4: must match new pod labels
       version: v1
   template:
     metadata:
       labels:
-        app: rr-frontend     # D4
+        app: rr-frontend # D4
         version: v1
     spec:
       imagePullSecrets:
@@ -28,41 +28,41 @@ spec:
       nodeSelector:
         tier: frontend
       containers:
-      - name: nextjs-frontend
-        # REBUILD REQUIRED: image must add the x-frontend=v1 cookie via
-        # next.config.ts headers() (D5). Tag stays :latest; CI write-back
-        # will seed the SHA. See next.config.ts snippet in the handover.
-        image: ghcr.io/manunebo/rr-v1-frontend:latest
-        ports:
-        - containerPort: 3000
-        # v1 single-endpoint probe contract (UNCHANGED). /api/health is
-        # shallow (200, no DB touch), safe for BOTH probes.
-        readinessProbe:
-          httpGet:
-            path: /api/health
-            port: 3000
-          initialDelaySeconds: 5
-          periodSeconds: 10
-          timeoutSeconds: 2
-          failureThreshold: 3
-        livenessProbe:
-          httpGet:
-            path: /api/health
-            port: 3000
-          initialDelaySeconds: 15
-          periodSeconds: 20
-          timeoutSeconds: 2
-          failureThreshold: 3
-        env:
-        # CHANGED: points at the unified backend Service (D1), was
-        # http://rr-backend-flask-svc:80. Server-side fetch, no rebuild
-        # needed for THIS change (runtime env var).
-        - name: BACKEND_URL
-          value: "http://ritual-roast-backend:5000"
-        resources:
-          requests:
-            cpu: 100m
-            memory: 256Mi
-          limits:
-            cpu: 300m
-            memory: 512Mi
+        - name: nextjs-frontend
+          # REBUILD REQUIRED: image must add the x-frontend=v1 cookie via
+          # next.config.ts headers() (D5). Tag stays :latest; CI write-back
+          # will seed the SHA. See next.config.ts snippet in the handover.
+          image: ghcr.io/manunebo/rr-v1-frontend:96d8b078f323f22d40d233875b76acdb11c6946a
+          ports:
+            - containerPort: 3000
+          # v1 single-endpoint probe contract (UNCHANGED). /api/health is
+          # shallow (200, no DB touch), safe for BOTH probes.
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 2
+            failureThreshold: 3
+          env:
+            # CHANGED: points at the unified backend Service (D1), was
+            # http://rr-backend-flask-svc:80. Server-side fetch, no rebuild
+            # needed for THIS change (runtime env var).
+            - name: BACKEND_URL
+              value: "http://ritual-roast-backend:5000"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 300m
+              memory: 512Mi
