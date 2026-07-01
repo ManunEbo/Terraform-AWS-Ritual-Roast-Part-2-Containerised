@@ -114,11 +114,34 @@ otherwise). Re-enable when Layers 3-4 are redeployed. Do not delete it.
 - ArgoCD Application `path:` values include `infrastructure/` prefix — correct, do NOT strip ✓
 - Security groups, ALB health check, NAT coverage, CIDR overlap, Gateway selector — all clear ✓
 - SHA write-back job present in `deploy-ghcr-k8s.yml` ✓
+- Duplicate `metadata:` bug in all 4 pod templates fixed — labels and annotations merged into single block ✓
+- Kiali chart corrected: `kiali-operator v2.28.0` (not `kiali-server`); Prometheus chart: `29.13.1` ✓
+
+**Bootstrap bugs found and fixed 2026-07-01 (CRITICAL — these caused two failed deploys):**
+
+**Bug 1 — `node-role.kubernetes.io/worker=true` in `--node-labels` (commit `922621f`)**
+- Kubelet v1.28 rejects `kubernetes.io` labels at registration time unless they match an explicit
+  allowlist (`kubelet.kubernetes.io`, `node.kubernetes.io` prefixes, or specific beta/topology labels).
+  `node-role.kubernetes.io/worker` is NOT in that set → kubelet exits on every start attempt →
+  workers join the API server but can never become Ready.
+- **Fix:** Removed `--node-label node-role.kubernetes.io/worker=true` from both worker user_data scripts.
+  Apply the cosmetic role label POST-JOIN via `kubectl label node <name> node-role.kubernetes.io/worker=worker`.
+
+**Bug 2 — Calico CRD wait timeout (120s) aborts bootstrap (commit `a63eebb`)**
+- `user_data_cp.sh` runs `kubectl wait --for=condition=Established crd/installations.operator.tigera.io
+  --timeout=120s` immediately after applying `tigera-operator.yaml`. On a freshly-booted leader under
+  load, the CRD establishment takes >120s → `set -e` kills the script → `custom-resources.yaml` is never
+  applied → tigera-operator runs indefinitely with "Installation config not found" → no pod network →
+  coredns/metrics-server stay Pending → ArgoCD Helm install never starts → no namespaces, no secrets,
+  no apps. The cluster appears running (nodes join) but is completely unbootstrapped.
+- **Fix:** Added `sleep 30` after applying `tigera-operator.yaml` (lets API server register CRDs before
+  polling), increased timeout to 300s. Both committed and pushed.
+- **Live recovery (if it happens again):** `kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/custom-resources.yaml` then continue manual bootstrap below.
 
 **ACTIVE — Phase 2 (canary/blue-green/shadow):**
-- v2 pods not yet running; pending ArgoCD sync of `ritual-roast-canary` Application
+- v2 pods not yet running; pending ArgoCD bootstrap completion and sync of `ritual-roast-canary`
 - Istio traffic weights currently 100% v1 / 0% v2 (steady state in `dev-apps/routing/istio-routing.yml`)
-- Prometheus (in-cluster) and Kiali (operator) committed; last version-fix commit not yet pushed — see handover
+- Prometheus (in-cluster) and Kiali (operator) committed and pushed ✓
 
 **Node capacity — resolved:**
 - Istio default sidecar memory limit (1024Mi) capped to 128Mi via pod annotations on all 4 deployments
@@ -163,67 +186,160 @@ Terraform (alias may be `tf`), kubectl, istioctl, argocd, AWS CLI, Docker, Helm,
 
 ---
 
-## SESSION HANDOVER — 2026-07-01 (read this before doing anything)
+## SESSION HANDOVER — 2026-07-01 END-OF-DAY
 
 ### Access constraints (critical — read first)
 - **No local `kubectl`** on the dev machine. Cluster access is **SSM only** to the EC2 nodes.
 - **Repo is private (SSH remote)** — raw GitHub URLs 404, and `kubectl apply -f <github-url>` won't work.
 - **All cluster changes must go via git commit + push → ArgoCD syncs.** No exceptions.
 
-### Phase 1 status — COMPLETE ✓
-Website is live and healthy:
-- K3s v1.28.15+k3s1, 3 CP + 2 workers (all t3.medium), Calico 3.26.1 — all nodes Ready
-- istiod 1.30.1 ✓ | istio-ingressgateway ✓ | All app pods 2/2 (Envoy sidecars injected)
-- v1-frontend-nextjs: 2/2 Running ✓
-- v1-backend-flask: 2/2 Running ✓ (boto3 timeouts + startupProbe fixed)
-- Grafana Alloy: Running on all 5 nodes, remote-writing to Grafana Cloud ✓
-- Website accessible at `http://<ALB-DNS>` — data send/retrieve confirmed working
-
-### Phase 2 status — IN PROGRESS
-
-#### What's committed and pushed
+### All commits on main (pushed)
 | Commit | What it does |
 |---|---|
-| `3820001` | Sidecar memory limits capped to 128Mi on all 4 deployments; Prometheus + Kiali nodeAffinity to CP nodes |
-| `3820001` | `canary-staging-app.yml` — ArgoCD Application for v2 pods (0% traffic) |
-| `3820001` | `prometheus-app.yml` — in-cluster Prometheus for Kiali (chart v29.13.1, 2h retention) |
-| `3820001` | `kiali-app.yml` — Kiali via operator (chart kiali-operator v2.28.0, anonymous auth) |
-| `3820001` | `kiali-routing.yml` — VirtualService: `http://<ALB-DNS>/kiali` → Kiali pod |
+| `922621f` | Remove `node-role.kubernetes.io/worker=true` from worker user_data — kubelet blocks this label at registration |
+| `a63eebb` | Increase Calico CRD wait 120s→300s + add 30s pre-sleep to prevent bootstrap abort on loaded node |
+| (earlier) | Sidecar memory cap, Prometheus, Kiali, canary staging, kiali-routing, metadata merge fix |
 
-#### What's committed but NOT YET PUSHED
-| Commit | What it does |
-|---|---|
-| `97025ca` | Fix kiali chart: `kiali-server` → `kiali-operator v2.28.0`; prometheus: `25.27.0` → `29.13.1` |
+### Cluster state at end of session
+- **Nodes:** 5 nodes (3 CP + 2 workers), all Running. Workers: `ip-10-16-121-80` (one role) and `ip-10-16-124-222` (other role).
+- **Calico:** Fully up — manually applied `custom-resources.yaml` after Bug 2 abort. All calico-node pods Running.
+- **Worker role labels:** NOT YET APPLIED. After deploy, run from any CP node:
+  ```bash
+  kubectl label node <worker-1-hostname> node-role.kubernetes.io/worker=worker
+  kubectl label node <worker-2-hostname> node-role.kubernetes.io/worker=worker
+  ```
+- **ArgoCD: NOT INSTALLED.** Bootstrap aborted at the Calico CRD wait step. The session ended mid-recovery.
 
-**First action this session:**
+### Recommended first action tomorrow
+
+**Destroy and redeploy cleanly.** Both bugs are fixed and committed. A fresh `terraform apply` will now
+bootstrap end-to-end without manual intervention. Do not attempt to continue the half-bootstrapped
+cluster — it's missing ArgoCD, all namespaces, all secrets.
+
 ```bash
-git push --set-upstream origin main
+cd infrastructure/05-aws-k8s
+terraform destroy -auto-approve    # confirm in AWS console it's gone
+terraform apply                    # fresh deploy with both fixes in
 ```
 
-#### What ArgoCD will do after push (new sync-wave order)
-```
-Wave -1 : istio-base             ✓ already Synced/Healthy
-Wave  0 : alloy ConfigMap + RBAC (instant Healthy)
-Wave  1 : istiod  ✓  |  prometheus (new — in-cluster Prometheus for Kiali)
-Wave  2 : istio-ingressgateway ✓  |  kiali (new — kiali-operator)
-Wave  3 : ritual-roast-workloads ✓  |  ritual-roast-canary (new — v2 pods at 0% traffic)
-Wave  4 : grafana-alloy DaemonSet ✓
-```
+Expected timeline after apply: ~20 min to full ArgoCD sync (Calico 3 min, ArgoCD 5 min, Istio + apps 10 min).
 
-#### Verify after push
-From SSM session on any cluster node:
+### If you want to skip destroy and finish the manual bootstrap instead
+
+The cluster has Calico but nothing else. SSM into any CP node and run these in order:
+
 ```bash
-# New applications should appear
-kubectl -n argocd get applications
+# 1. Install Helm
+curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | DESIRED_VERSION=v3.14.4 bash
 
-# v2 pods should come up 2/2 once ritual-roast-canary syncs
-kubectl -n dev get pods -l version=v2 -w
+# 2. ArgoCD
+kubectl create namespace argocd || true
+helm repo add argo https://argoproj.github.io/argo-helm && helm repo update
+helm upgrade --install argocd argo/argo-cd -n argocd --version 7.3.11 --set server.service.type=ClusterIP
 
-# Kiali service (operator creates this — VirtualService points to it)
-kubectl -n observability get svc kiali
+# 3. GitHub PAT → ArgoCD repo secret
+GITHUB_PAT=$(aws secretsmanager get-secret-value --region eu-west-2 \
+  --secret-id rr-dev-argocd-github-token --query SecretString --output text)
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ritual-roast-git-repo
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repository
+type: Opaque
+stringData:
+  type: git
+  url: https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised.git
+  password: $GITHUB_PAT
+EOF
 
-# Access Kiali
-http://<ALB-DNS>/kiali
+# 4. dev namespace + Istio injection label + GHCR pull secret
+kubectl create namespace dev || true
+kubectl label namespace dev istio-injection=enabled --overwrite
+kubectl create secret docker-registry ghcr-login-secret \
+  --namespace=dev --docker-server=ghcr.io \
+  --docker-username=ManunEbo --docker-password=$GITHUB_PAT || true
+
+# 5. backend-config ConfigMap — get DB_SECRET_ARN first:
+aws secretsmanager list-secrets --region eu-west-2 \
+  --query "SecretList[?contains(Name,'rr-dev')].{Name:Name,ARN:ARN}" --output table
+# Then apply (replace ARN with the RDS credentials secret ARN from above):
+DB_SECRET_ARN="arn:aws:secretsmanager:eu-west-2:ACCOUNT:secret:rr-dev-rds-XXXXX"
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: dev
+data:
+  SECRET_ARN: "$DB_SECRET_ARN"
+  AWS_REGION: "eu-west-2"
+EOF
+
+# 6. observability namespace + Grafana credentials secret
+kubectl create namespace observability || true
+GRAFANA_TOKEN=$(aws secretsmanager get-secret-value --region eu-west-2 \
+  --secret-id rr-dev-grafana-cloud-token --query SecretString --output text)
+GRAFANA_URL=$(aws secretsmanager get-secret-value --region eu-west-2 \
+  --secret-id rr-dev-grafana-remote-write-url --query SecretString --output text)
+GRAFANA_ID=$(aws secretsmanager get-secret-value --region eu-west-2 \
+  --secret-id rr-dev-grafana-instance-id --query SecretString --output text)
+kubectl create secret generic grafana-auth --namespace=observability \
+  --from-literal=bearer-token=$GRAFANA_TOKEN \
+  --from-literal=remote-write-url=$GRAFANA_URL \
+  --from-literal=instance-id=$GRAFANA_ID || true
+
+# 7. Wait for ArgoCD CRD then fire root Application
+until kubectl get crd applications.argoproj.io >/dev/null 2>&1; do sleep 5; done
+kubectl apply -f - <<EOF
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-observability
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised.git'
+    targetRevision: main
+    path: infrastructure/05-aws-k8s/k8s-manifests/observability
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+EOF
+```
+
+After step 7, watch ArgoCD pick up and sync everything:
+```bash
+kubectl -n argocd get applications -w
+```
+
+### What ArgoCD will deploy (sync-wave order)
+```
+Wave -1 : istio-base             (Istio CRDs)
+Wave  0 : alloy ConfigMap + RBAC
+Wave  1 : istiod  |  prometheus  (in-cluster Prometheus for Kiali)
+Wave  2 : istio-ingressgateway   |  kiali (kiali-operator)
+Wave  3 : ritual-roast-workloads (v1 apps)  |  ritual-roast-canary (v2 at 0%)
+Wave  4 : grafana-alloy DaemonSet
+```
+
+### Post-deploy verification
+```bash
+kubectl get nodes                          # all 5 Ready
+kubectl -n argocd get applications         # all Synced/Healthy
+kubectl -n dev get pods                    # v1 pods 2/2, v2 pods 2/2
+kubectl -n observability get svc kiali     # kiali service exists
+# Then in browser: http://<ALB-DNS>        website working
+# And:            http://<ALB-DNS>/kiali   Kiali mesh graph
 ```
 
 ### Observability stack
