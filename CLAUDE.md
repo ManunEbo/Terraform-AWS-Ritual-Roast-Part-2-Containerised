@@ -3,14 +3,6 @@
 > Claude Code loads this file automatically at the start of every session in this repo.
 > It shapes how Claude *behaves*; it does NOT enforce anything — the hard guardrails live in
 > `.claude/settings.json`. Keep both in sync.
->
-> ⚠️ **SEED — paths corrected for THIS repo; FINDINGS not yet re-derived.** The architecture,
-> contracts (data path, probe contract, image/GitOps strategy) and paths below are correct for this
-> repo: the five Terraform layers live under **`infrastructure/`**; `apps/` and `.github/workflows/`
-> are at the repo root. The **"Current findings"** section is a PLACEHOLDER — run `/audit` against this
-> repo and populate it from what the files actually say. Do NOT import the sandbox's "already fixed on
-> disk" status: this repo is likely still original. The sandbox checklist (in HANDOFF.md) is a guide to
-> what to look for, not a statement of this repo's state.
 
 ## What this project is
 
@@ -71,9 +63,8 @@ liveness probe restart-loops the pod on any RDS blip; this RDS is **Multi-AZ**, 
 (~60–120s of connection unavailability) would crash-loop the whole backend fleet and keep it down even
 after the DB recovers — the "container assassination" failure mode.
 
-v2 is the **challenger** (v1 = base). The v2 deployments plus Istio canary / blue-green / shadow
-routing (DestinationRule subsets + weighted/mirrored VirtualService) are a **deliberate later
-workstream — not yet built.**
+v2 is the **challenger** (v1 = base). The v2 deployments and all Istio routing manifests are built
+and committed. See SESSION HANDOVER for current canary status and how to step through each strategy.
 
 ## Image tagging & GitOps image promotion (the SHA workflow)
 
@@ -111,29 +102,27 @@ The ECS workflow (`deploy-ecs.yml`) is disabled during the K8s phase by renaming
 `deploy-ecs.yml.disabled` (its Layer-3 OIDC role is destroyed, so it red-X's on every `apps/v1-*` push
 otherwise). Re-enable when Layers 3-4 are redeployed. Do not delete it.
 
-## Current findings — POPULATE VIA `/audit` (do not trust sandbox status)
+## Current findings — verified 2026-07-01
 
-> This section is intentionally empty of conclusions. Run `/audit` and fill it from THIS repo's files,
-> each cited by `file:resource`. The sandbox HANDOFF expects the following — but RE-PROVE each here by
-> reading the files (do not paste sandbox line numbers; they may differ):
-> - K3s installed UNPINNED in the user_data scripts vs Calico 3.26.1 / Istio chart 1.30.1 (version
->   skew — likely the root cause; pin `INSTALL_K3S_VERSION` on ALL install lines).
-> - Missing `istio-injection=enabled` on the `dev` namespace (pods 1/1, no sidecars).
-> - istiod with no nodeSelector/toleration/resource caps (can starve etcd/ArgoCD on a small box).
-> - Duplicate ArgoCD ownership of dev-apps + any self-referential observability app-of-apps.
-> - `:latest` image tags under `selfHeal: true` + no `update-manifests` write-back job in
->   `deploy-ghcr-k8s.yml` (rollback is a no-op).
-> - `deploy-ecs.yml` still active (not renamed `.disabled`).
-> - v1 probes wired into the deployments? v2 `/livez` present in `apps/v2-backend-go/main.go`?
->
-> **Likely NOT a finding here (sandbox-only):** the ArgoCD Application `path:` strip. In this repo the
-> `infrastructure/` prefix is present — verify the paths are correct, do NOT strip. (See MANIFEST PATH.)
->
-> **Re-confirm CLEARED, then don't re-litigate:** security groups (Calico overlay symmetric, 30080 ALB
-> path, 6443 API NLB triangle); ALB health check on 30080 `/` matcher 200; NAT route coverage (single
-> NAT, shared route table → both AZ subnets get egress; cost/SPOF tradeoff, not a bug); VPC CIDR
-> 10.16.0.0/16 vs pod CIDR 192.168.0.0/16 (no overlap); Istio Gateway selector `istio: ingressgateway`;
-> `global-bundle.pem` baked into the backend; env injection consistent, no hardcoded secrets.
+**CLEARED (do not re-litigate):**
+- K3s pinned to `v1.28.15+k3s1` on all install lines (CP + both worker user_data scripts) ✓
+- `dev` namespace has `istio-injection=enabled` — all app pods are 2/2 with Envoy sidecars ✓
+- istiod has `nodeSelector: tier: frontend`, toleration, and resource caps (100m/128Mi req, 500m/512Mi lim) ✓
+- `deploy-ecs.yml` renamed to `deploy-ecs.yml.disabled` ✓
+- v1 probes correct (single `/health` endpoint for both liveness + readiness) ✓
+- v2 `/livez` present in `apps/v2-backend-go/main.go`; split-probe contract wired in v2 deployment ✓
+- ArgoCD Application `path:` values include `infrastructure/` prefix — correct, do NOT strip ✓
+- Security groups, ALB health check, NAT coverage, CIDR overlap, Gateway selector — all clear ✓
+- SHA write-back job present in `deploy-ghcr-k8s.yml` ✓
+
+**ACTIVE — Phase 2 (canary/blue-green/shadow):**
+- v2 pods not yet running; pending ArgoCD sync of `ritual-roast-canary` Application
+- Istio traffic weights currently 100% v1 / 0% v2 (steady state in `dev-apps/routing/istio-routing.yml`)
+- Prometheus (in-cluster) and Kiali (operator) committed; last version-fix commit not yet pushed — see handover
+
+**Node capacity — resolved:**
+- Istio default sidecar memory limit (1024Mi) capped to 128Mi via pod annotations on all 4 deployments
+- Prometheus and Kiali steered to CP nodes via `nodeAffinity` preference
 
 ## How the team works this
 
@@ -174,107 +163,117 @@ Terraform (alias may be `tf`), kubectl, istioctl, argocd, AWS CLI, Docker, Helm,
 
 ---
 
-## SESSION HANDOVER — 2026-06-30 (read this before doing anything)
+## SESSION HANDOVER — 2026-07-01 (read this before doing anything)
 
-> Live cluster is running. Context was cleared mid-debug. Pick up from here.
+### Access constraints (critical — read first)
+- **No local `kubectl`** on the dev machine. Cluster access is **SSM only** to the EC2 nodes.
+- **Repo is private (SSH remote)** — raw GitHub URLs 404, and `kubectl apply -f <github-url>` won't work.
+- **All cluster changes must go via git commit + push → ArgoCD syncs.** No exceptions.
 
-### Cluster state (at clear time, ~80 min uptime)
-- K3s v1.28.15+k3s1, 3 CP + 2 workers, Calico 3.26.1 — all nodes Ready
-- Leader CP node: `10.16.121.38` (SSM in here to check cloud-init)
-- ArgoCD: all pods Running
-- `istio-system` namespace: EXISTS but **completely empty** — istiod never deployed
-- `istio-ingress` namespace: does NOT exist
-- No `istio-ingressgateway` either
-- Frontend NextJS: **1/1 Running** ✓
-- Backend Flask: **0/1 Running, 10+ restarts** — startupProbe timing out
-- Grafana Alloy: **CrashLoopBackOff 13+ restarts**
+### Phase 1 status — COMPLETE ✓
+Website is live and healthy:
+- K3s v1.28.15+k3s1, 3 CP + 2 workers (all t3.medium), Calico 3.26.1 — all nodes Ready
+- istiod 1.30.1 ✓ | istio-ingressgateway ✓ | All app pods 2/2 (Envoy sidecars injected)
+- v1-frontend-nextjs: 2/2 Running ✓
+- v1-backend-flask: 2/2 Running ✓ (boto3 timeouts + startupProbe fixed)
+- Grafana Alloy: Running on all 5 nodes, remote-writing to Grafana Cloud ✓
+- Website accessible at `http://<ALB-DNS>` — data send/retrieve confirmed working
 
-### ArgoCD Applications (at clear time)
-| Application | Sync | Health | Notes |
+### Phase 2 status — IN PROGRESS
+
+#### What's committed and pushed
+| Commit | What it does |
+|---|---|
+| `3820001` | Sidecar memory limits capped to 128Mi on all 4 deployments; Prometheus + Kiali nodeAffinity to CP nodes |
+| `3820001` | `canary-staging-app.yml` — ArgoCD Application for v2 pods (0% traffic) |
+| `3820001` | `prometheus-app.yml` — in-cluster Prometheus for Kiali (chart v29.13.1, 2h retention) |
+| `3820001` | `kiali-app.yml` — Kiali via operator (chart kiali-operator v2.28.0, anonymous auth) |
+| `3820001` | `kiali-routing.yml` — VirtualService: `http://<ALB-DNS>/kiali` → Kiali pod |
+
+#### What's committed but NOT YET PUSHED
+| Commit | What it does |
+|---|---|
+| `97025ca` | Fix kiali chart: `kiali-server` → `kiali-operator v2.28.0`; prometheus: `25.27.0` → `29.13.1` |
+
+**First action this session:**
+```bash
+git push --set-upstream origin main
+```
+
+#### What ArgoCD will do after push (new sync-wave order)
+```
+Wave -1 : istio-base             ✓ already Synced/Healthy
+Wave  0 : alloy ConfigMap + RBAC (instant Healthy)
+Wave  1 : istiod  ✓  |  prometheus (new — in-cluster Prometheus for Kiali)
+Wave  2 : istio-ingressgateway ✓  |  kiali (new — kiali-operator)
+Wave  3 : ritual-roast-workloads ✓  |  ritual-roast-canary (new — v2 pods at 0% traffic)
+Wave  4 : grafana-alloy DaemonSet ✓
+```
+
+#### Verify after push
+From SSM session on any cluster node:
+```bash
+# New applications should appear
+kubectl -n argocd get applications
+
+# v2 pods should come up 2/2 once ritual-roast-canary syncs
+kubectl -n dev get pods -l version=v2 -w
+
+# Kiali service (operator creates this — VirtualService points to it)
+kubectl -n observability get svc kiali
+
+# Access Kiali
+http://<ALB-DNS>/kiali
+```
+
+### Observability stack
+
+| Component | Purpose | Where |
+|---|---|---|
+| Grafana Alloy | Scrapes Envoy sidecars + nodes → remote-writes to Grafana Cloud | `observability` ns, DaemonSet on all 5 nodes |
+| In-cluster Prometheus | Scrapes Istio metrics for Kiali's live graph only (2h retention, no PV) | `observability` ns, prefers CP node |
+| Kiali | Live service mesh graph, traffic animation, VirtualService viewer | `observability` ns, prefers CP node |
+| Grafana Cloud | Long-term metrics, dashboards, alerting | External (remote-write target) |
+
+**Kiali access:** `http://<ALB-DNS>/kiali` — anonymous, no login.
+**Kiali Graph settings:** Namespace=dev → Versioned app graph → enable Traffic Animation + Traffic Distribution.
+
+### Canary strategy — GitOps only
+
+All traffic weight changes happen by editing `dev-apps/routing/istio-routing.yml` and pushing.
+ArgoCD applies the change within ~3 minutes. No `kubectl apply` needed.
+
+The `canary-variants/` files are **reference templates** — they show the target weights for each step.
+Do NOT put them in `dev-apps/routing/` (same VirtualService name → collision under recursive sync).
+Instead, copy the weight values from the variant file into `istio-routing.yml`, commit, push.
+
+#### Canary step sequence
+| Step | Frontend weights (v1/v2) | Backend weights (v1/v2) | Verify in Kiali |
 |---|---|---|---|
-| `istio-base` | Synced | Healthy | ✓ CRDs installed |
-| `ritual-roast-workloads` | Synced | Degraded | backend pods failing |
-| `root-observability` | OutOfSync | Progressing | blocked — see below |
-| `istiod` | — | — | **never created** |
-| `istio-ingressgateway` | — | — | **never created** |
+| Baseline (current) | 100 / 0 | 100 / 0 | All traffic on v1 |
+| Canary 10% | 90 / 10 | 90 / 10 | Thin v2 line, error rate stable |
+| 30% | 70 / 30 | 70 / 30 | Line thickens |
+| 50% | 50 / 50 | 50 / 50 | Equal split |
+| 70% | 30 / 70 | 30 / 70 | v2 dominant |
+| 90% | 10 / 90 | 10 / 90 | Near full cutover |
+| Blue-green (100% v2) | 0 / 100 | 0 / 100 | v1 nodes go grey |
+| Rollback | `git revert` the weight commit | ArgoCD re-applies v1 weights |
 
-### Root cause chain (why istiod is missing)
-1. `ritual-roast-workloads` (no sync-wave annotation = wave 0) and
-   `grafana-alloy` DaemonSet (no sync-wave annotation = wave 0) block ArgoCD
-   from advancing to wave 1 (`istiod`) because wave 0 resources are Degraded.
-2. Alloy is Degraded because the River config had invalid one-liner rule syntax.
-3. **All fixes are written to disk but NOT yet committed or pushed to git.**
+#### Shadow mode (backend only)
+To mirror GET reads to v2 without affecting users, copy the `mirror:` spec from
+`canary-variants/vs-backend-shadow.yml` into the `backend-route` VirtualService in `istio-routing.yml`.
+**Critical:** mirror is GET-only (no POST mirror) — mirroring writes would double-insert rows in the
+shared RDS. v2's mirrored responses are discarded; users only see v1.
+In Kiali Graph: v2 backend node shows inbound traffic despite 0% weight — confirms mirror is working.
 
-### Files changed on disk — NEED ONE GIT COMMIT + PUSH
+### Node memory budget (post-fix)
 
-```
-infrastructure/05-aws-k8s/k8s-manifests/observability/telemetry.yml
-  → River syntax fixed (one-liner rules expanded to multi-line)
-  → sync-wave "4" added to grafana-alloy DaemonSet metadata
+All nodes are t3.medium (4096 MiB). After sidecar limit cap:
 
-infrastructure/05-aws-k8s/k8s-manifests/observability/ritual-roast-app.yml
-  → sync-wave "3" added (was wave 0, was blocking istiod)
+| Node | Total limits | % of RAM | Safe? |
+|---|---|---|---|
+| Frontend worker | ~3200 MiB | 78% | ✓ |
+| Backend worker | ~2432 MiB | 59% | ✓ |
 
-infrastructure/05-aws-k8s/k8s-manifests/dev-apps/deployments/v1-backend-flask-deployment.yml
-  → startupProbe added (30 × 5s = 150s window, mirrors ECS 120s grace period)
-
-apps/v1-backend-flask/app.py
-  → connection_timeout=5 added to MySQLConnectionPool
-  → boto3 connect_timeout=5 / read_timeout=5 STILL MISSING (user rejected edit,
-    must be re-applied next session — see "Backend fix" below)
-
-infrastructure/05-aws-k8s/modules/iam_k8s/controlplane.tf
-  → Added rr-dev-grafana-remote-write-url-* and rr-dev-grafana-instance-id-*
-    to CP IAM policy (was causing set -e script death on bootstrap)
-
-infrastructure/05-aws-k8s/modules/security_k8s/grafana_token_secret.tf
-  → Two new SM secrets added for grafana_remote_write_url and grafana_instance_id
-
-infrastructure/05-aws-k8s/modules/security_k8s/variables.tf
-infrastructure/05-aws-k8s/environments/dev/variables.tf
-infrastructure/05-aws-k8s/environments/dev/main.tf
-  → New variables wired through for grafana_remote_write_url and grafana_instance_id
-
-infrastructure/05-aws-k8s/modules/compute_k8s/user_data_cp.sh
-  → Bootstrap now reads all 3 grafana secrets from SM and creates complete grafana-auth K8s secret
-```
-
-### Backend Flask fix (INCOMPLETE — finish this first)
-
-The startupProbe fires every 5s from t=5s. Without boto3 timeouts, a single
-Secrets Manager call can block for up to 180s (3 retries × 60s default). This
-fills all Gunicorn gthread workers, Flask can't serve, probe times out, pod killed.
-
-**Still needs to be added to `apps/v1-backend-flask/app.py`:**
-```python
-boto3_config = Config(
-    region_name = region,
-    tcp_keepalive = True,
-    connect_timeout = 5,   # ← ADD THIS
-    read_timeout = 5,      # ← ADD THIS
-    retries = {
-        'max_attempts': 3,
-        'mode': 'standard'
-    }
-)
-```
-
-`connection_timeout=5` for MySQL is already in the file. Only the boto3 lines are missing.
-
-### Correct sync-wave order (after push, ArgoCD will deploy in this order)
-```
-Wave -1 : istio-base            ✓ already Synced/Healthy
-Wave  0 : alloy ConfigMap + RBAC (no annotation, instant Healthy)
-Wave  1 : istiod
-Wave  2 : istio-ingressgateway
-Wave  3 : ritual-roast-workloads
-Wave  4 : grafana-alloy DaemonSet (fixed River config)
-```
-
-### What to do when this session starts
-
-1. Add boto3 timeouts to `apps/v1-backend-flask/app.py` (listed above).
-2. Run: `git add -p && git commit -m "fix: boto3/mysql timeouts, Alloy River syntax, sync-wave order, startupProbe" && git push`
-3. Watch: `kubectl get applications -n argocd -w` — `istiod` should appear within 5 min of push.
-4. After `istiod` + `istio-ingressgateway` show Synced/Healthy: `kubectl rollout restart deployment -n dev` (injects Envoy sidecars so pods go 2/2).
-5. CI (deploy-ghcr-k8s.yml) will build a new backend image from the app.py changes; the SHA write-back updates the manifest; ArgoCD re-deploys backend with new image → backend becomes 1/1.
+Sidecar limit is 128 MiB (was 1024 MiB default). Actual Envoy usage ~50–80 MiB under normal load.
+Prometheus (256 MiB limit) and Kiali (256 MiB limit) land on CP nodes via nodeAffinity preference.
