@@ -78,8 +78,12 @@ if [ -z "$EXISTING_CP" ] || [ "$EXISTING_CP" == "$MY_IP" ]; then
   # Without it the Deployment is created but CRDs are missing, causing the operator
   # to crash-loop on every boot.
   kubectl apply --server-side -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/tigera-operator.yaml
-  # Wait for the Installation CRD to be fully established before applying the CR.
-  kubectl wait --for=condition=Established crd/installations.operator.tigera.io --timeout=120s
+  # Give the API server time to register the CRDs before we poll them.
+  # On a freshly-booted leader under load the 120s default was observed to time
+  # out, causing set -e to abort the script before custom-resources.yaml was
+  # applied (tigera-operator runs but has nothing to do -> Calico never starts).
+  sleep 30
+  kubectl wait --for=condition=Established crd/installations.operator.tigera.io --timeout=300s
   kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/custom-resources.yaml
   sleep 20
 
