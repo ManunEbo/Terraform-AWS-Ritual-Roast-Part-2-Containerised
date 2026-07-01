@@ -1,0 +1,80 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kiali
+  namespace: argocd
+  annotations:
+    # After Prometheus (wave 1) so Kiali can reach it on first startup
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  source:
+    repoURL: 'https://kiali.org/helm-charts'
+    chart: kiali-server
+    # VERIFY BEFORE PUSH: run from the cluster node:
+    #   helm repo add kiali https://kiali.org/helm-charts
+    #   helm search repo kiali/kiali-server --versions | head -10
+    # Pick the latest version whose Istio support range includes 1.30.x
+    targetRevision: '2.3.0'
+    helm:
+      values: |
+        auth:
+          # Anonymous access - no login screen. Fine for a private dev cluster.
+          strategy: anonymous
+
+        external_services:
+          prometheus:
+            # In-cluster Prometheus deployed by prometheus-app.yml above.
+            # The service name comes from the prometheus chart default:
+            # <release-name>-server.<namespace>.svc.cluster.local
+            url: "http://prometheus-server.observability.svc.cluster.local"
+
+          grafana:
+            enabled: false
+
+          tracing:
+            enabled: false
+
+        server:
+          # Must match the VirtualService prefix in kiali-routing.yml
+          web_root: "/kiali"
+          web_port: 20001
+
+        deployment:
+          # Prefer CP nodes to keep Kiali off the already-loaded worker
+          # nodes. Falls back to any node if CP nodes are full.
+          tolerations:
+            - operator: Exists
+          affinity:
+            nodeAffinity:
+              preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                preference:
+                  matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: Exists
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          # We expose through the Istio Gateway, not a K8s Ingress
+          ingress:
+            enabled: false
+
+        kiali_feature_flags:
+          # Show the traffic graph with version-level granularity
+          # (v1 and v2 appear as separate nodes, not merged into one)
+          istio_injection_action: true
+
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

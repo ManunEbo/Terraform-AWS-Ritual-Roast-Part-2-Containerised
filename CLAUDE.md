@@ -171,3 +171,110 @@ THEN app/probes.
 ## Tooling
 
 Terraform (alias may be `tf`), kubectl, istioctl, argocd, AWS CLI, Docker, Helm, Infracost.
+
+---
+
+## SESSION HANDOVER — 2026-06-30 (read this before doing anything)
+
+> Live cluster is running. Context was cleared mid-debug. Pick up from here.
+
+### Cluster state (at clear time, ~80 min uptime)
+- K3s v1.28.15+k3s1, 3 CP + 2 workers, Calico 3.26.1 — all nodes Ready
+- Leader CP node: `10.16.121.38` (SSM in here to check cloud-init)
+- ArgoCD: all pods Running
+- `istio-system` namespace: EXISTS but **completely empty** — istiod never deployed
+- `istio-ingress` namespace: does NOT exist
+- No `istio-ingressgateway` either
+- Frontend NextJS: **1/1 Running** ✓
+- Backend Flask: **0/1 Running, 10+ restarts** — startupProbe timing out
+- Grafana Alloy: **CrashLoopBackOff 13+ restarts**
+
+### ArgoCD Applications (at clear time)
+| Application | Sync | Health | Notes |
+|---|---|---|---|
+| `istio-base` | Synced | Healthy | ✓ CRDs installed |
+| `ritual-roast-workloads` | Synced | Degraded | backend pods failing |
+| `root-observability` | OutOfSync | Progressing | blocked — see below |
+| `istiod` | — | — | **never created** |
+| `istio-ingressgateway` | — | — | **never created** |
+
+### Root cause chain (why istiod is missing)
+1. `ritual-roast-workloads` (no sync-wave annotation = wave 0) and
+   `grafana-alloy` DaemonSet (no sync-wave annotation = wave 0) block ArgoCD
+   from advancing to wave 1 (`istiod`) because wave 0 resources are Degraded.
+2. Alloy is Degraded because the River config had invalid one-liner rule syntax.
+3. **All fixes are written to disk but NOT yet committed or pushed to git.**
+
+### Files changed on disk — NEED ONE GIT COMMIT + PUSH
+
+```
+infrastructure/05-aws-k8s/k8s-manifests/observability/telemetry.yml
+  → River syntax fixed (one-liner rules expanded to multi-line)
+  → sync-wave "4" added to grafana-alloy DaemonSet metadata
+
+infrastructure/05-aws-k8s/k8s-manifests/observability/ritual-roast-app.yml
+  → sync-wave "3" added (was wave 0, was blocking istiod)
+
+infrastructure/05-aws-k8s/k8s-manifests/dev-apps/deployments/v1-backend-flask-deployment.yml
+  → startupProbe added (30 × 5s = 150s window, mirrors ECS 120s grace period)
+
+apps/v1-backend-flask/app.py
+  → connection_timeout=5 added to MySQLConnectionPool
+  → boto3 connect_timeout=5 / read_timeout=5 STILL MISSING (user rejected edit,
+    must be re-applied next session — see "Backend fix" below)
+
+infrastructure/05-aws-k8s/modules/iam_k8s/controlplane.tf
+  → Added rr-dev-grafana-remote-write-url-* and rr-dev-grafana-instance-id-*
+    to CP IAM policy (was causing set -e script death on bootstrap)
+
+infrastructure/05-aws-k8s/modules/security_k8s/grafana_token_secret.tf
+  → Two new SM secrets added for grafana_remote_write_url and grafana_instance_id
+
+infrastructure/05-aws-k8s/modules/security_k8s/variables.tf
+infrastructure/05-aws-k8s/environments/dev/variables.tf
+infrastructure/05-aws-k8s/environments/dev/main.tf
+  → New variables wired through for grafana_remote_write_url and grafana_instance_id
+
+infrastructure/05-aws-k8s/modules/compute_k8s/user_data_cp.sh
+  → Bootstrap now reads all 3 grafana secrets from SM and creates complete grafana-auth K8s secret
+```
+
+### Backend Flask fix (INCOMPLETE — finish this first)
+
+The startupProbe fires every 5s from t=5s. Without boto3 timeouts, a single
+Secrets Manager call can block for up to 180s (3 retries × 60s default). This
+fills all Gunicorn gthread workers, Flask can't serve, probe times out, pod killed.
+
+**Still needs to be added to `apps/v1-backend-flask/app.py`:**
+```python
+boto3_config = Config(
+    region_name = region,
+    tcp_keepalive = True,
+    connect_timeout = 5,   # ← ADD THIS
+    read_timeout = 5,      # ← ADD THIS
+    retries = {
+        'max_attempts': 3,
+        'mode': 'standard'
+    }
+)
+```
+
+`connection_timeout=5` for MySQL is already in the file. Only the boto3 lines are missing.
+
+### Correct sync-wave order (after push, ArgoCD will deploy in this order)
+```
+Wave -1 : istio-base            ✓ already Synced/Healthy
+Wave  0 : alloy ConfigMap + RBAC (no annotation, instant Healthy)
+Wave  1 : istiod
+Wave  2 : istio-ingressgateway
+Wave  3 : ritual-roast-workloads
+Wave  4 : grafana-alloy DaemonSet (fixed River config)
+```
+
+### What to do when this session starts
+
+1. Add boto3 timeouts to `apps/v1-backend-flask/app.py` (listed above).
+2. Run: `git add -p && git commit -m "fix: boto3/mysql timeouts, Alloy River syntax, sync-wave order, startupProbe" && git push`
+3. Watch: `kubectl get applications -n argocd -w` — `istiod` should appear within 5 min of push.
+4. After `istiod` + `istio-ingressgateway` show Synced/Healthy: `kubectl rollout restart deployment -n dev` (injects Envoy sidecars so pods go 2/2).
+5. CI (deploy-ghcr-k8s.yml) will build a new backend image from the app.py changes; the SHA write-back updates the manifest; ArgoCD re-deploys backend with new image → backend becomes 1/1.

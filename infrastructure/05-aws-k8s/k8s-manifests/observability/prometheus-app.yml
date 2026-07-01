@@ -1,0 +1,140 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: prometheus
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    repoURL: 'https://prometheus-community.github.io/helm-charts'
+    chart: prometheus
+    targetRevision: '25.27.0'
+    helm:
+      values: |
+        # Disable everything except the server - Alloy handles long-term
+        # scraping and remote-write. This Prometheus exists solely for
+        # Kiali's live traffic graph (2h retention, no persistent storage).
+        alertmanager:
+          enabled: false
+        kube-state-metrics:
+          enabled: false
+        prometheus-node-exporter:
+          enabled: false
+        prometheus-pushgateway:
+          enabled: false
+
+        server:
+          retention: "2h"
+          persistentVolume:
+            enabled: false
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 200m
+              memory: 512Mi
+          # Prefer CP nodes (more headroom, no app workloads) but fall back
+          # to any node if CP nodes are full. Worker nodes are tolerated via
+          # the Exists toleration but deprioritised by the affinity weight.
+          tolerations:
+            - operator: Exists
+          affinity:
+            nodeAffinity:
+              preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                preference:
+                  matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: Exists
+
+        # Istio scrape jobs. The native Envoy metrics on istio_requests_total
+        # already carry all labels Kiali needs (source_workload,
+        # destination_workload, destination_version, reporter, response_code).
+        # We only relabel pod metadata (namespace, pod_name, app, version)
+        # for Kiali's namespace and workload filtering.
+        extraScrapeConfigs: |
+          # App sidecars in dev namespace
+          - job_name: 'istio-mesh'
+            kubernetes_sd_configs:
+            - role: pod
+              namespaces:
+                names: [dev]
+            relabel_configs:
+            - source_labels: [__meta_kubernetes_pod_annotation_sidecar_istio_io_status]
+              action: keep
+              regex: .+
+            - source_labels: [__address__]
+              action: replace
+              regex: '([^:]+)(?::\d+)?'
+              replacement: '$1:15020'
+              target_label: __address__
+            - source_labels: [__meta_kubernetes_namespace]
+              target_label: namespace
+            - source_labels: [__meta_kubernetes_pod_name]
+              target_label: pod_name
+            - source_labels: [__meta_kubernetes_pod_label_app]
+              target_label: app
+            - source_labels: [__meta_kubernetes_pod_label_version]
+              target_label: version
+            metric_relabel_configs:
+            - source_labels: [__name__]
+              regex: 'istio_.*|envoy_cluster_upstream_rq.*|pilot_.*'
+              action: keep
+
+          # Istio ingress gateway (not sidecar-annotated, needs its own job)
+          - job_name: 'istio-ingress-gateway'
+            kubernetes_sd_configs:
+            - role: pod
+              namespaces:
+                names: [istio-ingress]
+            relabel_configs:
+            - source_labels: [__meta_kubernetes_pod_label_istio]
+              action: keep
+              regex: ingressgateway
+            - source_labels: [__address__]
+              action: replace
+              regex: '([^:]+)(?::\d+)?'
+              replacement: '$1:15020'
+              target_label: __address__
+            - source_labels: [__meta_kubernetes_namespace]
+              target_label: namespace
+            - source_labels: [__meta_kubernetes_pod_name]
+              target_label: pod_name
+            metric_relabel_configs:
+            - source_labels: [__name__]
+              regex: 'istio_.*|envoy_cluster_upstream_rq.*'
+              action: keep
+
+          # istiod control plane (pilot metrics - used by Kiali's config tab)
+          - job_name: 'istiod'
+            kubernetes_sd_configs:
+            - role: pod
+              namespaces:
+                names: [istio-system]
+            relabel_configs:
+            - source_labels: [__meta_kubernetes_pod_label_app]
+              action: keep
+              regex: istiod
+            - source_labels: [__address__]
+              action: replace
+              regex: '([^:]+)(?::\d+)?'
+              replacement: '$1:15014'
+              target_label: __address__
+            - source_labels: [__meta_kubernetes_namespace]
+              target_label: namespace
+
+        rbac:
+          create: true
+
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

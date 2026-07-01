@@ -1,0 +1,30 @@
+# =================================================================
+# KIALI ROUTING - Expose Kiali UI through the existing Istio Gateway
+# =================================================================
+# Matches any request with URI prefix /kiali and proxies it to the
+# Kiali service in the observability namespace.
+#
+# Access: http://<ALB-DNS>/kiali
+#
+# Kiali must have server.web_root: /kiali set in its Helm values
+# (done in kiali-app.yml) so it serves assets from the right prefix.
+# =================================================================
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: kiali-route
+  namespace: dev
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - ritual-roast-gateway
+  http:
+  - match:
+    - uri:
+        prefix: /kiali
+    route:
+    - destination:
+        host: kiali.observability.svc.cluster.local
+        port:
+          number: 20001
