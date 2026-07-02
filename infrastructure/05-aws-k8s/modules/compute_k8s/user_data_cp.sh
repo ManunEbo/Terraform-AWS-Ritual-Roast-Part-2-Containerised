@@ -84,7 +84,38 @@ if [ -z "$EXISTING_CP" ] || [ "$EXISTING_CP" == "$MY_IP" ]; then
   # applied (tigera-operator runs but has nothing to do -> Calico never starts).
   sleep 30
   kubectl wait --for=condition=Established crd/installations.operator.tigera.io --timeout=300s
-  kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/custom-resources.yaml
+  # Pinned Installation — encapsulation VXLAN (Always), NOT the upstream default
+  # VXLANCrossSubnet. Every K3s node shares its /20 subnet with peers. In CrossSubnet
+  # mode Calico sends SAME-subnet pod traffic UNENCAPSULATED with raw pod-CIDR
+  # (192.168.x) src/dst addresses, which (a) the EC2 ENI source/dest check drops and
+  # (b) security-group source-SG rules cannot match (pod IPs are invisible to AWS).
+  # Net effect: the istiod sidecar-injector webhook is unreachable from any apiserver
+  # in istiod's own subnet -> failurePolicy=Fail rejects every pod create -> ZERO pods
+  # in dev + no ingressgateway (image: auto). VXLAN Always wraps EVERY pod packet in a
+  # node-IP (10.16.x) outer header on UDP/4789 — which the SGs already permit — so the
+  # overlay IPs never touch the ENI or SG. Calico treats a pool's encapsulation as
+  # IMMUTABLE once the pool exists, so this MUST be set at creation time here; patching
+  # the Installation on a running cluster does not retrofit the existing pool.
+cat <<EOF | kubectl apply -f -
+apiVersion: operator.tigera.io/v1
+kind: Installation
+metadata:
+  name: default
+spec:
+  calicoNetwork:
+    ipPools:
+    - blockSize: 26
+      cidr: 192.168.0.0/16
+      encapsulation: VXLAN
+      natOutgoing: Enabled
+      nodeSelector: all()
+---
+apiVersion: operator.tigera.io/v1
+kind: APIServer
+metadata:
+  name: default
+spec: {}
+EOF
   sleep 20
 
   # =========================================================================

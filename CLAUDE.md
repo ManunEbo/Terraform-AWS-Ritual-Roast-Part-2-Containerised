@@ -158,6 +158,30 @@ otherwise). Re-enable when Layers 3-4 are redeployed. Do not delete it.
   14 MB committed binary `apps/v2-backend-go/ritual-roast-backend` fires spurious CI builds (git rm +
   gitignore); minor stale comments in v1-frontend deployment (old svc names) — comments only.
 
+**Bug 3 — Calico CrossSubnet on shared subnets → sidecar-injector webhook unreachable → ZERO pods (found live 2026-07-02, 3rd deploy):**
+- The 3rd deploy formed the cluster cleanly (Bugs 1 & 2 dead), but `dev` had **zero pods** and
+  ArgoCD showed `ritual-roast-workloads`/`ritual-roast-canary`/`istio-ingressgateway` **Synced but
+  Degraded**. Proven root cause (live bisection): the upstream Calico `custom-resources.yaml` creates
+  the IP pool with `encapsulation: VXLANCrossSubnet`. Multiple K3s nodes share each /20 subnet, so
+  Calico sends **same-subnet** pod traffic **unencapsulated** with raw pod-CIDR (192.168.x) src/dst.
+  Those packets are (a) dropped by the EC2 **ENI source/dest check** (default = on) and (b) unmatchable
+  by security-group **source-SG** rules (pod IPs are invisible to AWS). istiod runs on a frontend
+  worker; the K3s apiserver on the CP node **in that same subnet** therefore cannot reach the
+  sidecar-injector webhook → `Post ".../inject": context deadline exceeded` → `failurePolicy=Fail`
+  **rejects every pod create** → no app pods, and no ingressgateway (`image: auto` also needs the
+  injector). Cross-subnet CP nodes reached istiod fine, which is why it looked intermittent.
+- **This corrects a prior "CLEARED" line:** the audit cleared SGs/CIDR/overlay but never checked the
+  **ENI source/dest check ↔ CrossSubnet-on-shared-subnet interaction**. It is NOT an SG-rule bug.
+- **Fix (committed):** `user_data_cp.sh` no longer applies the upstream `custom-resources.yaml`; it
+  applies an inline Installation with **`encapsulation: VXLAN` (Always)**, so every pod packet is
+  wrapped in a node-IP (10.16.x) outer header on UDP/4789 (which the SGs already permit) and overlay
+  IPs never touch the ENI or SG. No SG widening, no source/dest-check dependency.
+- **Cannot be hot-patched:** Calico treats a pool's encapsulation as **immutable once created**. The
+  tigera operator accepts an Installation edit (`encapsulation: VXLAN`) but will NOT retrofit the
+  existing pool (verified live — `installation` shows VXLAN, `ippool` stays CrossSubnet). Must be set
+  at pool-creation time → requires a fresh deploy. `--no-source-dest-check` on the live ENIs alone did
+  NOT fix it (the SG source-SG matching gap remains), confirming VXLAN Always is the correct lever.
+
 **ACTIVE — Phase 2 (canary/blue-green/shadow):**
 - v2 pods not yet running; pending ArgoCD bootstrap completion and sync of `ritual-roast-canary`
 - Istio traffic weights currently 100% v1 / 0% v2 (steady state in `dev-apps/routing/istio-routing.yml`)
