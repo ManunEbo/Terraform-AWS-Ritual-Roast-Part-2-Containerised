@@ -235,7 +235,9 @@ Terraform (alias may be `tf`), kubectl, istioctl, argocd, AWS CLI, Docker, Helm,
 ### Status: CLUSTER FULLY DEPLOYED AND HEALTHY ✓ (supersedes the 2026-06-30 / 07-01 handovers)
 The 3rd deploy succeeded end-to-end (Bugs 1–3 all fixed). All 8 ArgoCD apps Synced/Healthy; the site
 serves data (v1 + v2 pods 2/2 with sidecars); Kiali reachable at `/kiali`; Grafana Cloud ingesting
-(429 cleared). Istio routing at baseline 100% v1 / 0% v2 — ready for the canary walkthrough below.
+(429 cleared). **Canary walkthrough IN PROGRESS** — the user drives, Claude guides. Currently at
+**step 1: 90% v1 / 10% v2 on both tiers** (commit `5774932`, verified live). Resume at step 2 (70/30) —
+see "RESUME HERE — canary walkthrough" below.
 
 ### Access constraints (critical — read first)
 - **No local `kubectl`** on the dev machine. Cluster access is **SSM only** to the EC2 nodes — run
@@ -253,21 +255,53 @@ serves data (v1 + v2 pods 2/2 with sidecars); Kiali reachable at `/kiali`; Grafa
 | `fe6d5fa` | Bug 3: create Calico pool as **VXLAN Always** (not VXLANCrossSubnet). Shared-subnet pod traffic was unencapsulated → dropped by ENI src/dest check + SG source-SG rules → istiod injector webhook unreachable from same-subnet apiserver → zero pods. VXLAN Always wraps every packet in node-IP/UDP-4789 which the SGs already allow. Pool encap is immutable, so must be set at creation (fresh deploy) |
 | `bc635d9`→`f084497`→`bf8ef9a` | Kiali `web_port` quoted (int → CR rejected → no server/Service → `/kiali` 503); `ignoreDifferences` for istio webhooks (managedFieldsManagers: `pilot-discovery`) + Kiali CR (jqPathExpressions `.spec` — its loose CRD schema breaks managedFieldsManagers) |
 | `9b7c501` | Trim Alloy scrape to `istio_*` only, drop cAdvisor + annotated-pod jobs, 15s→30s interval — clears Grafana Cloud 429 rate-limit |
+| `b3e8020` | Move `/kiali` route INTO `frontend-route` as its first http rule + delete standalone `kiali-routing.yml`. Browser 404'd on /kiali while curl got 200: frontend stamps an `x-frontend` cookie; the separate kiali VirtualService merged on the same gateway+host had non-deterministic order, so the frontend cookie rule captured /kiali → frontend 404. A first-position `/kiali` match within one VS is deterministic and wins |
+| `5774932` | Canary step 1: frontend + backend weights 90/10 (v1/v2) |
 | (earlier) | Sidecar memory cap, Prometheus, Kiali, canary staging, kiali-routing, metadata merge fix |
 
 ### Cluster state at end of session
 - **Nodes:** 5 Ready (3 CP + 2 workers), K3s v1.28.15+k3s1.
 - **Calico:** VXLAN **Always** — verify `kubectl get ippool default-ipv4-ippool -o jsonpath='{.spec.vxlanMode}'` → `Always`. All calico pods Running.
 - **ArgoCD:** all 8 apps Synced/Healthy (istio-base, istiod, istio-ingressgateway, kiali, prometheus, ritual-roast-workloads, ritual-roast-canary, root-observability).
-- **dev:** v1 + v2 frontend/backend all 2/2 with sidecars. Istio routing baseline **100% v1 / 0% v2**.
+- **dev:** v1 + v2 frontend/backend all 2/2 with sidecars. Istio routing at **canary step 1: 90% v1 / 10% v2** on both tiers (frontend-route rule `[3]`, backend-route rule `[0]`).
 - **Observability:** Kiali at `/kiali` (200); in-cluster Prometheus feeds Kiali's graph; Alloy → Grafana Cloud (429 cleared, `istio_*` only). No in-cluster Grafana by design — Grafana is Grafana Cloud (external).
 - **Worker role labels:** cosmetic `node-role.kubernetes.io/worker` still not applied (optional). Apply from a CP node: `kubectl label node <worker-hostname> node-role.kubernetes.io/worker=worker`.
 
-### Recommended next action
+### RESUME HERE — canary walkthrough (interactive: user drives, Claude guides)
 
-Cluster is up and healthy — proceed to the **canary walkthrough** (step table below). Change traffic
-weights by editing `dev-apps/routing/istio-routing.yml` and pushing; ArgoCD applies within ~3 min.
-Watch the v1/v2 split in Kiali (Namespace=dev → Versioned app graph → Traffic Animation on).
+Mid-walkthrough. Workflow per step: user edits weights in `dev-apps/routing/istio-routing.yml`,
+commits + pushes; ArgoCD applies within ~3 min. **Currently at step 1 (90/10).** Remaining steps:
+70/30 → 50/50 → 30/70 → 10/90 → 0/100 (blue-green) → rollback via `git revert`. Full step table below.
+
+**Which numbers to edit** (do NOT touch the `/kiali` rule or the two cookie rules above it):
+frontend-route weighted block = http rule **`[3]`** (`weight:` ~line 139 v1 / ~145 v2); backend-route
+weighted block = rule **`[0]`** (`weight:` ~line 171 v1 / ~177 v2).
+
+**Verify a change landed** (SSM to a CP node, then `export KUBECONFIG=/etc/rancher/k3s/k3s.yaml`):
+`kubectl -n dev get virtualservice frontend-route -o jsonpath='{range .spec.http[3].route[*]}{.destination.subset}={.weight} {end}'`
+and the same for `backend-route` with `http[0]`. Nudge ArgoCD if it hasn't polled:
+`kubectl -n argocd annotate application ritual-roast-workloads argocd.argoproj.io/refresh=hard --overwrite`.
+
+**Driving/observing traffic — the load-bearing lesson (v1 SSR vs v2 SPA):** ALB =
+`http://rr-dev-public-alb-1057461043.eu-west-2.elb.amazonaws.com`
+- **Frontend split + v1's backend hop:** drive the ROOT cookieless (`curl -s $ALB/` in a loop). v1
+  (Next.js) renders **server-side** and calls the backend → v1→backend edge appears. v2 (Vite) serves
+  static HTML on `/` — no backend call from curl (correct, not a fault).
+- **v2's backend hop:** `/api/get_recipe` is a real endpoint ONLY on **v2** (Vite nginx `location /api/`
+  proxies to the backend). v1 Next.js has NO browser `/api/get_recipe` route (only `/api/health`); it
+  fetches via a server-side Server Action. So **NEVER curl `/api/get_recipe` cookieless** — ~90% hits
+  v1 → **404 → red edges in Kiali** (alarming but just a missing route, not a regression). Exercise
+  v2→backend cleanly by pinning the cookie: `curl -H 'Cookie: x-frontend=v2' $ALB/api/get_recipe`.
+- **Best for a demo:** an **incognito browser** on the ALB — each version runs its natural path (v1 SSR
+  / v2 client-side) with no false 404s and the recipe table populates from RDS.
+- Frontend is **cookie-sticky** (`x-frontend=v1|v2`); a normal browser stays on one version. Use fresh
+  incognito windows or cookieless curl to see the split. Count served versions:
+  `for i in $(seq 1 100); do curl -s -D - -o /dev/null $ALB/; done | grep -oi 'x-frontend=v[12]' | sort | uniq -c`.
+- The blue `backend → PassthroughCluster` edge in Kiali = the backend's RDS / Secrets-Manager call
+  leaving the mesh. Expected, not an error.
+
+**Shadow mode** (backend only): copy the `mirror:` spec from `canary-variants/vs-backend-shadow.yml`
+into `backend-route`. GET-only — NEVER mirror POST (double-inserts into the shared RDS).
 
 If a **fresh rebuild** is ever needed: `cd infrastructure/05-aws-k8s && terraform destroy && terraform apply`
 now bootstraps end-to-end with all three bugs fixed (~20 min to full sync). Do NOT pass `-auto-approve`
