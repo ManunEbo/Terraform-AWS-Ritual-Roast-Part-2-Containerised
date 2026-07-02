@@ -90,6 +90,22 @@ spec:
   gateways:
   - ritual-roast-gateway
   http:
+  # (0) Kiali UI — MUST be the FIRST rule. A browser that has loaded the app
+  #     carries an x-frontend cookie; if the cookie matches below are reached
+  #     first, they capture /kiali and route it to the frontend app -> 404
+  #     (v1) or the wrong SPA (v2). Within one VirtualService rules are ordered
+  #     top-down, so a first-position /kiali prefix always wins regardless of
+  #     cookies. Covers the whole prefix: UI + assets + /kiali/api. This lives
+  #     here (not a separate VirtualService) because two VSes on the same
+  #     gateway+host merge with non-deterministic cross-VS ordering.
+  - match:
+    - uri:
+        prefix: /kiali
+    route:
+    - destination:
+        host: kiali.observability.svc.cluster.local
+        port:
+          number: 20001
   # (1) Established v1 session -> always v1
   - match:
     - headers:
