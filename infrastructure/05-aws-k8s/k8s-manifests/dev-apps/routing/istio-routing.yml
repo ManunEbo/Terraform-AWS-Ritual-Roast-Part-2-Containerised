@@ -136,13 +136,13 @@ spec:
         subset: v1
         port:
           number: 80
-      weight: 100
+      weight: 90
     - destination:
         host: rr-frontend-svc
         subset: v2
         port:
           number: 80
-      weight: 0
+      weight: 10
 ---
 # -----------------------------------------------------------------
 # 3b. VIRTUAL SERVICE - Backend (mesh-internal: frontend -> backend)
@@ -168,10 +168,10 @@ spec:
         subset: v1
         port:
           number: 5000
-      weight: 100
+      weight: 90
     - destination:
         host: ritual-roast-backend
         subset: v2
         port:
           number: 5000
-      weight: 0
+      weight: 10
