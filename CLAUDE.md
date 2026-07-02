@@ -230,43 +230,49 @@ Terraform (alias may be `tf`), kubectl, istioctl, argocd, AWS CLI, Docker, Helm,
 
 ---
 
-## SESSION HANDOVER — 2026-07-01 END-OF-DAY
+## SESSION HANDOVER — 2026-07-02 END-OF-DAY
+
+### Status: CLUSTER FULLY DEPLOYED AND HEALTHY ✓ (supersedes the 2026-06-30 / 07-01 handovers)
+The 3rd deploy succeeded end-to-end (Bugs 1–3 all fixed). All 8 ArgoCD apps Synced/Healthy; the site
+serves data (v1 + v2 pods 2/2 with sidecars); Kiali reachable at `/kiali`; Grafana Cloud ingesting
+(429 cleared). Istio routing at baseline 100% v1 / 0% v2 — ready for the canary walkthrough below.
 
 ### Access constraints (critical — read first)
-- **No local `kubectl`** on the dev machine. Cluster access is **SSM only** to the EC2 nodes.
+- **No local `kubectl`** on the dev machine. Cluster access is **SSM only** to the EC2 nodes — run
+  kubectl on a CP node via `aws ssm send-command` with a `--parameters file://...json` payload (the
+  shorthand form chokes on `===` / parens). CP instance IDs change every redeploy; re-query by tag
+  `rr-dev-k3s-control-plane`.
 - **Repo is private (SSH remote)** — raw GitHub URLs 404, and `kubectl apply -f <github-url>` won't work.
 - **All cluster changes must go via git commit + push → ArgoCD syncs.** No exceptions.
 
-### All commits on main (pushed)
+### All fixes on main this deploy (pushed)
 | Commit | What it does |
 |---|---|
-| `922621f` | Remove `node-role.kubernetes.io/worker=true` from worker user_data — kubelet blocks this label at registration |
-| `a63eebb` | Increase Calico CRD wait 120s→300s + add 30s pre-sleep to prevent bootstrap abort on loaded node |
+| `922621f` | Bug 1: remove `node-role.kubernetes.io/worker=true` from worker user_data (kubelet rejects it) |
+| `a63eebb` | Bug 2: Calico CRD wait 120s→300s + 30s pre-sleep (bootstrap abort on loaded leader) |
+| `fe6d5fa` | Bug 3: create Calico pool as **VXLAN Always** (not VXLANCrossSubnet). Shared-subnet pod traffic was unencapsulated → dropped by ENI src/dest check + SG source-SG rules → istiod injector webhook unreachable from same-subnet apiserver → zero pods. VXLAN Always wraps every packet in node-IP/UDP-4789 which the SGs already allow. Pool encap is immutable, so must be set at creation (fresh deploy) |
+| `bc635d9`→`f084497`→`bf8ef9a` | Kiali `web_port` quoted (int → CR rejected → no server/Service → `/kiali` 503); `ignoreDifferences` for istio webhooks (managedFieldsManagers: `pilot-discovery`) + Kiali CR (jqPathExpressions `.spec` — its loose CRD schema breaks managedFieldsManagers) |
+| `9b7c501` | Trim Alloy scrape to `istio_*` only, drop cAdvisor + annotated-pod jobs, 15s→30s interval — clears Grafana Cloud 429 rate-limit |
 | (earlier) | Sidecar memory cap, Prometheus, Kiali, canary staging, kiali-routing, metadata merge fix |
 
 ### Cluster state at end of session
-- **Nodes:** 5 nodes (3 CP + 2 workers), all Running. Workers: `ip-10-16-121-80` (one role) and `ip-10-16-124-222` (other role).
-- **Calico:** Fully up — manually applied `custom-resources.yaml` after Bug 2 abort. All calico-node pods Running.
-- **Worker role labels:** NOT YET APPLIED. After deploy, run from any CP node:
-  ```bash
-  kubectl label node <worker-1-hostname> node-role.kubernetes.io/worker=worker
-  kubectl label node <worker-2-hostname> node-role.kubernetes.io/worker=worker
-  ```
-- **ArgoCD: NOT INSTALLED.** Bootstrap aborted at the Calico CRD wait step. The session ended mid-recovery.
+- **Nodes:** 5 Ready (3 CP + 2 workers), K3s v1.28.15+k3s1.
+- **Calico:** VXLAN **Always** — verify `kubectl get ippool default-ipv4-ippool -o jsonpath='{.spec.vxlanMode}'` → `Always`. All calico pods Running.
+- **ArgoCD:** all 8 apps Synced/Healthy (istio-base, istiod, istio-ingressgateway, kiali, prometheus, ritual-roast-workloads, ritual-roast-canary, root-observability).
+- **dev:** v1 + v2 frontend/backend all 2/2 with sidecars. Istio routing baseline **100% v1 / 0% v2**.
+- **Observability:** Kiali at `/kiali` (200); in-cluster Prometheus feeds Kiali's graph; Alloy → Grafana Cloud (429 cleared, `istio_*` only). No in-cluster Grafana by design — Grafana is Grafana Cloud (external).
+- **Worker role labels:** cosmetic `node-role.kubernetes.io/worker` still not applied (optional). Apply from a CP node: `kubectl label node <worker-hostname> node-role.kubernetes.io/worker=worker`.
 
-### Recommended first action tomorrow
+### Recommended next action
 
-**Destroy and redeploy cleanly.** Both bugs are fixed and committed. A fresh `terraform apply` will now
-bootstrap end-to-end without manual intervention. Do not attempt to continue the half-bootstrapped
-cluster — it's missing ArgoCD, all namespaces, all secrets.
+Cluster is up and healthy — proceed to the **canary walkthrough** (step table below). Change traffic
+weights by editing `dev-apps/routing/istio-routing.yml` and pushing; ArgoCD applies within ~3 min.
+Watch the v1/v2 split in Kiali (Namespace=dev → Versioned app graph → Traffic Animation on).
 
-```bash
-cd infrastructure/05-aws-k8s
-terraform destroy -auto-approve    # confirm in AWS console it's gone
-terraform apply                    # fresh deploy with both fixes in
-```
-
-Expected timeline after apply: ~20 min to full ArgoCD sync (Calico 3 min, ArgoCD 5 min, Istio + apps 10 min).
+If a **fresh rebuild** is ever needed: `cd infrastructure/05-aws-k8s && terraform destroy && terraform apply`
+now bootstraps end-to-end with all three bugs fixed (~20 min to full sync). Do NOT pass `-auto-approve`
+(settings.json denies it — confirm interactively). The manual-bootstrap block below is legacy reference
+only; it is not needed on a clean deploy.
 
 ### If you want to skip destroy and finish the manual bootstrap instead
 
