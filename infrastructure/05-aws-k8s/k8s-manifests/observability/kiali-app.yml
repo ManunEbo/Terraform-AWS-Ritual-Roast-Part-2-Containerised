@@ -45,7 +45,10 @@ spec:
 
             server:
               web_root: "/kiali"
-              web_port: 20001
+              # MUST be quoted: the Kiali v2.28 CRD schema types web_port as a string.
+              # An unquoted integer fails admission ("must be of type string") so the CR
+              # is never created and the operator never deploys the Kiali server/Service.
+              web_port: "20001"
 
             deployment:
               namespace: "observability"
