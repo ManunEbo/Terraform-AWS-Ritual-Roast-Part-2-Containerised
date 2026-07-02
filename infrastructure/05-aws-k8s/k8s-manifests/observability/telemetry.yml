@@ -4,16 +4,20 @@
 # Alloy DaemonSet (one pod per node), remote-writes to Grafana Cloud.
 # No local Prometheus -> no OOM risk on the t3.medium nodes.
 #
-# Scrape jobs:
+# Scrape jobs (TRIMMED 2026-07-02 to stay under the Grafana Cloud ingestion
+# rate limit — the full set was hitting HTTP 429 err-mimir-tenant-max-ingestion-rate):
 #   1. App sidecars        (dev)            port 15020 /stats/prometheus
 #   2. Ingress gateway      (istio-ingress) port 15020 /stats/prometheus
-#   3. Annotated pods       (any ns)        prometheus.io/* annotations
-#   4. Node cAdvisor        (kubelet)       container CPU/mem/restarts
+# A prometheus.relabel filter keeps ONLY istio_* (+ up) series and drops the
+# thousands of raw Envoy stats each proxy emits — that is the bulk of the volume.
+# Interval is 30s. The former job 3 (annotated pods, any ns) and job 4 (node
+# cAdvisor) were removed: high-cardinality and not Istio. Re-add selectively if
+# you later need node/OOM visibility, but watch the 1500 samples/s tenant limit.
 #
-# Jobs 1+2 are what populate the Istio dashboards and make the canary
-# split visible: istio_requests_total{destination_version=...}.
-# The gateway scrape (job 2) gives the edge-level frontend split;
-# the sidecar scrape (job 1) gives backend split + per-pod inbound.
+# Jobs 1+2 populate the Istio dashboards and make the canary split visible:
+# istio_requests_total{destination_version=...}. The gateway scrape (job 2)
+# gives the edge-level frontend split; the sidecar scrape (job 1) gives backend
+# split + per-pod inbound.
 #
 # BEFORE DEPLOY: user_data_cp.sh substitutes the two placeholders via
 # sed at node boot, sourced from Terraform vars:
@@ -40,6 +44,21 @@ data:
       external_labels = {
         cluster = "ritual-roast-dev",
         env     = "dev",
+      }
+    }
+
+    // ---------- METRIC FILTER: keep only Istio mesh series ----------
+    // Envoy's /stats/prometheus exposes thousands of series per proxy; the Istio
+    // dashboards and the canary split only need the istio_* family. Keeping just
+    // those (plus `up` for target health) is the single biggest cut in sample
+    // volume and is what brings us under the Grafana Cloud 1500 samples/s limit.
+    // Both scrape jobs forward here instead of straight to remote_write.
+    prometheus.relabel "istio_only" {
+      forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+      rule {
+        source_labels = ["__name__"]
+        action = "keep"
+        regex  = "istio_.*|up"
       }
     }
 
@@ -82,9 +101,9 @@ data:
     }
     prometheus.scrape "sidecar_pods" {
       targets = discovery.relabel.sidecar_pods.output
-      scrape_interval = "15s"
+      scrape_interval = "30s"
       metrics_path = "/stats/prometheus"
-      forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+      forward_to = [prometheus.relabel.istio_only.receiver]
     }
 
     // ---------- JOB 2: INGRESS GATEWAY (istio-ingress) ----------
@@ -120,92 +139,14 @@ data:
     }
     prometheus.scrape "gateway_pods" {
       targets = discovery.relabel.gateway_pods.output
-      scrape_interval = "15s"
+      scrape_interval = "30s"
       metrics_path = "/stats/prometheus"
-      forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+      forward_to = [prometheus.relabel.istio_only.receiver]
     }
 
-    // ---------- JOB 3: ANNOTATED PODS (any ns) ----------
-    discovery.kubernetes "annotated_pods" {
-      role = "pod"
-    }
-    discovery.relabel "annotated_pods" {
-      targets = discovery.kubernetes.annotated_pods.targets
-      rule {
-        source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_scrape"]
-        action = "keep"
-        regex  = "true"
-      }
-      rule {
-        source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_path"]
-        action = "replace"
-        target_label = "__metrics_path__"
-        regex  = "(.+)"
-      }
-      rule {
-        source_labels = ["__address__", "__meta_kubernetes_pod_annotation_prometheus_io_port"]
-        action = "replace"
-        regex  = "([^:]+)(?::\\d+)?;(\\d+)"
-        replacement = "$1:$2"
-        target_label = "__address__"
-      }
-      rule {
-        source_labels = ["__meta_kubernetes_namespace"]
-        target_label = "namespace"
-      }
-      rule {
-        source_labels = ["__meta_kubernetes_pod_name"]
-        target_label = "pod"
-      }
-      rule {
-        source_labels = ["__meta_kubernetes_pod_label_app"]
-        target_label = "app"
-      }
-      rule {
-        source_labels = ["__meta_kubernetes_pod_label_version"]
-        target_label = "version"
-      }
-    }
-    prometheus.scrape "annotated_pods" {
-      targets = discovery.relabel.annotated_pods.output
-      scrape_interval = "30s"
-      forward_to = [prometheus.remote_write.grafana_cloud.receiver]
-    }
-
-    // ---------- JOB 4: NODE cADVISOR ----------
-    // Catches OOM kills / resource pressure during the canary.
-    discovery.kubernetes "nodes" {
-      role = "node"
-    }
-    discovery.relabel "cadvisor" {
-      targets = discovery.kubernetes.nodes.targets
-      rule {
-        action = "replace"
-        target_label = "__address__"
-        replacement = "kubernetes.default.svc:443"
-      }
-      rule {
-        source_labels = ["__meta_kubernetes_node_name"]
-        action = "replace"
-        target_label = "__metrics_path__"
-        regex  = "(.+)"
-        replacement = "/api/v1/nodes/$1/proxy/metrics/cadvisor"
-      }
-      rule {
-        source_labels = ["__meta_kubernetes_node_name"]
-        target_label = "node"
-      }
-    }
-    prometheus.scrape "cadvisor" {
-      targets = discovery.relabel.cadvisor.output
-      scrape_interval = "30s"
-      bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
-      tls_config {
-        ca_file = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
-        insecure_skip_verify = true
-      }
-      forward_to = [prometheus.remote_write.grafana_cloud.receiver]
-    }
+    // JOB 3 (annotated pods, any ns) and JOB 4 (node cAdvisor) were removed
+    // 2026-07-02 to stay under the Grafana Cloud ingestion rate limit. They were
+    // high-cardinality and not Istio metrics. Re-add selectively if needed.
 ---
 apiVersion: v1
 kind: ServiceAccount
