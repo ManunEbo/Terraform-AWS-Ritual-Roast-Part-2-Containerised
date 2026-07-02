@@ -138,6 +138,26 @@ otherwise). Re-enable when Layers 3-4 are redeployed. Do not delete it.
   polling), increased timeout to 300s. Both committed and pushed.
 - **Live recovery (if it happens again):** `kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/custom-resources.yaml` then continue manual bootstrap below.
 
+**Pre-redeploy audit — verified 2026-07-02 (static, full four-domain pass; verdict: GO for redeploy):**
+- Both bootstrap fixes confirmed on disk AND on origin/main (`922621f`, `a63eebb`); working tree clean ✓
+- istiod Helm values in `observability/istio-app.yml` are CORRECT as flat/top-level keys. The Istio
+  1.30 istiod chart reads `.Values.nodeSelector` / `.Values.tolerations` / `.Values.resources` at the
+  TOP level (verified against the release-1.30 chart deployment template — the old `pilot:` scoping is
+  gone). Do NOT "fix" them under `pilot:`; that would make them inert. An audit agent flagged this as a
+  HIGH bug — it is a FALSE POSITIVE for chart 1.30.x ✓
+- Istio 1.30.1 on K8s 1.28.15: outside Istio's official support window (K8s 1.32–1.36) but inside its
+  "tested" window (1.27–1.31). Accepted for dev; align versions when next bumping K3s/Calico.
+- Seed image SHAs in all 4 deployments (`96d8b078…` ×3, `0ba5fb4e…` ×1) were written by the CI
+  write-back bot AFTER the build jobs succeeded (`needs:` gating), so all 4 tags exist in GHCR — no
+  first-sync ImagePullBackOff ✓ (paths-filter evaluates the push range; tags use the head SHA)
+- Non-blocking hardening backlog (do NOT churn before the redeploy): bounded retries around the
+  network steps in user_data_cp.sh (dnf/get-helm/Calico applies/helm repo run under `set -e` with no
+  retry); a timeout on the `until kubectl get crd applications.argoproj.io` loop; `--cluster-init` is
+  not idempotent if the lowest-IP CP instance is ever replaced (split-brain risk on ASG replacement);
+  frontend ASG desired=1 is tight once a 4-pod canary runs (raise to 2 before canary steps); stray
+  14 MB committed binary `apps/v2-backend-go/ritual-roast-backend` fires spurious CI builds (git rm +
+  gitignore); minor stale comments in v1-frontend deployment (old svc names) — comments only.
+
 **ACTIVE — Phase 2 (canary/blue-green/shadow):**
 - v2 pods not yet running; pending ArgoCD bootstrap completion and sync of `ritual-roast-canary`
 - Istio traffic weights currently 100% v1 / 0% v2 (steady state in `dev-apps/routing/istio-routing.yml`)
