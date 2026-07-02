@@ -21,13 +21,14 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
-  # istiod injects the caBundle into this ValidatingWebhookConfiguration at runtime,
-  # which the chart ships empty -> permanent (benign) OutOfSync. Ignore that one field.
+  # istiod (field manager "pilot-discovery") mutates this ValidatingWebhookConfiguration
+  # at runtime — caBundle plus other webhook fields — which the chart ships as defaults,
+  # causing a permanent benign OutOfSync. Ignore everything istiod manages on it.
   ignoreDifferences:
   - group: admissionregistration.k8s.io
     kind: ValidatingWebhookConfiguration
-    jqPathExpressions:
-    - '.webhooks[].clientConfig.caBundle'
+    managedFieldsManagers:
+    - pilot-discovery
 
 ---
 # 2. Istio Control Plane (istiod)
@@ -69,13 +70,13 @@ spec:
     automated:
       prune: true
       selfHeal: true
-  # Same benign caBundle injection as istio-base — istiod writes the CA into its own
-  # validating webhook post-sync. Ignore just that field so ArgoCD reports Synced.
+  # Same benign runtime mutation as istio-base — istiod ("pilot-discovery") owns this
+  # validating webhook's fields post-sync. Ignore everything it manages.
   ignoreDifferences:
   - group: admissionregistration.k8s.io
     kind: ValidatingWebhookConfiguration
-    jqPathExpressions:
-    - '.webhooks[].clientConfig.caBundle'
+    managedFieldsManagers:
+    - pilot-discovery
 
 ---
 # 3. Istio Ingress Gateway (The Front Door)

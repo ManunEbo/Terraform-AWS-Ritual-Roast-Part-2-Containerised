@@ -85,3 +85,11 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+  # The kiali-operator (field manager "ansible-operator") writes defaults back into the
+  # Kiali CR it manages, so ArgoCD sees the CR as OutOfSync even though Kiali is Healthy
+  # and serving. Ignore the fields the operator owns.
+  ignoreDifferences:
+  - group: kiali.io
+    kind: Kiali
+    managedFieldsManagers:
+    - ansible-operator
