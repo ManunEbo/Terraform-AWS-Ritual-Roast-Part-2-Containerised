@@ -85,11 +85,15 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
-  # The kiali-operator (field manager "ansible-operator") writes defaults back into the
-  # Kiali CR it manages, so ArgoCD sees the CR as OutOfSync even though Kiali is Healthy
-  # and serving. Ignore the fields the operator owns.
+  # The kiali-operator rewrites the Kiali CR .spec with defaults, so ArgoCD sees it as
+  # OutOfSync even though Kiali is Healthy and serving. We ignore .spec drift.
+  # NOTE: use jqPathExpressions, NOT managedFieldsManagers — the Kiali CRD uses a loose
+  # (preserve-unknown-fields) schema, and managedFieldsManagers forces schema-typed
+  # normalization that errors with "field not declared in schema" (-> sync status
+  # Unknown/ComparisonError). jq diffs raw JSON and sidesteps that. The operator remains
+  # the source of truth for the CR's effective config; the seed is still applied on sync.
   ignoreDifferences:
   - group: kiali.io
     kind: Kiali
-    managedFieldsManagers:
-    - ansible-operator
+    jqPathExpressions:
+    - '.spec'
