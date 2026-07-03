@@ -81,7 +81,7 @@ spec:
               target_label: version
             metric_relabel_configs:
             - source_labels: [__name__]
-              regex: 'istio_.*|envoy_cluster_upstream_rq.*|pilot_.*'
+              regex: 'istio_.*|pilot_.*'
               action: keep
 
           # Istio ingress gateway (not sidecar-annotated, needs its own job)
@@ -105,7 +105,7 @@ spec:
               target_label: pod_name
             metric_relabel_configs:
             - source_labels: [__name__]
-              regex: 'istio_.*|envoy_cluster_upstream_rq.*'
+              regex: 'istio_.*'
               action: keep
 
           # istiod control plane (pilot metrics - used by Kiali's config tab)
