@@ -1,0 +1,267 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "description": "Select your Grafana Cloud Prometheus datasource (the one Alloy remote-writes istio_* series into).",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "__requires": [
+    { "type": "grafana", "id": "grafana", "name": "Grafana", "version": "9.0.0" },
+    { "type": "datasource", "id": "prometheus", "name": "Prometheus", "version": "1.0.0" }
+  ],
+  "title": "Ritual Roast — v1/v2 Mesh Traffic (Istio)",
+  "uid": "rr-mesh-traffic",
+  "description": "Frontend + backend traffic split, error rate, and latency by version, built from the istio_* series Alloy remote-writes to Grafana Cloud (cluster=ritual-roast-dev, env=dev). Version-agnostic to strategy — the same destination_version split renders canary ramps, blue-green cutovers, and shadow-mirrored traffic identically. Covers exactly what is scraped: sidecar_pods (dev) + gateway_pods (istio-ingress).",
+  "tags": ["ritual-roast", "istio", "mesh", "canary", "blue-green", "shadow"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": { "list": [] },
+  "annotations": { "list": [] },
+  "panels": [
+    { "id": 100, "type": "row", "title": "Traffic split (canary / blue-green / shadow)", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }, "panels": [] },
+
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Frontend request rate by version",
+      "description": "sum(rate(istio_requests_total{destination_service_name=\"rr-frontend-svc\"}[5m])) by (destination_version). reporter=destination = counted once, at the frontend pod's own sidecar.",
+      "datasource": "${DS_PROMETHEUS}",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 1 },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "lineWidth": 2, "fillOpacity": 10, "pointSize": 5 } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "v1" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#0ca30c" } }] },
+          { "matcher": { "id": "byName", "options": "v2" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#d03b3b" } }] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "sum(rate(istio_requests_total{reporter=\"destination\", destination_service_name=\"rr-frontend-svc\"}[5m])) by (destination_version)", "legendFormat": "{{destination_version}}", "refId": "A" }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Backend request rate by version",
+      "description": "sum(rate(istio_requests_total{destination_service_name=\"ritual-roast-backend\"}[5m])) by (destination_version)",
+      "datasource": "${DS_PROMETHEUS}",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 1 },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "lineWidth": 2, "fillOpacity": 10, "pointSize": 5 } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "v1" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#0ca30c" } }] },
+          { "matcher": { "id": "byName", "options": "v2" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#d03b3b" } }] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "sum(rate(istio_requests_total{reporter=\"destination\", destination_service_name=\"ritual-roast-backend\"}[5m])) by (destination_version)", "legendFormat": "{{destination_version}}", "refId": "A" }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Frontend traffic share % (observed weight)",
+      "description": "What fraction of frontend requests actually landed on each version — the real-world check against whatever VirtualService weight is set in istio-routing.yml. Reads the same way regardless of strategy: a canary ramp shows a moving split, blue-green shows a hard 0/100 flip, and backend shadow mode (mirror: spec) shows v2 receiving traffic on this panel even while its official weight stays 0 — mirrored requests still get a real response at the destination sidecar.",
+      "datasource": "${DS_PROMETHEUS}",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 9 },
+      "fieldConfig": {
+        "defaults": { "unit": "percent", "min": 0, "max": 100, "custom": { "lineWidth": 1, "fillOpacity": 40, "stacking": { "mode": "normal" } } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "v1" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#0ca30c" } }] },
+          { "matcher": { "id": "byName", "options": "v2" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#d03b3b" } }] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "100 * sum(rate(istio_requests_total{reporter=\"destination\", destination_service_name=\"rr-frontend-svc\"}[5m])) by (destination_version) / on() group_left sum(rate(istio_requests_total{reporter=\"destination\", destination_service_name=\"rr-frontend-svc\"}[5m]))", "legendFormat": "{{destination_version}}", "refId": "A" }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Backend traffic share % (observed weight)",
+      "description": "Same check for the backend VirtualService weight.",
+      "datasource": "${DS_PROMETHEUS}",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 9 },
+      "fieldConfig": {
+        "defaults": { "unit": "percent", "min": 0, "max": 100, "custom": { "lineWidth": 1, "fillOpacity": 40, "stacking": { "mode": "normal" } } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "v1" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#0ca30c" } }] },
+          { "matcher": { "id": "byName", "options": "v2" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#d03b3b" } }] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "100 * sum(rate(istio_requests_total{reporter=\"destination\", destination_service_name=\"ritual-roast-backend\"}[5m])) by (destination_version) / on() group_left sum(rate(istio_requests_total{reporter=\"destination\", destination_service_name=\"ritual-roast-backend\"}[5m]))", "legendFormat": "{{destination_version}}", "refId": "A" }
+      ]
+    },
+
+    { "id": 101, "type": "row", "title": "Reliability", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 17 }, "panels": [] },
+
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Frontend error rate % by version (5xx)",
+      "description": "A version with no errors in the window simply has no line — that's Prometheus, not a gap in scraping.",
+      "datasource": "${DS_PROMETHEUS}",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 18 },
+      "fieldConfig": {
+        "defaults": { "unit": "percent", "min": 0, "custom": { "lineWidth": 2, "fillOpacity": 5 } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "v1" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#0ca30c" } }] },
+          { "matcher": { "id": "byName", "options": "v2" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#d03b3b" } }] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "100 * sum(rate(istio_requests_total{reporter=\"destination\", destination_service_name=\"rr-frontend-svc\", response_code=~\"5..\"}[5m])) by (destination_version) / sum(rate(istio_requests_total{reporter=\"destination\", destination_service_name=\"rr-frontend-svc\"}[5m])) by (destination_version)", "legendFormat": "{{destination_version}}", "refId": "A" }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Backend error rate % by version (5xx)",
+      "datasource": "${DS_PROMETHEUS}",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 18 },
+      "fieldConfig": {
+        "defaults": { "unit": "percent", "min": 0, "custom": { "lineWidth": 2, "fillOpacity": 5 } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "v1" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#0ca30c" } }] },
+          { "matcher": { "id": "byName", "options": "v2" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#d03b3b" } }] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "100 * sum(rate(istio_requests_total{reporter=\"destination\", destination_service_name=\"ritual-roast-backend\", response_code=~\"5..\"}[5m])) by (destination_version) / sum(rate(istio_requests_total{reporter=\"destination\", destination_service_name=\"ritual-roast-backend\"}[5m])) by (destination_version)", "legendFormat": "{{destination_version}}", "refId": "A" }
+      ]
+    },
+    {
+      "id": 7, "type": "stat", "title": "Frontend v1 error rate",
+      "datasource": "${DS_PROMETHEUS}",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 26 },
+      "fieldConfig": { "defaults": { "unit": "percent", "thresholds": { "mode": "absolute", "steps": [
+        { "color": "#0ca30c", "value": null }, { "color": "#fab219", "value": 1 }, { "color": "#d03b3b", "value": 5 }
+      ] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
+      "targets": [
+        { "expr": "100 * sum(rate(istio_requests_total{reporter=\"destination\", destination_service_name=\"rr-frontend-svc\", destination_version=\"v1\", response_code=~\"5..\"}[5m])) / sum(rate(istio_requests_total{reporter=\"destination\", destination_service_name=\"rr-frontend-svc\", destination_version=\"v1\"}[5m]))", "refId": "A" }
+      ]
+    },
+    {
+      "id": 8, "type": "stat", "title": "Frontend v2 error rate",
+      "datasource": "${DS_PROMETHEUS}",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 26 },
+      "fieldConfig": { "defaults": { "unit": "percent", "thresholds": { "mode": "absolute", "steps": [
+        { "color": "#0ca30c", "value": null }, { "color": "#fab219", "value": 1 }, { "color": "#d03b3b", "value": 5 }
+      ] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
+      "targets": [
+        { "expr": "100 * sum(rate(istio_requests_total{reporter=\"destination\", destination_service_name=\"rr-frontend-svc\", destination_version=\"v2\", response_code=~\"5..\"}[5m])) / sum(rate(istio_requests_total{reporter=\"destination\", destination_service_name=\"rr-frontend-svc\", destination_version=\"v2\"}[5m]))", "refId": "A" }
+      ]
+    },
+    {
+      "id": 9, "type": "stat", "title": "Backend v1 error rate",
+      "datasource": "${DS_PROMETHEUS}",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 26 },
+      "fieldConfig": { "defaults": { "unit": "percent", "thresholds": { "mode": "absolute", "steps": [
+        { "color": "#0ca30c", "value": null }, { "color": "#fab219", "value": 1 }, { "color": "#d03b3b", "value": 5 }
+      ] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
+      "targets": [
+        { "expr": "100 * sum(rate(istio_requests_total{reporter=\"destination\", destination_service_name=\"ritual-roast-backend\", destination_version=\"v1\", response_code=~\"5..\"}[5m])) / sum(rate(istio_requests_total{reporter=\"destination\", destination_service_name=\"ritual-roast-backend\", destination_version=\"v1\"}[5m]))", "refId": "A" }
+      ]
+    },
+    {
+      "id": 10, "type": "stat", "title": "Backend v2 error rate",
+      "datasource": "${DS_PROMETHEUS}",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 26 },
+      "fieldConfig": { "defaults": { "unit": "percent", "thresholds": { "mode": "absolute", "steps": [
+        { "color": "#0ca30c", "value": null }, { "color": "#fab219", "value": 1 }, { "color": "#d03b3b", "value": 5 }
+      ] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
+      "targets": [
+        { "expr": "100 * sum(rate(istio_requests_total{reporter=\"destination\", destination_service_name=\"ritual-roast-backend\", destination_version=\"v2\", response_code=~\"5..\"}[5m])) / sum(rate(istio_requests_total{reporter=\"destination\", destination_service_name=\"ritual-roast-backend\", destination_version=\"v2\"}[5m]))", "refId": "A" }
+      ]
+    },
+
+    { "id": 102, "type": "row", "title": "Latency (p95)", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 30 }, "panels": [] },
+
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Frontend p95 latency by version",
+      "description": "histogram_quantile(0.95, ...istio_request_duration_milliseconds_bucket...)",
+      "datasource": "${DS_PROMETHEUS}",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 31 },
+      "fieldConfig": {
+        "defaults": { "unit": "ms", "custom": { "lineWidth": 2, "fillOpacity": 5 } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "v1" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#0ca30c" } }] },
+          { "matcher": { "id": "byName", "options": "v2" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#d03b3b" } }] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum(rate(istio_request_duration_milliseconds_bucket{reporter=\"destination\", destination_service_name=\"rr-frontend-svc\"}[5m])) by (le, destination_version))", "legendFormat": "{{destination_version}}", "refId": "A" }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Backend p95 latency by version",
+      "datasource": "${DS_PROMETHEUS}",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 31 },
+      "fieldConfig": {
+        "defaults": { "unit": "ms", "custom": { "lineWidth": 2, "fillOpacity": 5 } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "v1" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#0ca30c" } }] },
+          { "matcher": { "id": "byName", "options": "v2" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#d03b3b" } }] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum(rate(istio_request_duration_milliseconds_bucket{reporter=\"destination\", destination_service_name=\"ritual-roast-backend\"}[5m])) by (le, destination_version))", "legendFormat": "{{destination_version}}", "refId": "A" }
+      ]
+    },
+
+    { "id": 103, "type": "row", "title": "Mesh & infra health", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 39 }, "panels": [] },
+
+    {
+      "id": 13,
+      "type": "table",
+      "title": "Scrape target health (up)",
+      "description": "1 = Alloy is successfully scraping that pod's /stats/prometheus. Covers both scrape jobs: sidecar_pods (dev) and gateway_pods (istio-ingress).",
+      "datasource": "${DS_PROMETHEUS}",
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 40 },
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [
+        { "color": "#d03b3b", "value": null }, { "color": "#0ca30c", "value": 1 }
+      ] }, "custom": { "displayMode": "color-background" } } },
+      "options": { "showHeader": true },
+      "targets": [
+        { "expr": "up{namespace=~\"dev|istio-ingress\"}", "format": "table", "instant": true, "refId": "A" }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Backend → RDS TCP bytes (PassthroughCluster)",
+      "description": "Envoy TCP stats for the backend's outbound MySQL connection leaving the mesh. Expected traffic, not an error — see the blue backend→PassthroughCluster edge in Kiali.",
+      "datasource": "${DS_PROMETHEUS}",
+      "gridPos": { "h": 6, "w": 16, "x": 8, "y": 40 },
+      "fieldConfig": { "defaults": { "unit": "Bps", "custom": { "lineWidth": 2, "fillOpacity": 10 } } },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "sum(rate(istio_tcp_sent_bytes_total{reporter=\"source\", app=\"rr-backend\", destination_service_name=\"PassthroughCluster\"}[5m])) by (version)", "legendFormat": "{{version}} sent", "refId": "A" },
+        { "expr": "sum(rate(istio_tcp_received_bytes_total{reporter=\"source\", app=\"rr-backend\", destination_service_name=\"PassthroughCluster\"}[5m])) by (version)", "legendFormat": "{{version}} received", "refId": "B" }
+      ]
+    }
+  ]
+}

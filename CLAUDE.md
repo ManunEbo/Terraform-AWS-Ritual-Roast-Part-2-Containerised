@@ -230,14 +230,17 @@ Terraform (alias may be `tf`), kubectl, istioctl, argocd, AWS CLI, Docker, Helm,
 
 ---
 
-## SESSION HANDOVER — 2026-07-02 END-OF-DAY
+## SESSION HANDOVER — 2026-07-03 END-OF-DAY
 
-### Status: CLUSTER FULLY DEPLOYED AND HEALTHY ✓ (supersedes the 2026-06-30 / 07-01 handovers)
+### Status: CLUSTER FULLY DEPLOYED AND HEALTHY ✓ (supersedes the 2026-06-30 / 07-01 / 07-02 handovers)
 The 3rd deploy succeeded end-to-end (Bugs 1–3 all fixed). All 8 ArgoCD apps Synced/Healthy; the site
 serves data (v1 + v2 pods 2/2 with sidecars); Kiali reachable at `/kiali`; Grafana Cloud ingesting
-(429 cleared). **Canary walkthrough IN PROGRESS** — the user drives, Claude guides. Currently at
-**step 1: 90% v1 / 10% v2 on both tiers** (commit `5774932`, verified live). Resume at step 2 (70/30) —
-see "RESUME HERE — canary walkthrough" below.
+(429 cleared). **Canary walkthrough IN PROGRESS** — the user drives, Claude guides. Still at
+**step 1: 90% v1 / 10% v2 on both tiers** (commit `5774932`, verified live) — no weight change this
+session. Resume at step 2 (70/30) — see "RESUME HERE — canary walkthrough" below.
+
+**New this session (2026-07-03):** a Grafana Cloud dashboard was built and pushed live — see
+"Grafana Cloud dashboard" right after the canary resume-point below.
 
 ### Access constraints (critical — read first)
 - **No local `kubectl`** on the dev machine. Cluster access is **SSM only** to the EC2 nodes — run
@@ -302,6 +305,31 @@ and the same for `backend-route` with `http[0]`. Nudge ArgoCD if it hasn't polle
 
 **Shadow mode** (backend only): copy the `mirror:` spec from `canary-variants/vs-backend-shadow.yml`
 into `backend-route`. GET-only — NEVER mirror POST (double-inserts into the shared RDS).
+
+### Grafana Cloud dashboard (added 2026-07-03)
+
+A dashboard-as-code JSON + push script now lives at
+`infrastructure/05-aws-k8s/k8s-manifests/observability/dashboards/` — see that folder's `README.md` for
+full detail. Summary:
+
+- **Files:** `ritual-roast-mesh-dashboard.json` (the dashboard, source of truth — edit this, not the
+  Grafana UI), `push-to-grafana.sh` (pushes/updates it via Grafana's `/api/dashboards/import`), `README.md`.
+- **Live now:** pushed to `https://curiousquince1187.grafana.net/d/rr-mesh-traffic/...` — request rate,
+  observed traffic-share %, error rate, p95 latency (all by `destination_version`), scrape target health,
+  and backend→RDS TCP bytes. Colors are fixed: **v1 = green (`#0ca30c`), v2 = red (`#d03b3b`)** across
+  every panel.
+- **Strategy-agnostic by design:** plots by `destination_version`, not by canary step, so the same
+  dashboard reads canary ramps, blue-green cutovers, and shadow-mirrored traffic (v2 shows inbound on the
+  traffic-share panel even at 0% official weight) without any changes.
+- **Only shows what's scraped:** the `istio_*` family (+ `up`) — no node/cAdvisor metrics, per the
+  429-rate-limit trim in `9b7c501`.
+- **To push an edit:** `export GRAFANA_URL=https://curiousquince1187.grafana.net`,
+  `export GRAFANA_API_TOKEN=<service-account-token>` (a Grafana **instance** Service Account token,
+  Editor+ role — NOT the Alloy remote-write token in `rr-dev-grafana-cloud-token`, which is
+  metrics:write-only and can't create dashboards), then `./push-to-grafana.sh`. `overwrite:true` + fixed
+  `uid: rr-mesh-traffic` means re-running updates the same dashboard.
+- **Not yet done (backlog):** p50/p99 latency panels (currently p95 only), a dedicated Grafana folder
+  instead of General, alerting rules.
 
 If a **fresh rebuild** is ever needed: `cd infrastructure/05-aws-k8s && terraform destroy && terraform apply`
 now bootstraps end-to-end with all three bugs fixed (~20 min to full sync). Do NOT pass `-auto-approve`
@@ -435,6 +463,10 @@ kubectl -n observability get svc kiali     # kiali service exists
 | Kiali | Live service mesh graph, traffic animation, VirtualService viewer | `observability` ns, prefers CP node |
 | Grafana Cloud | Long-term metrics, dashboards, alerting | External (remote-write target) |
 
+**Grafana Cloud dashboard access:** `https://curiousquince1187.grafana.net/d/rr-mesh-traffic/...` — v1/v2
+mesh traffic, strategy-agnostic (canary/blue-green/shadow). Source + push script:
+`infrastructure/05-aws-k8s/k8s-manifests/observability/dashboards/` (see its README). v1=green, v2=red,
+fixed across every panel.
 **Kiali access:** `http://<ALB-DNS>/kiali` — anonymous, no login.
 **Kiali Graph settings:** Namespace=dev → Versioned app graph → enable Traffic Animation + Traffic Distribution.
 

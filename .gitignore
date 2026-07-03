@@ -76,3 +76,8 @@ apps/v2-backend-go/ritual-roast-backend
 # Windows Alternate Data Stream metadata
 # =========================
 *:Zone.Identifier
+
+# =========================
+# Local docs/screenshots (not version-controlled)
+# =========================
+docs/
