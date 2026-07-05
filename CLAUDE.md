@@ -245,12 +245,20 @@ files (not GitOps) and cleanly rolled back to the 10/90 state above — git was 
 surfaced a significant ArgoCD **app-of-apps self-heal** gotcha — see
 "Live manual-edit gotcha: app-of-apps self-heal" right after the resume section below. Read that
 before doing ANY manual `kubectl apply`/`kubectl patch` on this cluster. Backend shadow mode was
-also attempted this session but **not yet confirmed observed** — the first pass rolled back before
-any traffic was driven (see the "Shadow-mode traffic-sequencing pitfall" note in the resume
-section); a corrected redo was in progress at session end.
+redone correctly and **confirmed observed live in both Kiali and the Grafana Cloud dashboard**
+(v2 backend showed inbound mirrored traffic at 0% official weight) — no snapshots were captured
+that pass, so the observation itself is confirmed but not illustrated yet.
 
 **New in the 2026-07-03 session:** a Grafana Cloud dashboard was built and pushed live — see
 "Grafana Cloud dashboard" right after the canary resume-point below.
+
+**2026-07-05: transitioning to write-up phase.** The remaining work is producing illustrations
+(screenshots of Kiali graphs, Grafana dashboard panels, terminal output) for a written report on
+the canary/blue-green/shadow exercise. Expect repeated redeploys of the same steps above purely to
+recapture clean screenshots — no new bugs or strategy changes implied by a "redeploy" mention going
+forward unless stated. The user is also switching to a different (non-Mac) computer for this phase
+— treat the next session as a fresh local environment (no assumed shell history, credentials cache,
+or SSM session state) even though the cluster/repo state described here is unchanged.
 
 ### Access constraints (critical — read first)
 - **No local `kubectl`** on the dev machine. Cluster access is **SSM only** to the EC2 nodes — run
@@ -286,24 +294,26 @@ Mid-walkthrough. Workflow per step: user edits weights in `dev-apps/routing/isti
 commits + pushes; ArgoCD applies within ~3 min. **Canary steps 90/10 → 50/50 → 10/90 done**
 (commits `5774932` → `dcb805f` → `2611bbe`). **Blue-green (0/100) already exercised** live via the
 manual `canary-variants/` files on 2026-07-04 and rolled back cleanly to 10/90 — git untouched, so
-GitOps state and live state both still read 10/90. **Backend shadow mode attempted 2026-07-04 but
-NOT yet confirmed** — see the pitfall + corrected procedure right below. Remaining to try: blue-green
-again via pure GitOps (commit 0/100 weights instead of the manual variant files), a confirmed shadow
-observation, and rollback via `git revert`. Full step table below.
+GitOps state and live state both still read 10/90. **Backend shadow mode redone and CONFIRMED**
+(observed live in Kiali graph + Grafana Cloud dashboard — v2 backend showed inbound mirrored
+traffic at 0% weight) — no snapshots captured that pass, so re-run again during the write-up phase
+to capture illustrations. Remaining to try: blue-green again via pure GitOps (commit 0/100 weights
+instead of the manual variant files) and rollback via `git revert`. Full step table below.
 
 **Before any manual `kubectl apply`/`kubectl patch` step (blue-green, shadow) — read
 "Live manual-edit gotcha: app-of-apps self-heal" a few sections below.**
 
-**Shadow-mode traffic-sequencing pitfall (found live 2026-07-04):** the first shadow attempt applied
-`vs-backend-shadow.yml`, verified the `mirror` config, then rolled back to `istio-routing.yml` and
-re-enabled ArgoCD **before** driving any traffic — so the traffic loops that followed hit the plain
-10/90 split, not the mirror, and nothing was actually mirrored that round. **Drive traffic between
-apply/verify and rollback, never after.** Also prefer pinning the v2 cookie directly against the API
-path over a cookieless root curl: `curl -H 'Cookie: x-frontend=v2' $ALB/api/get_recipe` guarantees a
-real backend GET (and therefore a mirror) on every request, since v2's nginx always proxies that
-path to the backend — a cookieless `curl $ALB/` mostly lands on v2 (per current frontend weights),
-and v2's root response is static HTML with no server-side backend call, so that pattern only
-exercises the backend from the minority of requests landing on v1's SSR path.
+**Shadow-mode traffic-sequencing pitfall (found live 2026-07-04, avoided on the confirmed redo):**
+the first shadow attempt applied `vs-backend-shadow.yml`, verified the `mirror` config, then rolled
+back to `istio-routing.yml` and re-enabled ArgoCD **before** driving any traffic — so the traffic
+loops that followed hit the plain 10/90 split, not the mirror, and nothing was actually mirrored
+that round. **Drive traffic between apply/verify and rollback, never after.** Also prefer pinning
+the v2 cookie directly against the API path over a cookieless root curl:
+`curl -H 'Cookie: x-frontend=v2' $ALB/api/get_recipe` guarantees a real backend GET (and therefore a
+mirror) on every request, since v2's nginx always proxies that path to the backend — a cookieless
+`curl $ALB/` mostly lands on v2 (per current frontend weights), and v2's root response is static
+HTML with no server-side backend call, so that pattern only exercises the backend from the minority
+of requests landing on v1's SSR path.
 
 **Which numbers to edit** (do NOT touch the `/kiali` rule or the two cookie rules above it):
 frontend-route weighted block = http rule **`[3]`** (`weight:` ~line 139 v1 / ~145 v2); backend-route
