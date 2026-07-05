@@ -1,0 +1,7 @@
+# setting value for environment
+environment = "dev"
+
+#------------------------------------------------------------------------
+
+# S3 bucket
+s3_bucket = "rr-capstone-5b160b287a99a6d9"
