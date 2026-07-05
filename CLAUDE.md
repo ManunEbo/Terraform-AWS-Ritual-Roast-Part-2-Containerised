@@ -235,11 +235,21 @@ Terraform (alias may be `tf`), kubectl, istioctl, argocd, AWS CLI, Docker, Helm,
 ### Status: CLUSTER FULLY DEPLOYED AND HEALTHY ✓ (supersedes the 2026-06-30 / 07-01 / 07-02 handovers)
 The 3rd deploy succeeded end-to-end (Bugs 1–3 all fixed). All 8 ArgoCD apps Synced/Healthy; the site
 serves data (v1 + v2 pods 2/2 with sidecars); Kiali reachable at `/kiali`; Grafana Cloud ingesting
-(429 cleared). **Canary walkthrough IN PROGRESS** — the user drives, Claude guides. Still at
-**step 1: 90% v1 / 10% v2 on both tiers** (commit `5774932`, verified live) — no weight change this
-session. Resume at step 2 (70/30) — see "RESUME HERE — canary walkthrough" below.
+(429 cleared). **Canary walkthrough IN PROGRESS** — the user drives, Claude guides. GitOps canary
+steps progressed **90/10 → 50/50 → 10/90** (commits `5774932` → `dcb805f` → `2611bbe`). Current
+committed + live state: **v1:10 / v2:90 on both tiers** (the "canary 90%" step). Resume at the
+**0/100 blue-green step** — see "RESUME HERE — canary walkthrough" below.
 
-**New this session (2026-07-03):** a Grafana Cloud dashboard was built and pushed live — see
+**2026-07-04 session:** blue-green (0/100) was exercised live via the manual `canary-variants/`
+files (not GitOps) and cleanly rolled back to the 10/90 state above — git was never touched. This
+surfaced a significant ArgoCD **app-of-apps self-heal** gotcha — see
+"Live manual-edit gotcha: app-of-apps self-heal" right after the resume section below. Read that
+before doing ANY manual `kubectl apply`/`kubectl patch` on this cluster. Backend shadow mode was
+also attempted this session but **not yet confirmed observed** — the first pass rolled back before
+any traffic was driven (see the "Shadow-mode traffic-sequencing pitfall" note in the resume
+section); a corrected redo was in progress at session end.
+
+**New in the 2026-07-03 session:** a Grafana Cloud dashboard was built and pushed live — see
 "Grafana Cloud dashboard" right after the canary resume-point below.
 
 ### Access constraints (critical — read first)
@@ -266,15 +276,34 @@ session. Resume at step 2 (70/30) — see "RESUME HERE — canary walkthrough" b
 - **Nodes:** 5 Ready (3 CP + 2 workers), K3s v1.28.15+k3s1.
 - **Calico:** VXLAN **Always** — verify `kubectl get ippool default-ipv4-ippool -o jsonpath='{.spec.vxlanMode}'` → `Always`. All calico pods Running.
 - **ArgoCD:** all 8 apps Synced/Healthy (istio-base, istiod, istio-ingressgateway, kiali, prometheus, ritual-roast-workloads, ritual-roast-canary, root-observability).
-- **dev:** v1 + v2 frontend/backend all 2/2 with sidecars. Istio routing at **canary step 1: 90% v1 / 10% v2** on both tiers (frontend-route rule `[3]`, backend-route rule `[0]`).
+- **dev:** v1 + v2 frontend/backend all 2/2 with sidecars. Istio routing at **canary 90% step: v1:10 / v2:90** on both tiers (frontend-route rule `[3]`, backend-route rule `[0]`).
 - **Observability:** Kiali at `/kiali` (200); in-cluster Prometheus feeds Kiali's graph; Alloy → Grafana Cloud (429 cleared, `istio_*` only). No in-cluster Grafana by design — Grafana is Grafana Cloud (external).
 - **Worker role labels:** cosmetic `node-role.kubernetes.io/worker` still not applied (optional). Apply from a CP node: `kubectl label node <worker-hostname> node-role.kubernetes.io/worker=worker`.
 
 ### RESUME HERE — canary walkthrough (interactive: user drives, Claude guides)
 
 Mid-walkthrough. Workflow per step: user edits weights in `dev-apps/routing/istio-routing.yml`,
-commits + pushes; ArgoCD applies within ~3 min. **Currently at step 1 (90/10).** Remaining steps:
-70/30 → 50/50 → 30/70 → 10/90 → 0/100 (blue-green) → rollback via `git revert`. Full step table below.
+commits + pushes; ArgoCD applies within ~3 min. **Canary steps 90/10 → 50/50 → 10/90 done**
+(commits `5774932` → `dcb805f` → `2611bbe`). **Blue-green (0/100) already exercised** live via the
+manual `canary-variants/` files on 2026-07-04 and rolled back cleanly to 10/90 — git untouched, so
+GitOps state and live state both still read 10/90. **Backend shadow mode attempted 2026-07-04 but
+NOT yet confirmed** — see the pitfall + corrected procedure right below. Remaining to try: blue-green
+again via pure GitOps (commit 0/100 weights instead of the manual variant files), a confirmed shadow
+observation, and rollback via `git revert`. Full step table below.
+
+**Before any manual `kubectl apply`/`kubectl patch` step (blue-green, shadow) — read
+"Live manual-edit gotcha: app-of-apps self-heal" a few sections below.**
+
+**Shadow-mode traffic-sequencing pitfall (found live 2026-07-04):** the first shadow attempt applied
+`vs-backend-shadow.yml`, verified the `mirror` config, then rolled back to `istio-routing.yml` and
+re-enabled ArgoCD **before** driving any traffic — so the traffic loops that followed hit the plain
+10/90 split, not the mirror, and nothing was actually mirrored that round. **Drive traffic between
+apply/verify and rollback, never after.** Also prefer pinning the v2 cookie directly against the API
+path over a cookieless root curl: `curl -H 'Cookie: x-frontend=v2' $ALB/api/get_recipe` guarantees a
+real backend GET (and therefore a mirror) on every request, since v2's nginx always proxies that
+path to the backend — a cookieless `curl $ALB/` mostly lands on v2 (per current frontend weights),
+and v2's root response is static HTML with no server-side backend call, so that pattern only
+exercises the backend from the minority of requests landing on v1's SSR path.
 
 **Which numbers to edit** (do NOT touch the `/kiali` rule or the two cookie rules above it):
 frontend-route weighted block = http rule **`[3]`** (`weight:` ~line 139 v1 / ~145 v2); backend-route
@@ -305,6 +334,47 @@ and the same for `backend-route` with `http[0]`. Nudge ArgoCD if it hasn't polle
 
 **Shadow mode** (backend only): copy the `mirror:` spec from `canary-variants/vs-backend-shadow.yml`
 into `backend-route`. GET-only — NEVER mirror POST (double-inserts into the shared RDS).
+
+### Live manual-edit gotcha: app-of-apps self-heal (found live 2026-07-04, blue-green session)
+
+**Symptom:** During the blue-green walkthrough, `kubectl patch application ritual-roast-workloads
+--type merge -p '{"spec":{"syncPolicy":{"automated":{"selfHeal":false, ...}}}}'` (and later
+`{"automated":null}`) reported success and `kubectl get` confirmed the field was set — but within
+~1 second it silently reverted back to `{"prune":true,"selfHeal":true}`, and the manual
+`kubectl apply -f vs-*-bluegreen-v2.yml` weight changes got reverted back to the Git-committed
+canary weights each time. This looked identical to the ordinary self-heal race the
+`canary-variants/README.md` warns about, but disabling `selfHeal` on `ritual-roast-workloads` alone
+did not fix it.
+
+**Root cause:** `root-observability` (the bootstrap root Application, sourced from
+`k8s-manifests/observability/`) is an **app-of-apps parent** — `ritual-roast-app.yml`,
+`canary-staging-app.yml`, `istio-app.yml`, `kiali-app.yml`, `prometheus-app.yml` all define CHILD
+`Application` objects that `root-observability` itself treats as managed resources (confirmed live:
+`kubectl -n argocd get application root-observability -o jsonpath='{.status.resources[?(@.kind=="Application")]}'`
+lists `ritual-roast-workloads`, `ritual-roast-canary`, `istiod`, etc., each `Synced`). Because
+`root-observability`'s own `syncPolicy.automated.selfHeal` is `true`, it reverts ANY live drift on a
+child Application's spec — including a `kubectl patch` to that child's own `syncPolicy` field —
+back to what `ritual-roast-app.yml` declares in Git. Patching the child alone is therefore a no-op
+under a live app-of-apps parent: the parent re-heals the child's policy before the next `kubectl
+apply` to the actual workload resources can stick.
+
+**Fix / the pattern to follow for ANY manual live edit on this cluster:** disable
+`syncPolicy.automated` on the **entire ArgoCD ancestor chain**, parent first, then the child —
+not just the Application that directly owns the resource you're editing:
+```bash
+kubectl -n argocd patch application root-observability --type merge -p '{"spec":{"syncPolicy":{"automated":null}}}'
+kubectl -n argocd patch application ritual-roast-workloads --type merge -p '{"spec":{"syncPolicy":{"automated":null}}}'
+# ...now kubectl apply -f <manual-manifest>.yml sticks...
+```
+Restore in reverse order (child first, then parent) once done, so the parent doesn't re-heal a
+child that's still mid-restore:
+```bash
+kubectl -n argocd patch application ritual-roast-workloads --type merge -p '{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}}'
+kubectl -n argocd patch application root-observability --type merge -p '{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}}'
+```
+`canary-variants/README.md`'s self-heal-off snippet only patches the one target Application and is
+therefore **incomplete** on this cluster's topology — extend it with the parent step above before
+following it.
 
 ### Grafana Cloud dashboard (added 2026-07-03)
 

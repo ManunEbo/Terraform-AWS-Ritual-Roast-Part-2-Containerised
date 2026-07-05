@@ -20,10 +20,21 @@ Git state within ~3 minutes — it would undo your canary mid-exercise.
 So for a hands-on session, turn self-heal OFF first, step through the
 files, then turn it back ON.
 
+**IMPORTANT (found live 2026-07-04):** `ritual-roast-workloads` is a CHILD Application under the
+`root-observability` app-of-apps parent (sourced from `k8s-manifests/observability/`, which defines
+`ritual-roast-app.yml` etc. as Application objects that `root-observability` itself manages). If
+`root-observability`'s own `selfHeal` is still on, it will revert any `kubectl patch` you make to
+`ritual-roast-workloads`'s `syncPolicy` — including a `selfHeal:false` patch — back to
+`{"prune":true,"selfHeal":true}` within about a second, because from the parent's point of view your
+patch is just drift on a resource it manages. Patching `ritual-roast-workloads` alone is a no-op
+while `root-observability` is live. **Disable automated sync on the parent FIRST, then the child:**
+
 ```bash
-# 1. SELF-HEAL OFF (before the session)
+# 1. SELF-HEAL OFF - PARENT first (root-observability), then the CHILD
+kubectl -n argocd patch application root-observability --type merge \
+  -p '{"spec":{"syncPolicy":{"automated":null}}}'
 kubectl -n argocd patch application ritual-roast-workloads --type merge \
-  -p '{"spec":{"syncPolicy":{"automated":{"selfHeal":false,"prune":true}}}}'
+  -p '{"spec":{"syncPolicy":{"automated":null}}}'
 
 # 2. Step through variants manually (examples)
 kubectl apply -f vs-backend-canary-10.yml
@@ -31,8 +42,12 @@ kubectl apply -f vs-backend-canary-10.yml
 kubectl apply -f vs-backend-canary-30.yml
 #   ...etc...
 
-# 3. SELF-HEAL ON (after the session) - reverts live state to Git
+# 3. SELF-HEAL ON (after the session) - CHILD first, then PARENT, so the
+#    parent doesn't re-heal a child that's still mid-restore. Reverts live
+#    state to Git.
 kubectl -n argocd patch application ritual-roast-workloads --type merge \
+  -p '{"spec":{"syncPolicy":{"automated":{"selfHeal":true,"prune":true}}}}'
+kubectl -n argocd patch application root-observability --type merge \
   -p '{"spec":{"syncPolicy":{"automated":{"selfHeal":true,"prune":true}}}}'
 ```
 
