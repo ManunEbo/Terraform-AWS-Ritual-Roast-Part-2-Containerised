@@ -13,19 +13,19 @@ We use two distinct pipeline strategies depending on our hosting phase: **AWS EC
 > - Changing the extension to `.disabled` tells GitHub Actions to ignore the file.
 > - Keeping it as `.yml` keeps the pipeline active.
 
-This pipeline automates building and pushing our **Version 1 (V1)** images—consisting of a **Next.js frontend** and a **Flask backend**—directly to **AWS ECR (Elastic Container Registry)**.
+This pipeline automates building and pushing our **Version 1 (V1)** images consisting of a **Next.js frontend** and a **Flask backend** directly to **AWS ECR (Elastic Container Registry)**.
 
 ### Prerequisites & Setup
 
 - The target ECR repositories (`rr-dev-frontend` and `rr-dev-backend`) must exist in your AWS account before this runs, or the push step will fail.
-- Step-by-step instructions for provisioning ECR are located in [03-aws-ecr](./infrastructure/03-aws-ecr).
+- Step-by-step instructions for provisioning ECR are located in [03-aws-ecr](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/tree/main/infrastructure/03-aws-ecr).
 
 ### Pipeline Architecture
 
 To optimize execution speed and reduce build costs, this workflow is split into three decoupled jobs:
 
 1. **Detect Changes (`detect-changes`):** Runs first. It scans the incoming git commit. If changes are detected inside specific application directories, it flags them using boolean outputs.
-2. **Build V1 Frontend (`build-v1-frontend`):** Runs _only_ if changes were detected in `apps/v1-frontend-nextjs`. It logs into AWS using secure, passwordless **OIDC IAM Roles**, builds the Docker image on a GitHub-hosted runner, and pushes it to ECR.
+2. **Build V1 Frontend (`build-v1-frontend`):** Runs _only_ if changes were detected in `apps/v1-frontend-nextjs`. It logs into AWS using secure, passwordless **OIDC IAM Roles**, builds the Docker image on a GitHub-hosted runner (Ubuntu container), and pushes it to ECR.
 3. **Build V1 Backend (`build-v1-backend`):** Runs _only_ if changes are detected in `apps/v1-backend-flask`. It follows the exact same build-and-push sequence using a backend-specific IAM Role.
 
 ### Under the Hood: The Build Step
@@ -68,7 +68,7 @@ on:
 1. **Automatic Push Trigger:** Triggers a run automatically when a developer pushes changes to the `main` branch, but _only_ if those changes occur inside the specified application paths.
 2. **Manual Trigger (`workflow_dispatch`):** Allows team members to manually trigger a redeployment UI button directly from the GitHub Actions tab.
 
----
+[Build and push to ECR](./github/workflows/images/ecs-workflow)
 
 ## 2. Kubernetes & Istio GitOps Pipeline (`deploy-ghcr-k8s.yml`)
 
