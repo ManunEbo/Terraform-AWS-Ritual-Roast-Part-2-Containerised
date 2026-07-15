@@ -68,7 +68,7 @@ on:
 1. **Automatic Push Trigger:** Triggers a run automatically when a developer pushes changes to the `main` branch, but _only_ if those changes occur inside the specified application paths.
 2. **Manual Trigger (`workflow_dispatch`):** Allows team members to manually trigger a redeployment UI button directly from the GitHub Actions tab.
 
-[Build and push to ECR](./github/workflows/images/ecs-workflow)
+[Build and push to ECR](./github/workflows/images/ecs-workflow.png)
 
 ## 2. Kubernetes & Istio GitOps Pipeline (`deploy-ghcr-k8s.yml`)
 
