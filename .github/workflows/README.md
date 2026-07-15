@@ -68,11 +68,11 @@ on:
 1. **Automatic Push Trigger:** Triggers a run automatically when a developer pushes changes to the `main` branch, but _only_ if those changes occur inside the specified application paths.
 2. **Manual Trigger (`workflow_dispatch`):** Allows team members to manually trigger a redeployment UI button directly from the GitHub Actions tab.
 
-<!-- ![Build and push to ECR](./github/workflows/images/ecs-workflow.png) -->
+<!-- ![Build and push to ECR](./github/workflows/images/ecs-workflow.png) DOESN'T WORK -->
 
 <!-- [Build and push to ECR](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/.github/workflows/images/ecs-workflow.png) -->
 
-<img src="./github/workflows/images/ecs-workflow.png" alt="Build and push to ECR" width="500">
+<img src="https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/.github/workflows/images/ecs-workflow.png" alt="Build and push to ECR" width="500">
 
 ## 2. Kubernetes & Istio GitOps Pipeline (`deploy-ghcr-k8s.yml`)
 
