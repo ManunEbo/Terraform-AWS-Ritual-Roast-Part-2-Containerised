@@ -1,160 +1,167 @@
-# GitHub Workflows
+# GitHub Workflows (`.github/workflows`)
 
-This directory houses our CI/CD code for both AWS Elastic Container Registry (ECR) and GitHub Container Registry (ghcr.io) using GitHub Actions. GitHub Actions as a tool provides an automated end to end deployment stream which couples continues integration with continues deployment eliminating human error in the process.
+This directory houses our automated **CI/CD (Continuous Integration and Continuous Deployment)** pipelines. These workflows eliminate manual build errors by automatically packaging, testing, and shipping our applications whenever code changes.
 
-## deploy-ecs.yml (Alternatively: deploy-ecs.yml.disabled)
+We use two distinct pipeline strategies depending on our hosting phase: **AWS ECR (Docker Registry)** and **GitHub Container Registry (K8s/Istio GitOps)**.
 
-You might see this file as either deploy-ecs.yml or deploy-ecs.yml.disabled: When it is `deploy-ecs.yml.disabled` GitHub Actions will ignore this file. When it is `deploy-ecs.yml` GitHub Actions reads this file and executes the code pushing it to ECR.
+---
 
-The V1 images consists of a Next.js frontend and a Flask backend. These are original images from the course with a few modifications for security and production.
-This workflow focuses on deploying both to AWS ECR. Note, the ECR registry must already exist before we can push to it, otherwise the build will fail. The instructions for deploying to ECR are in [03-aws-ecr_link_to_path_(href?alternative)].
+## 1. AWS ECR Build Pipeline (`deploy-ecs.yml`)
 
-The workflow is split into three jobs:
+> **Note on File Naming:** You may see this file named either `deploy-ecs.yml` or `deploy-ecs.yml.disabled`.
+>
+> - Changing the extension to `.disabled` tells GitHub Actions to ignore the file.
+> - Keeping it as `.yml` keeps the pipeline active.
 
-1. Detect change
-   - This runs first. It scans the commits looking for change. If change is found then it flags it.
-2. build-v1-frontend
-   - This only runs if change is detected on the source code `apps/v1-frontend-nextjs`
-   - Builds the docker image on GitHub then logs into ECR using IAM role and pushes the image to `rr-dev-frontend` repository.
-3. build-v1-backend
-   - This only runs if change is detected on the source code `apps/v1-backend-flask`
-   - Builds the docker image on GitHub then logs into ECR using IAM role and pushes the image to `rr-dev-backend` repository.
+This pipeline automates building and pushing our **Version 1 (V1)** images—consisting of a **Next.js frontend** and a **Flask backend**—directly to **AWS ECR (Elastic Container Registry)**.
 
-The jobs comprise of steps which are the tasks/actions to be performed against some resource. This could be running a shell command:
+### Prerequisites & Setup
 
+- The target ECR repositories (`rr-dev-frontend` and `rr-dev-backend`) must exist in your AWS account before this runs, or the push step will fail.
+- Step-by-step instructions for provisioning ECR are located in [03-aws-ecr](./infrastructure/03-aws-ecr).
+
+### Pipeline Architecture
+
+To optimize execution speed and reduce build costs, this workflow is split into three decoupled jobs:
+
+1. **Detect Changes (`detect-changes`):** Runs first. It scans the incoming git commit. If changes are detected inside specific application directories, it flags them using boolean outputs.
+2. **Build V1 Frontend (`build-v1-frontend`):** Runs _only_ if changes were detected in `apps/v1-frontend-nextjs`. It logs into AWS using secure, passwordless **OIDC IAM Roles**, builds the Docker image on a GitHub-hosted runner, and pushes it to ECR.
+3. **Build V1 Backend (`build-v1-backend`):** Runs _only_ if changes are detected in `apps/v1-backend-flask`. It follows the exact same build-and-push sequence using a backend-specific IAM Role.
+
+### Under the Hood: The Build Step
+
+Here is a closer look at a step inside the `build-v1-frontend` job:
+
+```yaml
+- name: Build and Push Frontend
+  env:
+    ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+    ECR_REPOSITORY: rr-dev-frontend
+    IMAGE_TAG: ${{ github.sha }}
+  working-directory: ./apps/v1-frontend-nextjs
+  run: |
+    docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+    docker push $ECR_REGISTRY/$ECR_REPOSITORY --all-tags
 ```
-      - name: Build and Push Frontend
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: rr-dev-frontend
-          IMAGE_TAG: ${{ github.sha }}
-        working-directory: ./apps/v1-frontend-nextjs
-        run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY --all-tags
-```
 
-Above, this step belongs to the `build-v1-frontend` job. It does the following:
+#### What this does:
 
-1. Builds an image and tags using environment variables which are linked with corresponding ECR credentials
-   - Note, the `IMAGE_TAG` is the `{{github.sha}}` value, this will be useful later
-2. Pushes the image just created to the ECR registry
+1. **Builds the Docker image** and applies two distinct tags:
+   - `:latest` for standard deployments.
+   - `:$IMAGE_TAG` (which uses `${{ github.sha }}`, the unique 40-character Git commit hash) for precise, version-controlled tracking.
+2. **Pushes both tags** to our private AWS ECR registry.
 
-For the job to actually run, it needs to be triggered. Here we've used two types of triggers:
+### Pipeline Triggers
 
-```
+This pipeline is configured to fire on two distinct events:
+
+```yaml
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
     paths:
-      - 'apps/v1-frontend-nextjs/**'
-      - 'apps/v1-backend-flask/**'
+      - "apps/v1-frontend-nextjs/**"
+      - "apps/v1-backend-flask/**"
   workflow_dispatch:
 ```
 
-Above the two triggers are defined, usually at the top of the file:
+1. **Automatic Push Trigger:** Triggers a run automatically when a developer pushes changes to the `main` branch, but _only_ if those changes occur inside the specified application paths.
+2. **Manual Trigger (`workflow_dispatch`):** Allows team members to manually trigger a redeployment UI button directly from the GitHub Actions tab.
 
-1. On push
-   - If we push to any of the specified paths, this triggers a build
-2. On Workflow dispatch
-   - We can trigger a rebuild online, on the GitHub UI workflow dispatch (see the image below)
+---
 
-[image_of_workflow_deployment(href?alternative)]
+## 2. Kubernetes & Istio GitOps Pipeline (`deploy-ghcr-k8s.yml`)
 
-## deploy-ghcr-k8s.yml
+This pipeline represents our production-grade upgrade. Instead of just pushing container images, this workflow manages a fully automated **GitOps deployment loop** targeting a **Kubernetes (EKS)** cluster running an **Istio Service Mesh**.
 
-This is the upgrade to `deploy-ecs.yml`, it's a CI/CD pipeline designed for Kubernetes (K8s) and Istio-based infrastructure deployment.
-As usual the build can be triggered on push or by workflow dispatch given detection of a change in the source code.
+### Key Architectural Concepts
 
-```
+#### Concurrency Locks
+
+When pushing updates to Git, we must prevent multiple runner environments from writing to the same files at the same time. We implement a concurrency lock at the top of the file:
+
+```yaml
 concurrency:
   group: update-manifests
   cancel-in-progress: false
 ```
 
-Concurrency lock ensures that only one workflow can push changes up to completion. Once complete, the lock is removed and other changes can be pushed.
-Thus it guarantees that every single commit that triggers the pipeline gets fully built, fully pushed, and successfully committed back to Git sequentially.
+- This ensures that only **one** runner can update our deployment manifests at a time.
+- Setting `cancel-in-progress: false` guarantees that older commits are queued and completed sequentially rather than aborted mid-deployment.
 
-Here we deploy/push the following images to ghcr.io:
+#### Parallel Multi-App Builds
 
-1. V1 Next.js frontend
-2. V1 Flask backend
-3. V2 Vite frontend
-4. V2 Go backend
+We build four microservices in parallel across independent runner containers:
 
-To build these images, GitHub spins up a container usually an Ubuntu container to run docker build. Note, these are four independent builds and they run in parallel, next to each other, not in sequence.
+- **V1 Stack:** Next.js Frontend & Flask Backend (Stable Track)
+- **V2 Stack:** Vite Frontend & Go Backend (Canary Track)
 
-Every build job undertakes the following tasks:
+Each build logs into **GHCR (GitHub Container Registry)** using the automatic `${{ secrets.GITHUB_TOKEN }}`, builds the image, converts the image namespace to lowercase (a GHCR requirement), and tags/pushes the build with both `:latest` and the unique commit `${{ github.sha }}`.
 
-1. Logs into GHCR using the automatic workflow `${{ secrets.GITHUB_TOKEN }}`
+---
 
-2. Builds the Docker image.
+### The CD Step: Pinning Manifests with `yq`
 
-3. Lowercases the image name (to comply with GHCR naming rules).
+Once the containers are safely pushed to GHCR, the pipeline updates our Kubernetes deployment files.
 
-4. Tags the image with `:latest` and the unique commit SHA `(${{ github.sha }})`
-
-5. Pushes all tags to GHCR.
-
-If the build runs successfully, then the build must write the new SHA-1 value back into the Kubernetes manifest, yaml file. This is done to facilitate Kubernetes deployment rollback i.e. tagging the images with `:latest` then when we rollback, the previous image will also have the same tag `:latest`, making the images indistinguishable from one another. Essentially Kubernetes will not have the means to identify one image from another.
-
-```
-IMAGE_TAG: ${{ github.sha }}
+```yaml
+- name: Install yq
+  uses: mikefarah/yq@v4
 ```
 
-However, tagging the image with the SHA-1 will give each image a unique identifier that can be rolled back to with ease.
+> 💡 **What is `yq`?**
+> Just like `jq` is used to parse and modify JSON files on the command line, **`yq` is a specialized command-line tool designed to parse, edit, and write YAML files**.
+>
+> Because Kubernetes configurations are written entirely in YAML, we use `yq` to programmatically open our manifest files, find the container image field, replace the old tag with our new Git commit SHA-1 tag, and save the file back down—all without disturbing the rest of the file's structure or comments.
 
-```
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.ref }}
-      - name: Install yq
-        uses: mikefarah/yq@v4                   <---------WHAT IS THIS????
-      - name: Pin changed apps to the new SHA
-        run: |
-          set -euo pipefail
-          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          REG="ghcr.io/${OWNER}"
-          pin() {
-            local file="$1" repo="$2"
-            if [ -f "$file" ]; then
-              yq -i ".spec.template.spec.containers[0].image = \"${REG}/${repo}:${IMAGE_TAG}\"" "$file"
-              echo "Pinned $file -> ${REG}/${repo}:${IMAGE_TAG}"
-            else
-              echo "Skip (manifest absent): $file"
-            fi
-          }
-          if [ "${{ needs.detect-changes.outputs.v1_frontend }}" = "true" ]; then
-            pin "${MANIFEST_DIR}/v1-frontend-nextjs-deployment.yml" "rr-v1-frontend"
-          fi
-          if [ "${{ needs.detect-changes.outputs.v1_backend }}" = "true" ]; then
-            pin "${MANIFEST_DIR}/v1-backend-flask-deployment.yml" "rr-v1-backend"
-          fi
-          if [ "${{ needs.detect-changes.outputs.v2_frontend }}" = "true" ]; then
-            pin "${CANARY_MANIFEST_DIR}/v2-frontend-vite-deployment.yml" "rr-v2-frontend"
-          fi
-          if [ "${{ needs.detect-changes.outputs.v2_backend }}" = "true" ]; then
-            pin "${CANARY_MANIFEST_DIR}/v2-backend-go-deployment.yml" "rr-v2-backend"
-          fi
+```yaml
+- name: Pin changed apps to the new SHA
+  run: |
+    set -euo pipefail
+    OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+    REG="ghcr.io/${OWNER}"
+    pin() {
+      local file="$1" repo="$2"
+      if [ -f "$file" ]; then
+        yq -i ".spec.template.spec.containers[0].image = "${REG}/${repo}:${IMAGE_TAG}"" "$file"
+        echo "Pinned $file -> ${REG}/${repo}:${IMAGE_TAG}"
+      else
+        echo "Skip (manifest absent): $file"
+      fi
+    }
+    if [ "${{ needs.detect-changes.outputs.v1_frontend }}" = "true" ]; then
+      pin "${MANIFEST_DIR}/v1-frontend-nextjs-deployment.yml" "rr-v1-frontend"
+    fi
+    # ... (Repeated logic for backend, v2_frontend, and v2_backend)
 ```
 
-This process requires:
+#### Why we must pin to SHA-1 (and not use `:latest`):
 
-1. Install `yq:` A command-line YAML processor.
+If we only configured our Kubernetes manifests to point to `:latest`, Kubernetes wouldn't know when a change occurred because the tag name `:latest` never changes.
 
-2. Updates YAML Deployments: Dynamically rewrites the .spec.template.spec.containers[0].image value with the new commit SHA tag in the corresponding deployment files:
-   - V1 Apps (Stable Dev Track) live in: infrastructure/05-aws-k8s/k8s-manifests/dev-apps/deployments/
+Additionally, if we ever needed to **rollback** to a previous deployment, Kubernetes would look at the stable, unchanging tag `:latest` and be unable to distinguish the broken image from the working one.
 
-   - V2 Apps (Canary Track) live in: infrastructure/05-aws-k8s/k8s-manifests/canary-staging/
+By dynamically updating our YAML deployment manifest files with the unique **Git Commit SHA-1**, we guarantee:
 
-3. Commits & Pushes Back: Commits the updated YAML manifest files directly back to `main` as github-actions[bot].
+1. **Immutability:** Each deployment points to one—and only one—exact snapshot of our code.
+2. **Instant Rollbacks:** We can roll back our cluster to any historical commit instantly, as every version has a unique, permanent identifier.
 
-The Kubernetes cluster monitors ghcr.io using ArgoCD for any change, every 3 minutes, and pulls and deploys any change found accordingly.
+### The GitOps Loop (ArgoCD)
 
-## Conclusion
+Once the workflow updates the YAML deployment files, it commits them back to the GitHub `main` branch under the `github-actions[bot]` user.
 
-The GitHub Actions workflow files splits the push to ECR and ghcr.io exclusively into two files. Instead of carrying out the docker build locally, the docker build task is carried out by Github, remotely, in the background. The actual execution is triggered in one of two ways, on push or workflow dispatch on GitHub Actions. Further, new builds are only triggered if a change occurs in the source files. No change, no build. The decoupled nature of the build, means that the jobs run in parallel, this is a highly efficient CI/CD approach to deployment.
+Our Kubernetes cluster runs **ArgoCD**, which monitors our GitHub repository's manifest folders every 3 minutes. The moment ArgoCD notices that a manifest's `IMAGE_TAG` has changed on Git, it pulls the new image from GHCR and safely deploys it to the cluster.
 
-Tagging the image with the `github.sha` value give it a unique identifier which enables Kubernetes deployment rollbacks to a previous exact image, with ease.
-Without it, Kubernetes would not be able to distinguish the current image from the previous image, they would all look the same.
+---
+
+## Summary of Benefits
+
+| Feature                | AWS ECR Pipeline                         | K8s/GHCR Pipeline                             |
+| :--------------------- | :--------------------------------------- | :-------------------------------------------- |
+| **Primary Target**     | Docker Image Storage (AWS)               | Dynamic Kubernetes GitOps with ArgoCD         |
+| **Build Optimization** | Path filtering (Only build what changed) | Path filtering (Only build what changed)      |
+| **Build Speed**        | Sequential runner triggers               | Parallel runner containers                    |
+| **Manifest Tracking**  | None (Registry storage only)             | Automated Git writebacks using `yq`           |
+| **Rollback Safety**    | Manual ECR Image reversion               | Native K8s rolling update via exact Git SHA-1 |
+
+---
