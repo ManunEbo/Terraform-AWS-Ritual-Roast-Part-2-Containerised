@@ -18,9 +18,9 @@ spec:
         app: rr-frontend
         version: v2
       annotations:
-        sidecar.istio.io/proxyCPU:         "10m"
-        sidecar.istio.io/proxyMemory:      "40Mi"
-        sidecar.istio.io/proxyCPULimit:    "200m"
+        sidecar.istio.io/proxyCPU: "10m"
+        sidecar.istio.io/proxyMemory: "40Mi"
+        sidecar.istio.io/proxyCPULimit: "200m"
         sidecar.istio.io/proxyMemoryLimit: "128Mi"
     spec:
       imagePullSecrets:
@@ -37,7 +37,7 @@ spec:
           # REBUILD REQUIRED: nginx.conf must (a) listen 3000 [D4] and
           # (b) set x-frontend=v2 cookie [D5]. See revised nginx.conf.
           # Dockerfile EXPOSE should also change 80 -> 3000.
-          image: ghcr.io/manunebo/rr-v2-frontend:96d8b078f323f22d40d233875b76acdb11c6946a
+          image: ghcr.io/manunebo/rr-v2-frontend:46dd0cae58aa503c7ccd4abe03c93820bd4febad
           ports:
             - containerPort: 3000 # Vite/nginx rebuilt to listen on 3000
           # v2 frontend probe contract: nginx serves static files, so it is

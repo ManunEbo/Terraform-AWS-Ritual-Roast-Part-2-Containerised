@@ -18,9 +18,9 @@ spec:
         app: rr-frontend # D4
         version: v1
       annotations:
-        sidecar.istio.io/proxyCPU:         "10m"
-        sidecar.istio.io/proxyMemory:      "40Mi"
-        sidecar.istio.io/proxyCPULimit:    "200m"
+        sidecar.istio.io/proxyCPU: "10m"
+        sidecar.istio.io/proxyMemory: "40Mi"
+        sidecar.istio.io/proxyCPULimit: "200m"
         sidecar.istio.io/proxyMemoryLimit: "128Mi"
     spec:
       imagePullSecrets:
@@ -37,7 +37,7 @@ spec:
           # REBUILD REQUIRED: image must add the x-frontend=v1 cookie via
           # next.config.ts headers() (D5). Tag stays :latest; CI write-back
           # will seed the SHA. See next.config.ts snippet in the handover.
-          image: ghcr.io/manunebo/rr-v1-frontend:96d8b078f323f22d40d233875b76acdb11c6946a
+          image: ghcr.io/manunebo/rr-v1-frontend:46dd0cae58aa503c7ccd4abe03c93820bd4febad
           ports:
             - containerPort: 3000
           # v1 single-endpoint probe contract (UNCHANGED). /api/health is
