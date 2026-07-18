@@ -1,235 +1,328 @@
-# V1 Backend Flask
+# V1 Backend — Flask
 
-This directory houses the V1 backend flask application. It comprises two files:
+This is the original ("v1") backend for Ritual Roast: a small, deliberately simple Python/Flask API that stores and serves recipe submissions from a MySQL database (Amazon RDS). It's the **baseline** service that the newer Go backend (`apps/v2-backend-go`) is measured against during the canary / blue-green / shadow-traffic exercises described in `infrastructure/05-aws-k8s` — same job, same database, same three routes, different language and runtime characteristics.
 
-1. app.py
-   - This concists of the backend logic that handles requests from the frontend and communication to and fro
-     with the database.
-2. Dockerfile
-   - This packages our application into a lean secure lightweight production ready image.
+If you've never worked with a decoupled frontend/backend web app before: think of this as the "kitchen" behind the "dining room" (the Next.js frontend, `apps/v1-frontend-nextjs`). The frontend never touches the database directly — it asks this Flask service for recipes, and this service is the _only_ thing that ever opens a connection to MySQL.
 
-# app.py
+## What's in this directory
 
-This files is a collection of python functions that perform specific tasks:
+| File               | Purpose                                                                                                  |
+| ------------------ | -------------------------------------------------------------------------------------------------------- |
+| `app.py`           | The entire backend: routes, database connection pooling, AWS Secrets Manager integration, health checks. |
+| `Dockerfile`       | Multi-stage build that turns `app.py` into a small, non-root, production container image.                |
+| `requirements.txt` | Pinned Python dependencies.                                                                              |
 
-### 1. Configuring Python built-in logging system
-
-```
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-```
-
-1. ### 1. setup logging for CloudWatch compatibility
-
-In production backend, using logging is a critical best practice. It provides timestamped, formatted and level-filtered(importance of logs) system logs that are easy to monitor.
+## The request path
 
 ```
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+Next.js Server Action  /  Vite's nginx proxy
+        │  HTTP, JSON
+        ▼
+Flask app.py  (port 5000)
+        │  fetches DB creds once, then pooled TCP over TLS
+        ▼
+AWS Secrets Manager  ── credentials only, fetched at boot + on demand
+        │
+        ▼
+Amazon RDS for MySQL  (port 3306, TLS-verified)
 ```
 
-This sets up the global rules for how the application outputs messages.
-
-1. **level=logging.INFO:** This sets the severity threshold. Only log messages at this level or higher will be printed.
-   - **How it works:** The order is `DEBUG` (lowest) ---> `INFO` ---> `WARNING` ---> `ERROR` ---> `CRITICAL` (highest)
-     By setting it to `INFO`, the application will ignore noisy `DEBUG` logs but will capture everything else.
-2. **format='...':** This defines exactly what each log line will look like in the console or log files.
-   - **%(asctime)s:** inserts a human-readable date and timestamp e.g. `2026-07-15 16:28:15`
-   - **%(levelname)s:** Shows the severity level of the message (e.g., `INFO` or `ERROR`).
-   - **%(message)s:** The actual message.
-
-```
-Python
-logger = logging.getLogger(__name__)
-
-``
-
-This creates a dedicated logging "agent" specifically for the file it is written in.
-1. **__name__:** This is a special built-in variable that automatically evaluates to the name of the current file or module (e.g. `app` or `__main__`)
-2. **Why this is important:** As the project grows into multiple backend files seing a meaningful log message e.g. `INFO - Database connected` is useful
-   as it will be unknown which file generated it. However, by using `__name__` every log message is automatically tagged with the exact file it came from
-
-3. **What it looks like in practice:**
-   Lets say we have the following log
-```
-
-Python
-logger.info("Flask application started successfully!")
-
-```
-
-The following will be printed to the log file or terminal
-
-```
-
-Plaintext
-2026-07-15 16:28:15,312 - INFO - Flask application started successfully!
-
-```
-
-As can be seen, this is so much easier to read, especially when debugging.
-
-### 2. Instantiating the application
-
-```
-
-app = Flask(**name**)
-
-````
-
-Essentially, this assembles the flask engine but doesn't start it, that comes later (`app.run(host='0.0.0.0', port=5000)`).
-  - **Flask:** This is also known as the class constructor, it consists of several python functions grouped under the name flask, hence why we import from flask `from flask import Flask`
-  - **app:** This is the object we create, to refer to that instance, it becomes our main application controller. All routes  and configurations will be attached to it e.g. `@app.route('/recipes'`.
-  - **__name__:** The built-in python variable that passes the name of the current file/module. In the background `__name__` is associated with the file path `__file__` this helps flask find other related files such as html templates or css static files etc.
-
-
-### 3. **Cross-Origin Resource Sharing (CORS):**
-
-```python
-CORS(app, resources={r"/api/*": {"origins": os.getenv("FRONTEND_URL", "*")}})
-````
-
-- In a decoupled architecture, the Next.js frontend and the Flask backend run on **different origins** (different scheme, host, or port — e.g. `http://localhost:3000` vs `http://localhost:5000`). By default, browsers enforce a _same-origin policy_: JavaScript on one origin is not allowed to read responses from another. This protects users — it stops a malicious site from quietly reading data from other services you're logged into.
-- CORS is how the backend grants a controlled exception. It tells the browser _which_ other origins are trusted to read its responses. Important: this is a **browser-only** rule. It does not secure the API against non-browser clients (scripts, `curl`, server-to-server calls) — that's what authentication is for. CORS just decides which frontends a browser will let talk to the API.
-
-- **`CORS(app, ...)`** — Attaches the `flask-cors` extension to the Flask app. It adds the necessary `Access-Control-Allow-*` headers to responses so the browser knows the request is permitted.
-- **`resources={r"/api/*": {...}}`** — Applies the CORS policy only to routes under `/api/` (e.g. `/api/users`, `/api/orders/42`), leaving other routes untouched.
-- **`{"origins": os.getenv("FRONTEND_URL", "*")}`** — Defines which origins are allowed. The value comes from the `FRONTEND_URL` environment variable. In production, set it to the deployed frontend's origin (e.g. `https://app.example.com`) so only that frontend can call the API from a browser. If unset, it falls back to `"*"` (any origin) — convenient for local development.
-
-> **Note:** The `"*"` wildcard cannot be combined with credentialed requests
-> (cookies or auth headers) — browsers reject it. If your `/api/*` routes rely
-> on cookies or sessions, always set `FRONTEND_URL` to a concrete origin and
-> add `supports_credentials=True`.
+Nothing in this file ever receives traffic directly from the internet — it always sits behind an internal load balancer (ECS) or a cluster-internal Service (Kubernetes), and is only ever called by the frontend, server-side. That's a deliberate security boundary: the database credentials and the private network path never reach the browser.
 
 ---
 
-### 4. Retrieve database credentials
+## Walking through `app.py`
 
-**`def get_mysql_secrets()`:**
-This function retrieves DB credentials from Secrets Managerat runtime instead of hardcoding them or reading them from local environment variables. Hence this is a more secure way to retrieve DB credentials.
+`app.py` is organised as one linear script: configure logging → build the Flask app → fetch secrets → pool the database connection → define routes → run. Below is what each part does and, more importantly, _why_ it's built that way.
 
-**`db_pool = None`:**
+### 1. Logging, configured for CloudWatch
 
-- This is a module(global) level placeholder for a database connection pool that will be created later. Declaring it here ensures that it is in the scope, to be populated later.
+```python
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+```
 
-**`region = os.getenv("AWS_REGION", "eu-west-2")`:**
-
-- The AWS region is injected into the container at runtime. Above, we retrieve that value from the environment variable and assign it to `region`. If the environment variable is not set then it defaults to `eu-west-2`.
-
-**`secret_arn = os.getenv("SECRET_ARN")`:**
-
-- Like the AWS region, the AWS Secet ARN (Amazon Resource Name) is passed into the container at runtime. This value is retrieved from the environment variable and assigned to `secret_arn`, a local variable.
+Anything printed with `print()` is just a string with no structure. `logger.info(...)` instead
+produces a timestamped, leveled line:
 
 ```
+2026-07-15 16:28:15,312 - INFO - Flask application started successfully!
+```
+
+- **`level=logging.INFO`** sets the noise floor, the lowest ranking messages category allowed. The severity order is `DEBUG < INFO < WARNING < ERROR < CRITICAL` setting the floor at `INFO` means routine chatter (`DEBUG`) is suppressed but everything operationally relevant still comes through.
+- **`getLogger(__name__)`** This is a special built-in variable that automatically evaluates to the name of the current file or module (e.g. `app` or `__main__`)
+- As the project grows into multiple backend files seing a meaningful log message e.g. `INFO - Database connected` is useful as it will be unknown which file generated it. However, by using `__name__` every log message is automatically tagged with the exact file it came from.
+- In production this stream is captured by the container runtime — ECS's `awslogs` driver, or on Kubernetes whatever scrapes stdout/stderr from the pod — and lands in CloudWatch. That's why the comment says "CloudWatch-friendly" rather than "writes a log file": a log file would die with the container the moment it's replaced.
+- **What it looks like in practice:** Lets say we have the following log:
+
+  ```
+  Python
+  logger.info("Flask application started successfully!")
+  ```
+
+  The following will be printed to the log file or terminal
+
+  ```
+  Plaintext
+  2026-07-15 16:28:15,312 - INFO - Flask application started successfully!
+  ```
+
+  As can be seen, this is so much easier to read, especially when debugging.
+
+### 2. Building the Flask app and locking down CORS
+
+```python
+app = Flask(__name__)
+CORS(app, resources={r"/api/*": {"origins": os.getenv("FRONTEND_URL", "*")}})
+```
+
+`Flask(__name__)` assembles the application object every route attaches to (`@app.route(...)`) — it doesn't start a server yet, that happens at the very bottom of the file.
+
+CORS (Cross-Origin Resource Sharing) exists because the frontend and this backend are **different origins** (different host/port). Browsers refuse to let JavaScript on one origin read a response from another unless the server explicitly allows it — this is what stops a random website from silently reading data from other services you happen to be logged into. `flask-cors` adds the `Access-Control-Allow-*` response headers that grant a _specific_ origin (read from the `FRONTEND_URL` environment variable, injected by whichever platform is running the container) permission to read `/api/*` responses. In this app the browser never actually calls this backend directly — v1's frontend calls it server-side, v2's frontend calls it through an nginx proxy — so this CORS rule is defence in depth rather than the primary security boundary. It costs nothing to keep correct.
+
+> **Note:** the `"*"` fallback (no origin restriction) only works for _credential-less_ requests.
+> If a future version of this API needs cookies or auth headers, `FRONTEND_URL` must be set to a
+> concrete origin and `supports_credentials=True` added — browsers reject the wildcard for
+> credentialed calls.
+
+### 3. Fetching database credentials from Secrets Manager, not the environment
+
+```python
+def get_mysql_secrets():
+    region = os.getenv("AWS_REGION", "eu-west-2")
+    secret_arn = os.getenv("SECRET_ARN")
     if not secret_arn:
-      logger.error("❌ SECRET_ARN environment variable is missing!")
-      return None
-```
+        logger.error("❌ SECRET_ARN environment variable is missing!")
+        return None
 
-This ensures that if the ARN is not populated, that event is logged as an error, and returns `None`. This is a more informative fail fast mechanism than a less helpful exception.
+    boto3_config = Config(
+        region_name=region,
+        tcp_keepalive=True,
+        retries={'max_attempts': 3, 'mode': 'standard'}
+    )
+    session = boto3.Session()
+    client = session.client(service_name="secretsmanager", config=boto3_config)
 
-**`boto3_config = Config()`:**
-
-- This is a fix that configures Boto3 client to send TCP keepalives to prevent AWS from silently dropping the connection pool.
-- **`tcp_keepalive=True`:** This is what actually makes the underlying TCP connection send periodic keep alive packets, so its not mistaken for dead and dropped.
-
-```
-        retries = {
-          'max_attempts': 3,
-          'mode': 'standard'
-      }
-```
-
-- This is the fix for unpredictable connection time outs with up to 3 automatic retry attempts using boto3's standard backoff strategy.
-
-- **`session = boto3.Session()` / `client = session.client(...)`:**
-- This creates an AWS session and a Secrets Manager client configured with the boto3 config above. Note this session is facilitated by an AWS IAM Role with the right policy attached permitting the client to accomplish the following:
-
-```
     try:
-      response = client.get_secret_value(SecretId=secret_arn)
-      return json.loads(response["SecretString"])
-  except Exception as e:
-      logger.error(f"❌ Error fetching secrets: {e}")
-      return None
+        response = client.get_secret_value(SecretId=secret_arn)
+        return json.loads(response["SecretString"])
+    except Exception as e:
+        logger.error(f"❌ Error fetching secrets: {e}")
+        return None
 ```
 
-- Here the client performs a get request, for this to happen, the client assumes the IAM execution role. If the role is absent or has insuffient policies attached, then this throws an error, logs the error and returns `None`.
+The database username, password, host and port are **never baked into the image or set as plain environment variables**. Only one thing is injected at deploy time: `SECRET_ARN`, a pointer to where the real credentials live in AWS Secrets Manager (see `infrastructure/02-aws-rds`). At startup, the app uses its IAM role — attached to the ECS task or the Kubernetes node, never a static access key — to fetch the actual secret. That buys three things:
 
-### 5. db connection pooling
+- Credentials are rotated automatically (see the RDS layer's rotation Lambda) without ever touching a single container.
+- Nobody reading the Terraform, the container definition, or a `docker inspect` ever sees a password — only an ARN.
+- If the IAM role is missing or misconfigured, this fails loudly (the `SECRET_ARN` log, or the exception log) instead of silently falling back to something insecure.
 
-Opening and closing database connections is very costly:
+Two small but consequential details in the `boto3_config`:
 
-- It creates too many database authentication request for the database to handle, simultaneously, in high traffic
-- Since the database can only handle a finite number of connections in additions to the sla for processing database queries this leads to a back log of requests not handled.
-- A database can crash due to this pressure leading to the whole application becoming unavailable.
-- Note in our setup this would mean each single query must also retrieve database credentials from Secrets Manager, adding to latency cost as well as AWS financial cost.
-- Further MySQL traffic on port 3306 is unencrypted, meaning data packets are sent as plain text, any one listening can read it.
+- **`tcp_keepalive=True`** — without this, a connection that's idle long enough gets silently dropped by a NAT gateway or VPC endpoint, and the _next_ request just hangs until the OS notices. This is a fix for a real production symptom (an idle connection to the Secrets Manager VPC endpoint going dead), and it applies equally whether this container is running on ECS Fargate or a Kubernetes pod — it isn't ECS-specific despite living next to some Fargate-flavoured comments elsewhere in the file (see "Where this fits" below).
+- **`retries={'max_attempts': 3, 'mode': 'standard'}`** — absorbs the odd transient network blip with boto3's built-in exponential backoff instead of failing the whole boot on the first hiccup.
 
-Connection pooling mitigates this.
+### 4. Connection pooling (and why it matters more than it looks)
 
-Below is the configuration of connection pooling:
-
-- **`secrets = get_mysql_secrets()`:** Database credentials are fetched once from Secrets Manager then split into the various credentials for `db_pool` configuration, no more latency cost.
-
-```
-        db_pool = mysql.connector.pooling.MySQLConnectionPool(
-         pool_name="ritual_pool",
-         pool_size=5,
-         host=secrets["host"],
-         user=secrets["username"],
-         password=secrets["password"],
-         database=secrets["dbname"],
-         port=int(secrets.get("port", 3306)),
-         autocommit=True,
-         connection_timeout=5,
-         ssl_ca='/app/global-bundle.pem',
-         ssl_verify_cert=True
-     )
+```python
+db_pool = mysql.connector.pooling.MySQLConnectionPool(
+    pool_name="ritual_pool",
+    pool_size=5,
+    host=secrets["host"],
+    user=secrets["username"],
+    password=secrets["password"],
+    database=secrets["dbname"],
+    port=int(secrets.get("port", 3306)),
+    autocommit=True,
+    connection_timeout=5,
+    ssl_ca='/app/global-bundle.pem',
+    ssl_verify_cert=True
+)
 ```
 
-- **`pool_size=5`:** A predetermined number of connections to the database, 5 in our case, are kept open using the credentials retrieved from secrets manager
-- All new queries are funneled into these connection pools, once the database processes a query, the connection is not closed it just returns to the pool ready and available
-- **`autocommit=True`:** This ensures that every insert or update to the database is made permanent (committed).
-- **`connection_timeout=5`:** A connection times out if idle for 5 seconds.
-- **`ssl_ca='/app/global-bundle.pem'` & `ssl_verify_cert=True` :** This is used to encrypt the traffic through the connection pool; note, this is not a feature of the connection pooling, rather it is added to it.
+Opening a fresh TCP + MySQL authentication handshake for every single request is expensive, and it doesn't scale: MySQL can only hold a finite number of connections open, so under any real load a naive "connect per request" design starts queueing, then times out, then falls over — taking the whole app down with it. A **pool** solves this by opening `pool_size=5` connections once, handing them out to whichever request needs one, and returning them to the pool (not closing them) when the
+request finishes.
 
-- Once the `db_pool` is configured, the configuration can be used to instantiate/establish connection with the database.
+- **`autocommit=True`** — every `INSERT`/`UPDATE` is committed immediately; this app has no need for multi-statement transactions, so there's no reason to hold one open.
+- **`connection_timeout=5`** — fail fast rather than hang if the database is unreachable.
+- **`ssl_ca='/app/global-bundle.pem'` + `ssl_verify_cert=True`** — MySQL traffic is plaintext by default. Traffic between this container and RDS on port 3306 is encrypted, and the server certificate is verified against Amazon's RDS CA bundle (baked into the image at build time — see the Dockerfile below), so credentials and recipe data can't be read by anything sniffing the network path.
 
-```
-     conn = db_pool.get_connection()
-     cursor = conn.cursor()
-     cursor.execute("""
-         CREATE TABLE IF NOT EXISTS recipes (
-             id INT AUTO_INCREMENT PRIMARY KEY,
-             name VARCHAR(255) NOT NULL,
-             email VARCHAR(255) NOT NULL,
-             recipe_name VARCHAR(255) NOT NULL,
-             ingredients TEXT,
-             description_main TEXT,
-             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-         );
-     """)
-     cursor.close()
-     conn.close()
-     logger.info("✅ Database pool initialized and table verified.")
-     return True
+Once the pool exists, it's used to confirm — and lazily create — the schema:
+
+```python
+cursor.execute("""
+    CREATE TABLE IF NOT EXISTS recipes (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) NOT NULL,
+        recipe_name VARCHAR(255) NOT NULL,
+        ingredients TEXT,
+        description_main TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+""")
 ```
 
-- **`conn = db_pool.get_connection()`** this instantiates the connection using the `db_pool` configuration. Once the connection is established, it's time to test the connection; the cursor executes a create table command to create the database table if it doesn't exist.
-- **`cursor.close()` & `conn.close()`** Once the database connection pooling is initialized and the table is verified then the cursor and the connection close; essentially this closes the query but the connection is returned to the pool.
-- **`logger.info()`** A message is logged and at this point the connection is a success and the try method returns true (1).
-- **`except Exception as e:`** If an error occurs then the it is handled by the exception which logs the incident and exits with false (0)
+This is intentionally idempotent (`IF NOT EXISTS`) — if the database doesn't exist, then it is created else skipped; the app can boot against a brand-new database or an existing one without a separate migration step.
+
+### 5. Starting the pool, with retries, at import time
+
+```python
+def startup_db_connection():
+    for attempt in range(3):
+        if init_connection_pool():
+            return True
+        logger.warning(f"⚠️ Attempt {attempt+1} failed, retrying in 5 seconds...")
+        time.sleep(5)
+    logger.error("❌ CRITICAL: DB connection failed after retries.")
+    return False
+
+startup_db_connection()
+```
+
+This call sits at module level, so it runs the moment Gunicorn imports `app.py` — before the process ever accepts a request. RDS isn't always instantly reachable the moment a container starts (a Multi-AZ failover, a cold VPC endpoint, a security group still propagating), so the app gives it three tries, five seconds apart, before giving up. Critically, it does **not** crash the process if all three fail — it logs a critical error and moves on, because the routes themselves have a
+second safety net (next section) that can still recover later without the whole container needing to be replaced.
+
+### 6. `GET /api/get_recipe` — reading recipes, with self-healing
+
+This function queries the database using the connection pool, `db_pool`; while ensuring the data format matches the frontend.
+
+```python
+@app.route('/api/get_recipe', methods=['GET'])
+def get_recipes():
+    global db_pool
+    if not db_pool:
+        logger.warning("⚠️ Database pool not found during GET. Attempting reconnection...")
+        if not init_connection_pool():
+            return jsonify({"error": "DB not ready"}), 503
+
+    try:
+        conn = db_pool.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM recipes ORDER BY id DESC")
+        rows = cursor.fetchall()
+
+        recipes = [{
+            'id': r['id'],
+            'name': r['name'],
+            'email': r['email'],
+            'recipe_name': r['recipe_name'],
+            'ingredients': r['ingredients'],
+            'recipe_details': r['description_main'],  # renamed to match the frontend's field name
+            'created_at': r['created_at'].isoformat() if r['created_at'] else None
+        } for r in rows]
+
+        cursor.close()
+        conn.close()
+        return jsonify(recipes)
+    except Exception as e:
+        logger.error(f"Error fetching recipes: {e}")
+        return jsonify({"error": str(e)}), 500
+```
+
+Three things worth calling out:
+
+1. **`@app.route('/api/get_recipe', methods=['GET'])`** This maps any url request for `/api/get_recipe` directly
+   to this function. So when someone request that page on the browser, Flask executes this function.
+
+2. **The reconnect guard.** If `startup_db_connection()` gave up earlier (say, RDS was mid-failover
+   during boot), the pool is `None` — but rather than every request failing forever, the very next
+   `GET` retries the connection itself. A transient outage at boot becomes self-healing instead of
+   requiring someone to notice and restart the container.
+3. **The field rename.** The database column is `description_main`; the frontend expects
+   `recipe_details`. That translation happens here, in the API layer, so the database schema and the
+   frontend's data contract are free to evolve independently of each other.
+
+### 7. `POST /api/add_recipe` — writing a new submission
+
+```python
+@app.route('/api/add_recipe', methods=['POST'])
+def add_recipe():
+    ...
+    data = request.get_json()
+    query = """
+        INSERT INTO recipes (name, email, recipe_name, ingredients, description_main)
+        VALUES (%s, %s, %s, %s, %s)
+    """
+    cursor.execute(query, (
+        data.get('name'), data.get('email'), data.get('recipe_name'),
+        data.get('ingredients'), data.get('description_main')
+    ))
+```
+
+Same reconnect guard as the `GET` route. The detail worth noticing is the **`%s` placeholders passed as a tuple**, rather than an f-string building raw SQL text. The MySQL connector parameterises the query and escapes the values itself — that's what prevents SQL injection. Nothing in this route ever trusts the request body as anything other than data, no matter what a submitter types into the recipe form.
+
+### 8. `GET /health` — deliberately shallow
+
+```python
+@app.route('/health')
+def health_check():
+    """
+    Only proves the network and Flask server are alive.
+    Do NOT check the DB here to avoid ALB container assassination.
+    """
+    return "OK", 200
+```
+
+This is the one route that intentionally does almost nothing. It doesn't touch the database — it only proves the process is running and can answer HTTP requests at all. That's a deliberate design choice, not an oversight: if this check _did_ call the database, and RDS was mid-failover (routine on a Multi-AZ instance — see `infrastructure/02-aws-rds`), the load balancer or orchestrator would see the health check fail, conclude the container is broken, and kill and restart it — right as the database was about to recover on its own. There's a name for that failure mode in this project's notes: **"container assassination."** Because this endpoint is shallow, v1 can safely reuse the _same_ `/health` route for both **liveness** ("is the process alive?") and **readiness** ("should traffic be sent here?") checks, on whichever platform is running it — an ECS target-group health check or a Kubernetes probe.
+
+This choice matters more when compared with the Go rewrite: `apps/v2-backend-go`'s `/health` is _deep_ — it calls `db.Ping()` — which is fine for readiness but would trigger exactly the crash-loop described above if it were also wired to liveness. That's why v2 ships a second, shallow `/livez` endpoint instead of copying this single-endpoint pattern. See that app's README for the full contract.
+
+---
+
+## The Dockerfile: a small, non-root, TLS-ready image
+
+This is a two stage build, so that compilers and build tooling never ship in the image that actually runs in production. Essentially this is the process of distilling/refining the image; reducing attach surface, shedding the raw ingredients and impurities, all the libraries for building; bottling the lighter
+purified/distilled content for delivery, the final image without the bulky build essentials pushes, builds and starts faster, this matters in production.
+
+```dockerfile
+FROM python:3.11-slim AS builder
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential gcc curl
+RUN curl -sS --fail -O https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+COPY requirements.txt .
+RUN pip install --user --no-cache-dir -r requirements.txt
+```
+
+**Stage 1 (`builder`)** installs a C compiler (some Python wheels need one to build), downloads Amazon's RDS certificate bundle once at build time, and installs the pinned dependencies into the invoking user's local site-packages (`--user`) so the whole tree can be copied into the next stage.
+
+```dockerfile
+FROM python:3.11-slim AS runner
+RUN groupadd -r ritualuser && useradd -r -g ritualuser ritualuser
+COPY --from=builder /root/.local /home/ritualuser/.local
+COPY --from=builder /build/global-bundle.pem /app/global-bundle.pem
+COPY . .
+RUN chown root:root /app/global-bundle.pem && chmod 444 /app/global-bundle.pem
+RUN chown -R ritualuser:ritualuser /app && chmod 755 /app
+USER ritualuser
+EXPOSE 5000
+CMD ["gunicorn", "--worker-tmp-dir", "/dev/shm", "--bind", "0.0.0.0:5000", "--workers", "4", "--threads", "2", "app:app"]
+```
+
+**Stage 2 (`runner`)** starts from a clean, slim base with no build tools at all — smaller image, smaller attack surface. It copies over only the already-built dependencies, the RDS certificate, and the application code.
+
+- **Non-root by construction.** A dedicated `ritualuser` is created and the process runs as that user (`USER ritualuser`), never root. If the app were ever compromised, the attacker doesn't inherit root inside the container.
+- **The certificate is read-only even to the app's own user** (`chmod 444`, owned by `root:root`) — the app can read it to verify RDS's certificate, but nothing running as `ritualuser` can tamper with it.
+- **Gunicorn, not Flask's built-in server.** The `app.run(...)` call at the bottom of `app.py` only ever executes when the file is run directly (`python app.py`) for local development. In the container, Gunicorn is the real "Web Server Gateway Interface" (WSGI) server, running 4 worker processes × 2 threads each so the app can serve several requests concurrently instead of one at a time.
+- **Gunicorn worker heartbeat files & `/tmp`** Each gunicorn worker creates a small heartbeat file in the configured tmp dir, `/tmp` Gunicorn watches the mtime of these files to detect whether a worker has hung (this is the mechanism behind --timeout). If a worker stops updating its heartbeat file, the Gunicorn assumes it's frozen and kills/respawns it. This is purely gunicorn's internal worker-liveness protocol, nothing to do with the application. But it means gunicorn must be able to write small files somewhere at runtime, or workers fail to start.
+- **Runtime Read-only root file system** In enhancing container security at runtime, the container root filesystem will be set to read-only; When this happens `/tmp` becomes read-only too, since it's just a directory on that root filesystem. Gunicorn's default tmp dir (`/tmp`) would then fail to create the heartbeat file, and workers wouldn't boot.
+- **`/dev/shm` solution** `/dev/shm` is a distinct mount point with its own tmpfs, so it stays writable even when `--read-only` (Docker) or `readOnlyRootFilesystem: true` (ECS/K8s) is applied to everything else. Further, `/dev/shm` is memory-backed, so heartbeat writes are fast and don't get delayed by slow/overlay disk I/O,which reduces false-positive worker timeouts under load.
+
+## `requirements.txt` at a glance
 
 ```
- except Exception as e:
-     logger.error(f"❌ Database initialization failed: {e}")
-     return False
+Flask==3.1.0                     # the web framework
+flask-cors==5.0.0                # CORS headers for /api/*
+gunicorn==23.0.0                 # production WSGI server
+mysql-connector-python==9.1.0    # MySQL driver + connection pooling
+boto3==1.35.0 / botocore==1.35.0 # AWS SDK (Secrets Manager)
+python-dotenv==1.0.1             # .env loading for local development
 ```
 
-### 6. Start db connection
+Every dependency is pinned to an exact version, not a range — a deliberate choice so a rebuild six months from now produces the same behaviour as the one tested today, rather than silently picking up a breaking change from a dependency's minor release.
 
-### 7. Retrieve recipes from db
+## Where this fits in the bigger picture
 
-### 8. Add recipe to db
+This service is deployment-target-agnostic: the exact same image is run by **both** `infrastructure/04-aws-ecs` (as a Fargate task behind an internal ALB) **and**
+`infrastructure/05-aws-k8s` (as a Kubernetes Deployment behind an Istio-meshed Service) — never both at once. The behaviour underneath (a shallow health check, a platform-neutral TCP keepalive fix) is correct on both.
 
-### 9. health check route
+It's the **v1 / baseline** half of a v1-vs-v2 comparison: `apps/v2-backend-go` implements the same three routes against the same database, in Go, so the team can see how a rewrite performs under Istio traffic-shifting — canary, blue-green, and shadow/mirrored traffic. See `infrastructure/05-aws-k8s/README.md` for how that traffic is actually split between the two.
