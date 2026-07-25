@@ -41,16 +41,6 @@ module "alb" {
   public_alb_sg_id = module.security_groups.alb_sg_id  
 }
 
-# module "endpoints" {
-#   source = "../../modules/endpoints"
-
-#   vpc_id = module.vpc.vpc_id
-#   environment = var.environment
-#   common_tags = local.common_tags
-#   aws_region = var.aws_region
-#   app_subnet_ids = module.vpc.app_subnet_ids
-# }
-
 module "endpoints" {
   source = "../../modules/endpoints"
 

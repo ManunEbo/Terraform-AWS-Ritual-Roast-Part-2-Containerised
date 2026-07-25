@@ -2,6 +2,8 @@
 #  Interface Endpoints (Secrets Manager, ECR, ECS, Logs)
 #--------------------------------------------------------------
 
+# *** These PrivateLink Interface endpoints are only needed here, Layer 4, so we keep them here ***
+
 # # Secrets Manager: For lambda rotation and App secret retrieval
 # resource "aws_vpc_endpoint" "secretsmanager" {
 #   vpc_id              = var.vpc_id
@@ -22,7 +24,7 @@ resource "aws_vpc_endpoint" "ecr_api" {
   service_name        = "com.amazonaws.${var.aws_region}.ecr.api"
   vpc_endpoint_type   = "Interface"
   security_group_ids  = [var.endpoints_sg_id]
-  subnet_ids          = var.app_subnet_ids
+  subnet_ids          = var.app_subnet_ids    # This has 3 subnets so we are using 3 ENIs, one in each subnet
   private_dns_enabled = true
 
   tags = merge(var.common_tags, {
@@ -36,7 +38,7 @@ resource "aws_vpc_endpoint" "ecr_dkr" {
   service_name        = "com.amazonaws.${var.aws_region}.ecr.dkr"
   vpc_endpoint_type   = "Interface"
   security_group_ids  = [var.endpoints_sg_id]
-  subnet_ids          = var.app_subnet_ids
+  subnet_ids          = var.app_subnet_ids    # This has 3 subnets so we are using 3 ENIs, one in each subnet
   private_dns_enabled = true
 
   tags = merge(var.common_tags, {
@@ -49,7 +51,7 @@ resource "aws_vpc_endpoint" "logs" {
   vpc_id              = var.vpc_id
   service_name        = "com.amazonaws.${var.aws_region}.logs"
   vpc_endpoint_type   = "Interface"
-  subnet_ids          = var.app_subnet_ids
+  subnet_ids          = var.app_subnet_ids    # This has 3 subnets so we are using 3 ENIs, one in each subnet
   security_group_ids  = [var.endpoints_sg_id]
   private_dns_enabled = true
 

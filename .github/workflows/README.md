@@ -25,8 +25,8 @@ This pipeline automates building and pushing our **Version 1 (V1)** images consi
 To optimize execution speed and reduce build costs, this workflow is split into three decoupled jobs:
 
 1. **Detect Changes (`detect-changes`):** Runs first. It scans the incoming git commit. If changes are detected inside specific application directories, it flags them using boolean outputs.
-2. **Build V1 Frontend (`build-v1-frontend`):** Runs _only_ if changes were detected in `apps/v1-frontend-nextjs`. It logs into AWS using secure, passwordless **OIDC IAM Roles**, builds the Docker image on a GitHub-hosted runner (Ubuntu container), and pushes it to ECR.
-3. **Build V1 Backend (`build-v1-backend`):** Runs _only_ if changes are detected in `apps/v1-backend-flask`. It follows the exact same build-and-push sequence using a backend-specific IAM Role.
+2. **Build V1 Frontend (`build-v1-frontend`):** Runs only if changes were detected in `apps/v1-frontend-nextjs`. It logs into AWS using secure, passwordless **OIDC IAM Roles**, builds the Docker image on a GitHub-hosted runner (Ubuntu container), and pushes it to ECR.
+3. **Build V1 Backend (`build-v1-backend`):** Runs only if changes are detected in `apps/v1-backend-flask`. It follows the exact same build-and-push sequence using a backend-specific IAM Role.
 
 ### Under the Hood: The Build Step
 
@@ -72,7 +72,7 @@ on:
 
 ## 2. Kubernetes & Istio GitOps Pipeline (`deploy-ghcr-k8s.yml`)
 
-This pipeline represents our production-grade upgrade. Instead of just pushing container images, this workflow manages a fully automated **GitOps deployment loop** targeting a **self-managed Kubernetes cluster** — K3s built from scratch on plain EC2, not a managed service like EKS — running an **Istio Service Mesh**.
+This pipeline represents our production-grade upgrade. Instead of just pushing container images, this workflow manages a fully automated **GitOps deployment loop** targeting a **self-managed Kubernetes cluster** K3s built from scratch on plain EC2, not a managed service like EKS running an **Istio Service Mesh**.
 
 ### Key Architectural Concepts
 
@@ -138,7 +138,6 @@ Once the containers are safely pushed to GHCR, the pipeline updates our Kubernet
 #### Why we must pin to SHA-1 (and not use `:latest`):
 
 If we only configured our Kubernetes manifests to point to `:latest`, Kubernetes wouldn't know when a change occurred because the tag name `:latest` never changes.
-
 Additionally, if we ever needed to **rollback** to a previous deployment, Kubernetes would look at the stable, unchanging tag `:latest` and be unable to distinguish the broken image from the working one.
 
 By dynamically updating our YAML deployment manifest files with the unique **Git Commit SHA-1**, we guarantee:

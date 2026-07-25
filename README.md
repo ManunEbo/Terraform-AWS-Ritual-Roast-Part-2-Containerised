@@ -1,14 +1,48 @@
 # Ritual Roast — one app, two cloud platforms, built as code
 
-> A deliberately simple recipe-contest web app, deployed two completely different ways — first on AWS
-> ECS/Fargate, then on a hand-built Kubernetes cluster — over one shared, Terraform-defined
-> foundation, so the two platforms can be compared under live, shifting traffic.
+<!-- Things that needs to be explained:
+
+1. The project structure by layers <------ Explain the benefit of a layered approach
+   - Being able to stack and unstack components on top of each other with ease
+   - Isolation of components reduces blast radius when something goes wrong
+   -
+   -
+1.0 Moduler approach, advantages
+1.1 environments -> dev
+  a. providers.tf
+  b. main.tf
+  c. shared_locals.tf
+  d. terraform.tfvars
+  e. outputs.tf
+  f. variables.tf
+  g. terraform.lock file and its contents
+
+  "The terraform state file holds the current state of the deployment i.e. all the resources deployed and the parameter settings including sensitive values. If we lose this file or corrupt it, it makes it difficult to recover the deployment wholistically."
+1.2 *** Variable precedence in Terraform ***
+
+2. data sources
+Briefly explain the roles that these files play and
+why that's a major advantage over passing values via modules and outputs.tf
+
+3. Instructions
+  a. Deployment
+    - DB credentials
+    - tf plan & tf apply
+  b. Deploying Layer 3 & 4
+  c. grafana & grafana tokens
+  d. github PAT
+  e. Layer 5 pre-deploy requirements
+
+
+ -->
+
+<!-- Fix this: re-word the intro for Ritual roast and this particular project -->
 
 Ritual Roast is a fictitious company running an online recipe contest: a visitor fills in their
 name, email, and a recipe; a table on the same page shows everyone else's submissions; a countdown
 timer marks the deadline. That's the whole surface of the product, and it's deliberately simple —
 because the recipe contest isn't really the subject of this repository. **What's actually being built
-here is a from-scratch, production-style AWS platform on which the *same* application is deployed two
+here is a from-scratch, production-style AWS platform on which the _same_ application is deployed two
 completely different ways — first on AWS's managed container service, then on a hand-built Kubernetes
 cluster — so the two approaches can be compared head-to-head, each running against the same shared
 network and database.**
@@ -35,7 +69,7 @@ Every document in this repository, including this one, is written with two audie
 once:
 
 1. **A learning resource.** Someone with no cloud or infrastructure background should be able to read
-   any README here and come away understanding *what that piece does and why it exists*, without
+   any README here and come away understanding _what that piece does and why it exists_, without
    needing to already know Terraform, Kubernetes, or AWS.
 2. **A technical demonstration.** Someone evaluating engineering skill should be able to read the same
    documents and see the actual reasoning behind each design decision — not just what was built, but
@@ -47,12 +81,12 @@ There is a lot here — five independent Terraform layers, four application imag
 tool-belt for working the whole thing with an AI pair-programmer. Nobody needs to read all of it in
 one sitting. Pick a starting point:
 
-| You are… | Start here |
-|---|---|
-| A recruiter, or curious about the project generally | Keep reading this page — it's self-contained |
-| Interested in the applications themselves (frontend/backend code) | [`apps/`](#the-applications-v1-vs-v2) below |
-| A platform/cloud engineer, interested in the infrastructure | [`infrastructure/`](#the-five-infrastructure-layers) below, read the five layers in order |
-| Curious how this was built *with* an AI coding assistant | [`.claude/README.md`](.claude/README.md) and [`CLAUDE.md`](CLAUDE.md) |
+| You are…                                                          | Start here                                                                                |
+| ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| A recruiter, or curious about the project generally               | Keep reading this page — it's self-contained                                              |
+| Interested in the applications themselves (frontend/backend code) | [`apps/`](#the-applications-v1-vs-v2) below                                               |
+| A platform/cloud engineer, interested in the infrastructure       | [`infrastructure/`](#the-five-infrastructure-layers) below, read the five layers in order |
+| Curious how this was built _with_ an AI coding assistant          | [`.claude/README.md`](.claude/README.md) and [`CLAUDE.md`](CLAUDE.md)                     |
 
 ## The shape of the project
 
@@ -75,12 +109,12 @@ it means running `terraform destroy` in two directories and `terraform apply` in
 
 ## The five infrastructure layers
 
-| Layer | Builds | |
-|---|---|---|
-| [`01-aws-vpc`](infrastructure/01-aws-vpc/README.md) | The network: a VPC, subnets across three Availability Zones, and the one public load balancer every later layer shares. | Always on |
-| [`02-aws-rds`](infrastructure/02-aws-rds/README.md) | One shared, Multi-AZ MySQL database, with credentials that rotate themselves automatically. | Always on |
-| [`03-aws-ecr`](infrastructure/03-aws-ecr/README.md) | A private container registry, plus GitHub Actions CI that authenticates with no stored AWS password. | ECS phase |
-| [`04-aws-ecs`](infrastructure/04-aws-ecs/README.md) | The application running on AWS Fargate, behind its own internal load balancer. | ECS phase |
+| Layer                                               | Builds                                                                                                                                                                    |                  |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| [`01-aws-vpc`](infrastructure/01-aws-vpc/README.md) | The network: a VPC, subnets across three Availability Zones, and the one public load balancer every later layer shares.                                                   | Always on        |
+| [`02-aws-rds`](infrastructure/02-aws-rds/README.md) | One shared, Multi-AZ MySQL database, with credentials that rotate themselves automatically.                                                                               | Always on        |
+| [`03-aws-ecr`](infrastructure/03-aws-ecr/README.md) | A private container registry, plus GitHub Actions CI that authenticates with no stored AWS password.                                                                      | ECS phase        |
+| [`04-aws-ecs`](infrastructure/04-aws-ecs/README.md) | The application running on AWS Fargate, behind its own internal load balancer.                                                                                            | ECS phase        |
 | [`05-aws-k8s`](infrastructure/05-aws-k8s/README.md) | A self-managed Kubernetes cluster (K3s, on plain EC2) running an Istio service mesh and an ArgoCD GitOps pipeline — where **both** application versions run side by side. | Kubernetes phase |
 
 Laid out by deploy order — including the one-time platform swap in the middle — the sequence is:
@@ -92,8 +126,8 @@ Laid out by deploy order — including the one-time platform swap in the middle 
 01 and 02 are the permanent foundation — the network and the database — and they stay up the whole
 time. The ECS phase (03 + 04) and the Kubernetes phase (05) are never deployed at once: once the ECS
 build has been exercised and compared, layers 3 and 4 are destroyed — specifically to stop paying for
-a compute platform that has done its job — *before* layer 5 is deployed, so the two never contend for
-the shared load balancer. Layer 5 then inherits the *exact same* ALB (from layer 1) and database
+a compute platform that has done its job — _before_ layer 5 is deployed, so the two never contend for
+the shared load balancer. Layer 5 then inherits the _exact same_ ALB (from layer 1) and database
 (from layer 2) that the two permanent layers have been holding up all along — which is precisely why
 those were carved out as their own standalone layers to begin with. (A high-level design sketch lives
 at `infrastructure/01-aws-vpc/documents/RR-HLD-V2.png`, but the implementation moved past it in
@@ -106,17 +140,17 @@ traffic-path diagrams inside each layer's own README describe what was actually 
 a backend each — built specifically so they can be compared under live, shifting traffic rather than
 just read side by side as code.
 
-| | v1 (baseline) | v2 (challenger) |
-|---|---|---|
+|          | v1 (baseline)                                                                                        | v2 (challenger)                                                                                   |
+| -------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
 | Frontend | [Next.js](apps/v1-frontend-nextjs/README.md) — server-rendered, fetches data before the page is sent | [Vite + React](apps/v2-frontend-vite/README.md) — a client-side SPA, fetches after the page loads |
-| Backend | [Flask](apps/v1-backend-flask/README-1.md) — Python, `mysql-connector` pooling | [Go](apps/v2-backend-go/README.md) — native `net/http` and `database/sql` |
-| Runs on | **Both** ECS (layer 4) and Kubernetes (layer 5) — one image, two platforms | Kubernetes (layer 5) **only** — purpose-built for the traffic-shifting exercises |
+| Backend  | [Flask](apps/v1-backend-flask/README-1.md) — Python, `mysql-connector` pooling                       | [Go](apps/v2-backend-go/README.md) — native `net/http` and `database/sql`                         |
+| Runs on  | **Both** ECS (layer 4) and Kubernetes (layer 5) — one image, two platforms                           | Kubernetes (layer 5) **only** — purpose-built for the traffic-shifting exercises                  |
 
 Both backends talk to the identical database from layer 2, which is what makes a live comparison
 meaningful in the first place: v1 and v2 are always being judged against the same data, not separate
 copies of it. The two pairs also differ in a way that's easy to miss but matters a lot in practice —
 v1's Flask health check is shallow enough to serve as both its liveness and readiness probe, while
-v2's Go health check genuinely queries the database, which means it *must* be split into a separate
+v2's Go health check genuinely queries the database, which means it _must_ be split into a separate
 shallow endpoint for liveness. Get that backwards and a routine database failover turns into a
 fleet-wide crash loop. It's covered in depth in the [Go backend's README](apps/v2-backend-go/README.md)
 because it's the single most safety-critical design decision anywhere in this project.
@@ -150,10 +184,10 @@ contexts is more telling than any single instance of it.
 - **Security.** No AWS credential is ever stored as a GitHub secret — CI authenticates to AWS via
   OpenID Connect federation instead (see [layer 3](infrastructure/03-aws-ecr/README.md)). Internal
   traffic is chained security-group-to-security-group rather than by IP range: every hop, from the
-  public load balancer down to the database, authorises the *specific* security group allowed to reach
+  public load balancer down to the database, authorises the _specific_ security group allowed to reach
   it, so a rule never trusts a raw CIDR block where naming the source directly would do (the only
   deliberately broad `0.0.0.0/0` ranges are the unavoidable ones — the public ALB accepting the
-  internet, and the cluster nodes' outbound path for pulling images). IAM roles are split by *need*,
+  internet, and the cluster nodes' outbound path for pulling images). IAM roles are split by _need_,
   not convenience: on ECS the frontend task is granted no AWS permissions at all — it has no reason to
   touch an AWS API — and on Kubernetes only the backend worker nodes, never the frontend ones, can
   read the database secret (see [layer 4](infrastructure/04-aws-ecs/README.md) and
@@ -162,7 +196,7 @@ contexts is more telling than any single instance of it.
   automatically on a schedule (see [layer 2](infrastructure/02-aws-rds/README.md)).
 - **Reliability.** The database runs Multi-AZ, meaning a failover is a routine, survivable event
   rather than an incident. That single fact is the reason this project cares so much about the
-  difference between a *shallow* health check (proves a process is alive) and a *deep* one (proves a
+  difference between a _shallow_ health check (proves a process is alive) and a _deep_ one (proves a
   dependency is reachable) — wiring the wrong one to liveness turns a 60–120 second database blip into
   a self-inflicted, fleet-wide outage. This exact lesson appears, and is fixed, in three different
   places: the [Flask backend](apps/v1-backend-flask/README-1.md), the
@@ -186,7 +220,7 @@ contexts is more telling than any single instance of it.
 
 ## Built with an AI pair-programmer, deliberately fenced in
 
-Alongside the application and infrastructure code, this repository also documents *how it was built*:
+Alongside the application and infrastructure code, this repository also documents _how it was built_:
 `CLAUDE.md` is the project brief an AI coding assistant (Claude Code) loads automatically at the start
 of every session — architecture, prior incidents, and the current state of the work. `RUNBOOK.md` and
 `prompt.md` are the operational companions: the procedure for driving a session, and a kickoff prompt
@@ -194,7 +228,7 @@ used for one specific debugging exercise. `.claude/settings.json` and the six sp
 under `.claude/agents/` are the actual safety mechanism — a tiered permission system that lets the
 assistant freely inspect the account and the cluster, but never apply, deploy, or push anything
 without a human approving that specific action first. The reasoning behind that whole setup —
-including *why* a fix is always proposed as a diff and never applied silently — is written up in
+including _why_ a fix is always proposed as a diff and never applied silently — is written up in
 [`.claude/README.md`](.claude/README.md).
 
 One small detail worth pointing out: the documentation style used across every README in this
@@ -229,8 +263,8 @@ prompt.md                                          A one-off kickoff prompt (K8s
 ## Where this sits in the wider series
 
 This is **Part 2** of a three-part series built around the same fictitious company and recipe-contest
-brief — and it's the part named *"Containerised"* for a reason: it's where the architecture becomes
+brief — and it's the part named _"Containerised"_ for a reason: it's where the architecture becomes
 container-based and multi-platform. The series as a whole rebuilds a console-driven AWS reference
 architecture (the SAA-C03 capstone course referenced above) as Terraform Infrastructure as Code. This
-README, and the ten it links to, describe only what actually exists in *this* repository — nothing
+README, and the ten it links to, describe only what actually exists in _this_ repository — nothing
 from the other parts is assumed or duplicated here.

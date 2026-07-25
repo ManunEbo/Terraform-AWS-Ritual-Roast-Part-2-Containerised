@@ -8,13 +8,13 @@ Fargate (containers with no servers to patch or manage — AWS runs the underlyi
 
 ## What this layer builds
 
-| Module | Creates |
-|---|---|
-| `modules/ecs` | The ECS cluster, and Fargate task definitions + services for the frontend and backend. |
-| `modules/load-balancers` | A second, **internal** load balancer for frontend→backend traffic, plus this layer's own routing rule attached onto the shared public ALB from layer 1. |
-| `modules/iam` | One shared "execution" role, and two deliberately unequal "task" roles. |
-| `modules/endpoints` | Additional private AWS API access (ECR, CloudWatch Logs) for Fargate tasks that have no NAT gateway. |
-| `modules/security_groups` | Four security groups chaining every hop from the public internet down to the database. |
+| Module                    | Creates                                                                                                                                                 |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `modules/ecs`             | The ECS cluster, and Fargate task definitions + services for the frontend and backend.                                                                  |
+| `modules/load-balancers`  | A second, **internal** load balancer for frontend→backend traffic, plus this layer's own routing rule attached onto the shared public ALB from layer 1. |
+| `modules/iam`             | One shared "execution" role, and two deliberately unequal "task" roles.                                                                                 |
+| `modules/endpoints`       | Additional private AWS API access (ECR, CloudWatch Logs) for Fargate tasks that have no NAT gateway.                                                    |
+| `modules/security_groups` | Four security groups chaining every hop from the public internet down to the database.                                                                  |
 
 ## The traffic path: two load balancers, not one
 
@@ -43,7 +43,7 @@ Backend Fargate task  (Flask — 256 CPU / 512 MB, 2 tasks, Spot)
 RDS MySQL  (layer 2)
 ```
 
-Two load balancers, not one, because they solve different problems. The public ALB is *shared*
+Two load balancers, not one, because they solve different problems. The public ALB is _shared_
 across this entire project (layer 5's Kubernetes stack reuses the exact same one), so it can't be
 where ECS-specific, private routing details live. The internal ALB exists purely so the frontend
 task has one stable, private address to call the backend at — a much simpler answer than standing up
@@ -64,14 +64,14 @@ resource "aws_ecs_cluster_capacity_providers" "rr_ecs_cp" {
 ```
 
 `containerInsights` turns on detailed per-task CloudWatch metrics (CPU, memory, network) with no
-extra instrumentation needed in the app code. The cluster registers *both* Fargate and Fargate
+extra instrumentation needed in the app code. The cluster registers _both_ Fargate and Fargate
 Spot as available capacity — but each **service** below picks its own strategy, and the two services
 disagree on purpose:
 
 - The **frontend** service pins to plain `FARGATE` (on-demand) — user-facing traffic shouldn't be
   interrupted by a Spot reclamation mid-request.
 - The **backend** service runs on `FARGATE_SPOT` — the source comment says it plainly:
-  *"Cost-saving for development!"* An internal API, called only by the frontend and never directly
+  _"Cost-saving for development!"_ An internal API, called only by the frontend and never directly
   by a user's browser, tolerates an occasional Spot interruption far more comfortably (ECS simply
   reschedules the task elsewhere) in exchange for a substantial discount over on-demand pricing.
 
@@ -115,7 +115,7 @@ same design.
 
 `BACKEND_URL` and `SECRET_ARN` are both injected as plain environment variables here — neither is a
 secret itself, just a pointer (a DNS name, an ARN); see `infrastructure/02-aws-rds/README.md` for why
-the *actual* database credentials are never handled this way.
+the _actual_ database credentials are never handled this way.
 
 ### 3. IAM: one shared passport, two unequal task roles
 
@@ -139,14 +139,14 @@ resource "aws_iam_role" "rr_ecs_frontend_task_role" { ... }
 
 The **execution role** is infrastructure-level plumbing every task needs regardless of what it does
 (pull the image, write logs) — it's shared because scoping it per-task would add complexity without
-any security benefit, since it never grants access to *application* data.
+any security benefit, since it never grants access to _application_ data.
 
 The **task roles** are where the real access-control decision lives, and they're deliberately
 unequal. The backend's task role can read exactly one secret (matching the ARN pattern from layer 2)
 and reach exactly one S3 bucket — nothing else. The frontend's task role, by contrast, has **no
 custom policy attached to it at all** — it exists only because Fargate requires every task to have
-one, and the source code labels this explicitly: *"ZERO-TRUST FIX: Frontend gets its own isolated
-role (No DB Secret Access)."* If the frontend container were ever compromised, the AWS credentials it
+one, and the source code labels this explicitly: _"ZERO-TRUST FIX: Frontend gets its own isolated
+role (No DB Secret Access)."_ If the frontend container were ever compromised, the AWS credentials it
 could assume grant it nothing. This lines up exactly with what `apps/v1-frontend-nextjs`'s own code
 does: the frontend never calls an AWS SDK for anything, so an empty IAM role isn't a missing feature —
 it's the permissions correctly mirroring the fact that the frontend has no legitimate reason to touch
@@ -168,7 +168,7 @@ moment ECS places a new task, the ALB starts health-checking it immediately — 
 process needs a few seconds to actually finish booting before it can answer that check at all.
 Without this grace period, ECS sees the first few checks fail, concludes the task is broken, and
 kills and replaces it — before it was ever given the chance to become healthy. That's a self-inflicted
-restart loop on *every single deployment*, which is exactly what the source comment is flagging as
+restart loop on _every single deployment_, which is exactly what the source comment is flagging as
 "a huge culprit for the failures."
 
 **`lifecycle { ignore_changes = [task_definition, desired_count] }`** is a deliberate hand-off: once
@@ -177,7 +177,7 @@ running or how many tasks are desired. That's what allows a separate process —
 pushing a new image and registering a new task-definition revision, or someone manually scaling the
 service for a load test — to operate the service day to day, without every subsequent
 `terraform apply` fighting to reset it back to whatever was true the moment this resource was first
-created. Terraform owns the *shape* of the service; something else owns its *day-to-day state*.
+created. Terraform owns the _shape_ of the service; something else owns its _day-to-day state_.
 
 ### 5. The internal ALB and this layer's rule on the shared one
 
@@ -202,9 +202,9 @@ resource "aws_lb_listener_rule" "rr_ecs_frontend_rule" {
 }
 ```
 
-The frontend's health check on the *public* ALB deliberately points at `/api/health` — the shallow
+The frontend's health check on the _public_ ALB deliberately points at `/api/health` — the shallow
 Next.js route that never calls the backend (see `apps/v1-frontend-nextjs/README.md`) — so a slow or
-struggling backend can never make the ALB conclude the *frontend* is unhealthy and pull it from
+struggling backend can never make the ALB conclude the _frontend_ is unhealthy and pull it from
 rotation. **Priority 100** on this listener rule is a specific, deliberate number: it leaves room for
 `infrastructure/05-aws-k8s` to later attach its own rule at **priority 10** on the same shared
 listener. The two never actually compete for traffic (this project destroys layers 3–4 before
@@ -219,10 +219,28 @@ gateway anywhere in layers 1–4 — everything they need reaches AWS over priva
 instead. Fargate tasks running in this layer's private subnets need to pull their own container image
 from ECR and write logs to CloudWatch; this layer's `modules/endpoints` adds the ECR API, ECR Docker,
 and CloudWatch Logs interface endpoints for exactly that — plus its own S3 gateway endpoint (carrying
-a locked-down, identity-scoped access policy), because ECR stores the actual image *layers* in S3, so
+a locked-down, identity-scoped access policy), because ECR stores the actual image _layers_ in S3, so
 pulling an image needs an S3 path as well — all of it without ever touching the public internet.
 Layer 1's Secrets Manager interface endpoint is reused as-is (this layer's own copy of it is left
 commented out in the source).
+
+<!--
+Review how to fit in the following section:
+
+An S3 VPC endpoint lets resources inside the VPC (EC2, ECS tasks, K3s nodes, Lambda, etc.) talk to S3 without the traffic leaving the AWS network. Normally, if a resource in a private subnet needs to hit S3, the traffic has to go:
+
+        **private subnet → NAT gateway → `igw` → out to the public internet → to S3's public endpoint → back**
+
+That's real cost (NAT gateway data processing charges add up fast) and it also means S3 traffic is technically traversing the public internet path, even though it stays within AWS's backbone in practice. A VPC endpoint removes that hop entirely by creating a private, direct path from the VPC to S3. Hence the traffic never leaves the AWS backbone.
+
+Gateway endpoint is free, it adds an entry to the VPC route table that routes S3-bound traffic (by prefix list, since S3 doesn't have a fixed CIDR) directly to S3 instead of out through a NAT/IGW. No ENI, no hourly cost, no data processing charge.
+
+Since ECR stores the images on S3, in the background, then retrieving these images via VPC endpoints also slashes potential associated cost of pulling the images via a NAT gateway.
+
+*** Now include a small section about Private Link Interface endpoints ***
+
+
+ -->
 
 ### 7. Security groups: a five-hop chain, with two rules injected backward into other layers
 
