@@ -30,6 +30,7 @@ resource "null_resource" "rr_build_and_clean_layer" {
   }
 }
 
+# This deploys the lambda layer
 resource "aws_lambda_layer_version" "rr_db_layer" {
   # Ensure the layer isn't created until the bash script finishes zipping
   depends_on = [null_resource.rr_build_and_clean_layer]

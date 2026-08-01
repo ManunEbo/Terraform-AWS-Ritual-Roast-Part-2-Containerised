@@ -1,4 +1,4 @@
-# 01-aws-vpc (Layer 1) — VPC, Networking & the Shared Front Door
+# Deploying the VPC
 
 This is the base layer. Here we build the foundation for our infrastructure: the VPC, Subnets, the Loadbalancer, Security groups and VPC-Endpoints for Secrets Manager. Once this layer is up and running, other layers can then plugin, essentially attaching themselves to this layer, making use of the resources of this layer.
 
@@ -11,7 +11,7 @@ This is the base layer. Here we build the foundation for our infrastructure: the
 | `modules/load_balancers`  | The one public Application Load Balancer every later layer shares, with a deliberately minimal catch-all listener.     |
 | `modules/endpoints`       | A private, in-VPC network path to AWS Secrets Manager, so credential lookups never have to leave the VPC.              |
 
-## 0. Dev environment wiring
+## 0. Environment configuration
 
 Since the `01-aws-vpc/environments/dev` is the subdirectory that holds all the configuration for this layer lets look at some of the important settings and the role they play in this layer.
 
@@ -486,7 +486,24 @@ resource "aws_vpc_endpoint" "rr_secretsmanager" {
 Above it can be seen that the ENIs will be injected inside the App subnets, `subnet_ids = var.app_subnet_ids` . `private_dns_enabled = true` makes AWS's standard DNS name for Secrets Manager (`secretsmanager.eu-west-2.amazonaws.com`) resolve inside the VPC to this private endpoint, ENI's private IP, instead of a public IP. So the boto3 / AWS SDK calls in `apps/v1-backend-flask` and `apps/v2-backend-go` that fetch database credentials need zero code changes to use it; they just call the standard AWS API and the network quietly keeps the traffic private, resolving to the ENIs private IP address.
 Note, this endpoint incurs hourly and per gigabyte costs in additions to the ENIs that need to be injected into the three app subnets.
 
-## Where this fits in the bigger picture
+## 6. Where this fits in the bigger picture
 
 Every later layer depends on this layer and none of them can be usefully applied without it. The sequential deploy order that runs through this whole project — VPC, then RDS, then ECR, then ECS, then (after destroying ECR/ECS) Kubernetes — exists specifically because layers 2 onward all read this layer's subnet IDs, VPC ID, and security groups as inputs. See the root project documentation for the full five-layer sequence, and `infrastructure/04-aws-ecs/README.md` /
 `infrastructure/05-aws-k8s/README.md` for how each of them attaches its own listener rule onto the one ALB this layer creates.
+
+## 7. Instructions
+
+Perform the following tasks to deploy Layer 1:
+
+1. Create an S3 bucket in AWS that will house the state file, do this either on the AWS consol or on the cli.
+2. Open `01-aws-vpc/environments/dev/providers.tf` and change the bucket name from `"rr-capstone-5b160b287a99a6d9"` to your new bucket name
+3. If you're using a different region, change the provider region from `"eu-west-2"` to your desired region
+4. Open `01-aws-vpc/environments/dev/shared_locals.tf` and change `Project_owner` , `s3_bucket` and add/modify/remove any other desired labels
+5. Rename `terraform.tfvars.txt` to `terraform.tfvars`. If your desired region is not `eu-west-2` then open the file and change the respective `az`s values, else **Do NOT** change anything.
+6. Open `01-aws-vpc/environments/dev/variables.tf` and if your desired region is different, update the default value for aws_region variable `default = "eu-west-2"` . If you want to change the VPC name, update the default value for vpc_name, `default = "RR-vpc"` to your desired value.
+7. If on Linux change directory to the layer 1 dev directory `cd infrastructure/01-aws-vpc/environments/dev`
+8. Create an alias for terraform `alias tf=terraform`, this is easier than writing out the long word
+9. Initialize terraform: `tf init`
+10. Run terraform plan: `tf plan` review the outputs and if you're happy proceed to the next command
+11. Run terraform apply, with caution `tf apply`, or if you trusted the plan `tf apply -auto-approve`
+12. Congrats, you've deployed your VPC.

@@ -35,7 +35,7 @@ resource "aws_secretsmanager_secret_version" "rr_db_skeleton" {
 #--------------------------------------------------------------
 # 3. THE DYNAMIC POINTER
 #--------------------------------------------------------------
-# Tracks the "AWSCURRENT" label so ECS and RDS always have the latest.
+# Tracks the "AWSCURRENT" label so ECS, k8s and RDS always have the latest.
 data "aws_secretsmanager_secret_version" "rr_latest_creds" {
   secret_id = aws_secretsmanager_secret.rr_db_secret.id
 
@@ -80,4 +80,18 @@ resource "aws_secretsmanager_secret_rotation" "rr_db_rotation" {
 
   # Only begin rotation once the full host information is in the secret
   depends_on = [aws_secretsmanager_secret_version.rr_db_host_update]
+}
+
+#--------------------------------------------------------------
+# 6. Lambda resource-based policy - allow Secrets Manager to invoke the lambda function
+#--------------------------------------------------------------
+# CRITICAL: Lambda resource-based policy
+# This allows secrets manager to invoke the lambda function.
+
+resource "aws_lambda_permission" "allow_secretsmanager_to_call_lambda" {
+  statement_id  = "AllowExecutionFromSecretsManager"
+  action        = "lambda:InvokeFunction"
+  function_name = var.rotation_lambda_arn
+  principal     = "secretsmanager.amazonaws.com"
+  source_arn    = aws_secretsmanager_secret.rr_db_secret.arn
 }

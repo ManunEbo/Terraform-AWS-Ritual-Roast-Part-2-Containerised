@@ -25,7 +25,7 @@ resource "aws_security_group" "rr_database" {
 # Ingress Rules (MySQL Port 3306)
 #--------------------------------------------------------------
 
-# This security group rule will be attached in ECS
+# This security group rule will be attached in ECS as the rr_backend security group only exists when ECS is up
 # resource "aws_security_group_rule" "rr_db_ingress_from_backend" {
 #   type                     = "ingress"
 #   description              = "RR: Backend containers access to MySQL"
