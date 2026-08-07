@@ -1,6 +1,6 @@
 resource "aws_ecr_repository" "rr_frontend_repo" {
   name                 = "rr-${var.environment}-frontend"
-  image_tag_mutability = "MUTABLE"
+  image_tag_mutability = "IMMUTABLE"
 
   # Allow terraform destroy to wipe the images
   force_delete = true
@@ -16,7 +16,7 @@ resource "aws_ecr_repository" "rr_frontend_repo" {
 
 resource "aws_ecr_repository" "rr_backend_repo" {
   name                 = "rr-${var.environment}-backend"
-  image_tag_mutability = "MUTABLE"
+  image_tag_mutability = "IMMUTABLE"
 
   # Allow terraform destroy to wipe the images
   force_delete = true

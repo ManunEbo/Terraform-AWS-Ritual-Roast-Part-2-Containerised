@@ -1,0 +1,44 @@
+****************************************************************************************************************
+				GitHub - Setting up GitHub PAT Manually
+****************************************************************************************************************
+
+Securing that GitHub Personal Access Token (PAT) is the critical master key for your architecture. Because your ECS Fargate tasks and CI/CD pipeline need to pull container images from the GitHub Container Registry (`ghcr.io`), we need to generate a token with very specific package permissions.
+
+Here is the exact, step-by-step path to generate a secure, scoped PAT on GitHub.
+
+### Step 1: Navigate to Developer Settings
+
+1. Log in to **GitHub.com**.
+2. In the upper-right corner of any page, click your **profile photo**, then click **Settings**.
+3. In the left sidebar, scroll all the way to the bottom and click **Developer settings**.
+
+### Step 2: Generate a Classic Token
+
+*(Note: While GitHub offers "Fine-grained" tokens, for external CI/CD and Terraform pulling from `ghcr.io`, "Classic" tokens are currently the most reliable standard).*
+
+1. In the left sidebar, click **Personal access tokens**, then select **Tokens (classic)**.
+2. Click the **Generate new token** drop-down button on the right, and select **Generate new token (classic)**.
+3. Authenticate with your password or biometric device if prompted.
+
+### Step 3: Configure the Token Scopes
+
+1. **Note:** Give the token a descriptive name so you remember what it is for in 6 months (e.g., `Ritual Roast Terraform & GHCR`).
+2. **Expiration:** Set this to **90 days**. (For production, you never want a permanent token. If it leaks, a 90-day expiration acts as a forced safety rotation).
+3. **Select Scopes:** This dictates exactly what the token is legally allowed to touch. Check the following boxes:
+* `repo` (Check the master box to allow full control of private repositories—this is required if your Next.js/Flask code is in a private repo).
+* `write:packages` (Allows your CI/CD pipeline to push new Docker images to GHCR).
+* `read:packages` (Allows your Fargate tasks to download the images).
+* `delete:packages` (Optional, but highly recommended so you can automate the cleanup of old image tags to save storage).
+
+
+
+### Step 4: Capture and Export
+
+1. Scroll to the bottom and click the green **Generate token** button.
+2. **CRITICAL:** GitHub will display the token string (starting with `ghp_...`) exactly once. If you navigate away from this page, you will never be able to see it again. Click the copy icon.
+3. Open your terminal where you are running Terraform and securely export it into your environment variables:
+
+```bash
+export TF_VAR_github_pat="ghp_YOUR_NEW_COPIED_TOKEN_HERE"
+
+```

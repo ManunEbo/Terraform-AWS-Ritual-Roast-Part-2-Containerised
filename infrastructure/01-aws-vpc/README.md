@@ -81,6 +81,8 @@ The example above shows how we pass parameter values as inputs to the `vpc modul
 
 Any values starting with `local.` is coming from `shared_locals.tf` . Any values starting with `var.` is coming from `variables.tf`, however, due to the variable precedence that value might be coming from an environment variable or from `terraform.tfvars`, for example all the subnets data is coming from `terraform.tfvars` file.
 
+`source = "../../modules/vpc"` specigies the module path for the vpc module. Note the `../../` means change directory back 2 parent directories.
+
 **Dependency graph:**
 
 Terraform likes to do things in parallel, however, it's clever enough to know that when deploying project resources there can be relationships/dependencies between the resources. Instead of following a top-to-bottom execution process during a `tf plan` or `tf apply`, Terraform checks every file and maps out all the relationships (builds the dependency graph, [graph.svg](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/01-aws-vpc/environments/dev/graph.svg) ). Then it sorts this into a topological execution order. If it finds any circular dependency, (A references B, B references A) then it throws an error. Thus dependencies are automatically detected when a module requires a resource that is created from another module. In such cases the dependency must exist, there fore created, first.
