@@ -10,7 +10,7 @@
 
 resource "aws_security_group" "rr_frontend" {
   name        = "rr-${var.environment}-frontend-sg"
-  description = "Frontend containers (Web Tier)"
+  description = "Frontend containers (Web Tier) security group"
   vpc_id      = var.vpc_id
 
   tags = merge(var.common_tags, {

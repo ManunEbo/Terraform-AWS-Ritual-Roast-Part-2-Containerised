@@ -1,25 +1,5 @@
 #--------------------------------------------------------------
-# 1. CloudWatch Log Groups
-#--------------------------------------------------------------
-resource "aws_cloudwatch_log_group" "rr_frontend_logs" {
-  name              = "/ecs/rr-${var.environment}-frontend"
-  retention_in_days = 7
-  tags = merge(var.common_tags, {
-    Name = "rr-${var.environment}-frontend-logs"
-  })
-}
-
-resource "aws_cloudwatch_log_group" "rr_backend_logs" {
-  name              = "/ecs/rr-${var.environment}-backend"
-  retention_in_days = 7
-
-  tags = merge(var.common_tags, {
-    Name = "rr-${var.environment}-backend-logs"
-  })
-}
-
-#--------------------------------------------------------------
-# 2. Frontend Task Definition (The RR Web Greenprint)
+# 1. Frontend Task Definition (The RR Web Greenprint)
 #--------------------------------------------------------------
 
 resource "aws_ecs_task_definition" "rr_frontend_task" {
@@ -42,7 +22,7 @@ resource "aws_ecs_task_definition" "rr_frontend_task" {
     {
       name      = "rr-frontend-container-01"
       
-      # RESTORED: Pulling securely from ECR via VPC Endpoints
+      # Pulling securely from ECR via VPC Endpoints
       image     = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.id}.amazonaws.com/rr-${var.environment}-frontend:latest"
       essential = true
 
@@ -90,7 +70,7 @@ resource "aws_ecs_task_definition" "rr_frontend_task" {
 }
 
 #--------------------------------------------------------------
-# 3. Backend Task Definition (The RR API Greenprint)
+# 2. Backend Task Definition (The RR API Greenprint)
 #--------------------------------------------------------------
 resource "aws_ecs_task_definition" "rr_backend_task" {
   family                   = "rr-${var.environment}-backend-task"
@@ -109,7 +89,7 @@ resource "aws_ecs_task_definition" "rr_backend_task" {
       image     = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.id}.amazonaws.com/rr-${var.environment}-backend:latest"
       essential = true
 
-      # OS Unlocked: Allowing Gunicorn to write heartbeat files to /tmp securely via Docker /dev/shm
+      # Locking the root file system
       readonlyRootFilesystem = true
 
       portMappings = [

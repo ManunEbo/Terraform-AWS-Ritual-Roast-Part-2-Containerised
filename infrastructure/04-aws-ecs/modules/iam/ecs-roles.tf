@@ -57,19 +57,19 @@ resource "aws_iam_policy" "rr_backend_task_policy" {
         ]
         Resource = ["arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:rr-${var.environment}-db-secret-*"]
       },
-      {
-        # Allow the backend to talk to S3
-        Effect = "Allow"
-        Action = [
-          "s3:GetObject",
-          "s3:PutObject",
-          "s3:ListBucket"
-        ]
-        Resource = [
-          "arn:aws:s3:::${var.s3_bucket}",
-          "arn:aws:s3:::${var.s3_bucket}/*"
-        ]
-      }
+      # {
+      #   # Allow the backend to talk to S3 (Note, this statement is not a requirement)
+      #   Effect = "Allow"
+      #   Action = [
+      #     "s3:GetObject",
+      #     "s3:PutObject",
+      #     "s3:ListBucket"
+      #   ]
+      #   Resource = [
+      #     "arn:aws:s3:::${var.s3_bucket}",
+      #     "arn:aws:s3:::${var.s3_bucket}/*"
+      #   ]
+      # }
     ]
   })
 }

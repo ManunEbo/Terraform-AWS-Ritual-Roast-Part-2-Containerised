@@ -8,13 +8,13 @@ resource "aws_lb_target_group" "rr_frontend" {
 
     health_check {
       enabled             = true
-      path                = "/api/health" # <-- THE FIX: Point to the shallow route
+      path                = "/api/health"
       port                = "3000"
       interval            = 30
       timeout             = 5
       healthy_threshold   = 2
       unhealthy_threshold = 2
-      matcher             = "200"         # <-- THE GUARDRAIL: Accept only perfection
+      matcher             = "200"
     }
 }
 

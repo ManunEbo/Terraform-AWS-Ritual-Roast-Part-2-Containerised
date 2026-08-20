@@ -19,7 +19,7 @@ locals {
 
 data "aws_region" "current" {}
 
-# 1. Fetch the existing V1 VPC
+# 1. Fetch the existing Layer 1 VPC
 data "aws_vpc" "rr_vpc" {
   tags = local.common_tags_vpc  
   filter {

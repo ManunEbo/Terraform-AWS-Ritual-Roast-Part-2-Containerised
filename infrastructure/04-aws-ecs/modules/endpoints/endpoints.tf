@@ -2,8 +2,9 @@
 #  Interface Endpoints (Secrets Manager, ECR, ECS, Logs)
 #--------------------------------------------------------------
 
-# *** These PrivateLink Interface endpoints are only needed here, Layer 4, so we keep them here ***
 
+# The Secrets Manager interface endpoint has moved to Layer 1 to make it available to Layer 2,4 and 5
+# (see infrastucture/01-aws-vpc/modules/endpoints/secrets_manager_endpoint.tf)
 # # Secrets Manager: For lambda rotation and App secret retrieval
 # resource "aws_vpc_endpoint" "secretsmanager" {
 #   vpc_id              = var.vpc_id
@@ -17,6 +18,8 @@
 #     Name = "${var.environment}-secrets-endpoint"
 #   })
 # }
+
+# *** The following PrivateLink Interface endpoints are only needed here, Layer 4, so we keep them here ***
 
 # ECR API: for ECS to describe images
 resource "aws_vpc_endpoint" "ecr_api" {

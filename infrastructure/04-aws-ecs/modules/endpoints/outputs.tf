@@ -1,7 +1,7 @@
-output "endpoints_sg_id" {
-  description = "The SG ID attached to the VPC Endpoints"
-  value       = var.endpoints_sg_id
-}
+# output "endpoints_sg_id" {
+#   description = "The SG ID attached to the VPC Endpoints"
+#   value       = var.endpoints_sg_id
+# }
 
 output "endpoint_ids" {
   description = "The IDs of the created VPC Endpoints"
