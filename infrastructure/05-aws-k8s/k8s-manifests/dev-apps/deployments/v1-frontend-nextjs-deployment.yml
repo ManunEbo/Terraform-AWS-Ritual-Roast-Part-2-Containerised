@@ -4,7 +4,7 @@ metadata:
   name: v1-frontend-nextjs
   namespace: dev
   labels:
-    app: rr-frontend # D4: canonical relabel (was rr-frontend-nextjs)
+    app: rr-frontend
     version: v1
 spec:
   replicas: 2

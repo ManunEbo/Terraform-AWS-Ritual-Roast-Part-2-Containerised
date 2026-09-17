@@ -44,9 +44,9 @@ resource "aws_autoscaling_group" "rr_k3s_worker_backend_asg" {
     version = "$Latest"
   }
 
-  # =========================================================
+  # ============================================================
   # THE AUTOMATION: Forces TF to gracefully roll the instances
-  # =========================================================
+  # ============================================================
   instance_refresh {
     strategy = "Rolling"
     preferences {

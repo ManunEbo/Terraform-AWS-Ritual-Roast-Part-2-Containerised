@@ -148,7 +148,7 @@ resource "aws_security_group_rule" "rr_backend_egress_http" {
 # ENDPOINT SG - Backend
 # =========================================================
 
-# INJECTED INGRESS: Let Control Plane into Layer 1 Endpoints SG (Port 443)
+# INJECTED INGRESS: Let backend into Layer 1 Endpoints SG (Port 443)
 resource "aws_security_group_rule" "rr_endpoints_ingress_from_wkr_backend" {
   description              = "RR: Allow Backend worker to reach Secrets Manager via VPC Endpoint"
   type                     = "ingress"

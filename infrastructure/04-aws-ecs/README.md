@@ -1,4 +1,4 @@
-# Layer 4 - Elastic Container Service (ECS)
+# Layer 4 - Serverless Elastic Container Service (ECS) with Fargate
 
 In this Layer we deploy the website using severless ECS with Fargate: We pull resources from the previous three Layers and add extra resources to ensure our network traffic is secure and cost effective.
 
@@ -1033,10 +1033,11 @@ Here we're injecting the ARN pointing to the database secret stored in AWS Secre
 4. Open `04-aws-ecs/environments/dev/providers.tf` and replace the bucket name from `"rr-capstone-5b160b287a99a6d9"` with the value.
 5. If you're using a different region, change the provider region from `"eu-west-2"` to your desired region.
 6. Open `04-aws-ecs/environments/dev/shared_locals.tf` and change `Project_owner` , `s3_bucket` and add/modify/remove any other desired labels
-7. If on Linux change directory to the Layer 4 dev directory `cd infrastructure/04-aws-ecs/environments/dev`
-8. Create an alias for terraform `alias tf=terraform`, this is easier than writing out the long word
-9. Initialize terraform: `tf init`
-10. Run terraform plan: `tf plan` review the outputs and if you're happy proceed to the next command
-11. Run terraform apply, with caution `tf apply`, or if you trusted the plan `tf apply -auto-approve`
-12. Copy the Public ALB URL and paste it in the browser.
-13. Congratulations you've deployed your website with ECS Fargate
+7. Rename `04-aws-ecs/environments/dev/terraform.tfvars.txt` to `04-aws-ecs/environments/dev/terraform.tfvars`
+8. If on Linux change directory to the Layer 4 dev directory `cd infrastructure/04-aws-ecs/environments/dev`
+9. Create an alias for terraform `alias tf=terraform`, this is easier than writing out the long word
+10. Initialize terraform: `tf init`
+11. Run terraform plan: `tf plan` review the outputs and if you're happy proceed to the next command
+12. Run terraform apply, with caution `tf apply`, or if you trusted the plan `tf apply -auto-approve`
+13. Copy the Public ALB URL and paste it in the browser.
+14. Congratulations you've deployed your website with ECS Fargate

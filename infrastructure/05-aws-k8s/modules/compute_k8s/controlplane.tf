@@ -1,5 +1,6 @@
-
-# Network Load Balancer for HA Control Plane
+# =========================================================================
+# Section 1: Network Load Balancer for HA Control Plane
+# =========================================================================
 resource "aws_lb" "rr_k3s_cp_nlb" {
   name               = "rr-${var.environment}-k3s-cp-nlb"
   internal           = true
@@ -45,7 +46,9 @@ resource "aws_lb_listener" "rr_k3s_cp_listener" {
   }
 }
 
+# =========================================================================
 # Control Plane Compute
+# =========================================================================
 resource "aws_launch_template" "rr_k3s_cp" {
   name_prefix   = "rr-${var.environment}-k3s-cp-"
   image_id      = data.aws_ami.rr_al2023.id

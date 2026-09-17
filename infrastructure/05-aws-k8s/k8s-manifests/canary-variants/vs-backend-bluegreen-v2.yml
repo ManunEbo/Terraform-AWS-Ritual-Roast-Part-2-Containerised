@@ -9,10 +9,10 @@ metadata:
   namespace: dev
 spec:
   hosts:
-  - ritual-roast-backend
+    - ritual-roast-backend
   http:
-  - route:
-    - destination: { host: ritual-roast-backend, subset: v1, port: { number: 5000 } }
-      weight: 0
-    - destination: { host: ritual-roast-backend, subset: v2, port: { number: 5000 } }
-      weight: 100
+    - route:
+        - destination: { host: ritual-roast-backend, subset: v1, port: { number: 5000 } }
+          weight: 0
+        - destination: { host: ritual-roast-backend, subset: v2, port: { number: 5000 } }
+          weight: 100
