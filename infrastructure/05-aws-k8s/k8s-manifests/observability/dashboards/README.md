@@ -1,5 +1,7 @@
 # Grafana Cloud dashboards
 
+**This README.md was written by Claude code, on my request. I kept it here as it is a useful summary albeit brief.**
+
 Grafana here is **Grafana Cloud** (external, remote-write target) — there is no
 in-cluster Grafana and no dashboard-provisioning path via ArgoCD. These files
 are dashboard-as-code kept in-repo for review/versioning; getting them into
@@ -25,7 +27,7 @@ your Prometheus datasource, and prints the dashboard URL. Re-run it any time
 after editing the JSON — `overwrite:true` updates the existing dashboard
 (matched by `uid`) instead of erroring on a duplicate.
 
-**Getting `GRAFANA_API_TOKEN`** — this must be a *Grafana instance* Service
+**Getting `GRAFANA_API_TOKEN`** — this must be a _Grafana instance_ Service
 Account token, **not** the Alloy remote-write token in AWS Secrets Manager
 (`rr-dev-grafana-cloud-token`) — that one is a Cloud Access Policy token scoped
 `metrics:write` only and cannot create dashboards. Instead:
@@ -69,15 +71,15 @@ jobs there first if you want panels beyond mesh traffic.
 
 ## Panels
 
-| Row | Panel | Query basis |
-|---|---|---|
-| Traffic split (canary / blue-green / shadow) | Frontend / backend request rate by version | `sum(rate(istio_requests_total{...}[5m])) by (destination_version)` |
-| | Frontend / backend traffic share % | same, normalized to 100% — the live check against whatever weight is set in `../../dev-apps/routing/istio-routing.yml`; also where mirrored shadow traffic shows up on v2 even at 0% official weight |
-| Reliability | Error rate % by version (lines) | 5xx / total, per version |
-| | v1/v2 error rate stat tiles | thresholds: green <1%, yellow 1-5%, red >5% |
-| Latency (p95) | Frontend / backend p95 by version | `histogram_quantile(0.95, ...istio_request_duration_milliseconds_bucket...)` |
-| Mesh & infra health | Scrape target health | `up{namespace=~"dev\|istio-ingress"}` |
-| | Backend -> RDS TCP bytes | `istio_tcp_{sent,received}_bytes_total` on the `PassthroughCluster` — this is the blue backend->PassthroughCluster edge in Kiali, expected traffic leaving the mesh, not an error |
+| Row                                          | Panel                                      | Query basis                                                                                                                                                                                          |
+| -------------------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Traffic split (canary / blue-green / shadow) | Frontend / backend request rate by version | `sum(rate(istio_requests_total{...}[5m])) by (destination_version)`                                                                                                                                  |
+|                                              | Frontend / backend traffic share %         | same, normalized to 100% — the live check against whatever weight is set in `../../dev-apps/routing/istio-routing.yml`; also where mirrored shadow traffic shows up on v2 even at 0% official weight |
+| Reliability                                  | Error rate % by version (lines)            | 5xx / total, per version                                                                                                                                                                             |
+|                                              | v1/v2 error rate stat tiles                | thresholds: green <1%, yellow 1-5%, red >5%                                                                                                                                                          |
+| Latency (p95)                                | Frontend / backend p95 by version          | `histogram_quantile(0.95, ...istio_request_duration_milliseconds_bucket...)`                                                                                                                         |
+| Mesh & infra health                          | Scrape target health                       | `up{namespace=~"dev\|istio-ingress"}`                                                                                                                                                                |
+|                                              | Backend -> RDS TCP bytes                   | `istio_tcp_{sent,received}_bytes_total` on the `PassthroughCluster` — this is the blue backend->PassthroughCluster edge in Kiali, expected traffic leaving the mesh, not an error                    |
 
 All panels use `reporter="destination"` so each request is counted once, at the
 receiving sidecar — avoids double-counting from also scraping the caller side.

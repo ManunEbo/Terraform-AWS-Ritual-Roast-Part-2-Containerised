@@ -13,8 +13,7 @@ This Layer is by far the most jampacked Layer in the whole project. With ECS in 
 Note, this is the most expensive of the Layers in this project. The following are some of the highest contributers to costs:
 
 1. **EC2 Costs** - The choice of **instance type** is **t3.medium** and for control plane we have 3 of those and 2 for worker nodes. It is possible to run this with **t3.small** but the preference was for plenty of room in terms of capacity. Feel free to drop these to `t3.small` but if you get **Out Of Memory KIlls (`OOMKILL`)** then you know why.
-2. **Additional credentials in Secrets Manager** - To securely pass the GitHub PAT and the Grafana credentials to ???ArgoCD??? it is safer to store them in Secrets Manager and have ???ArgoCD??? retrieve them at runtime so that it can communicate with both GitHub and Grafana Cloud.
-3.
+2. **Additional credentials in Secrets Manager** - To securely pass the GitHub PAT to Argo CD and the Grafana credentials to Grafana Alloy (or Prometheus), it is safer to store them in AWS Secrets Manager and have the External Secrets Operator (ESO) retrieve them at runtime to synchronize them as Kubernetes Secrets.b and Grafana Cloud.
 
 # Dev environment
 
@@ -726,6 +725,15 @@ At this piont in the script, the Kubernetes cluster is running and its network i
     c. `AWS_REGION: "$REGION"` - Stores the active AWS region string e.g. `eu-west-1`. It instructs the AWS SDK inside the backend application which regional endpoints to target when calling AWS services.
 
 #### Section 6: Bootstrap observability credentials
+
+**What is Grafana Alloy**
+Lets briefly introduce **Grafana Allow** known simply as Alloy. This is a **lightweight** telemetry collector, a background software agent that acts as a middleman between our Kubernetes cluster and our monitoring tool, Grafana Cloud.
+
+Instead of forcing our applications/microservices to send their monitoring data directly to the cloud themselves, Alloy sits inside our cluster, gathers all that data in one place, cleans it up, and forwards it where it needs to go. This is split into 3 distinct tasks:
+
+    1. **Collect (The gatherer)** - Alloy continuously asks the cluster, like Istio envoy proxies application pods, or server nodes, *"What are your current CPU usage, request counts, and error rates?"*
+    2. **Process & Filter (The bouncer)** - Raw monitoring data is massive and noisy. Alloy formats the data, attaches helpful labels, and throws away irrelevant metrics so we don't pay extra for cloud storage.
+    3. **Delivery (The shipper)** - Alloy securely packs up the remaining clean data and ships it over the internet to our monitoring dashboard in Grafana Cloud.
 
 Here we bridge AWS secrets management with cluster telemetry by retrieving Grafana Cloud access credentials from AWS Secrets Manager and storing themin a dedicated Kubernetes Secret within an `observability` namespace. This enables in-cluster monitoring agents such as Prometheus, Grafana Alloy, or Vector, to authenticate and stream metrics/logs to Grafana Cloud without hardcoding keys in deployment manifests.
 
@@ -1599,14 +1607,394 @@ By locking the mirror rule to `exact: GET`:
 
 ## 4. [observability](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/k8s-manifests/observability)
 
-This folder sets up the "eyes and ears" of the cluster.
+This directory contains the **Observability & Monitoring stack** for the Istio service mesh, managed primarily via GitOps (ArgoCD).
+It equips the cluster with real-time traffic visualization, metrics collection, telemetry logging, and pre-configured Grafana dashboards.
 
-1. The `*-app.yaml` files like `istio-app.yaml` and `kiali-app.yaml` are declarative GitOps manifests that instruct the cluster to automatically install Istio, Prometheus and kiali.
-2. `telemetry.yml` configures how metrics are gathered.
-3. `dashboards/` contains the actual visual graphs and the scripts to push them into Grafana.
+**Core operational components**
+It consists of the following core operational components:
 
-This is needed because Istio acts as a middleman intercepting every single network request between the pods, traditional debugging tools stop working effectively. Thus its ideal to have a servish mesh observability stack to capture and store traffic. The observability mesh consits of:
+1. **Infrastructure & App wrappers (`*-app.yml`)** - These files are GitOps `application` manifests that automate the deployment and monitoring of cluster tools:
 
-1.  **Prometheus** - stores the network metrics
-2.  **kiali** - provides a live, visual map of our cluster, showing exactly which way traffic is flowing.
-3.  **Grafana** - Gives us the dashboards to prove that the 10% canary rollout in `canary-variants/` is actually only receiving 10% of the traffic.
+   a. **`prometheus-app.yml`** - Deploys Prometheus to collect, store, and query time-series performance metrics (request counts, latency, memory/CPU usage) from the pods and proxies.
+   b. **`istio-app.yml` / `ritual-roast-app.yml` / `canary-staging-app.yml`** - These are GitOps definitions that tell ArgoCD how to deploy and sync the core mesh components, the production application, and canary/staging environments alongside their monitoring hooks.
+
+2. **Mesh telemetry engine `telemetry.yml`** - This is an Istio custom resource that acts as the **"Logging & Metrics valve"**. It configures envoy sidecar proxies to emit acces logs, trace requests, and export standardized metrics directly to Prometheus for all traffic flowing through the `dev` namespace.
+
+3. **Visual Dashboards & Automation (`dashboards/`)**
+   a. **`ritual-roast-mesh-dashboard.json`** - This is a pre-configured Grafana dashboard template designed to monitor the Ritual Roast app (tracking traffic weights, error rates, response times, and canary/blue-green split performance).
+   b. **`push-to-grafana.sh`** - This is a helper script that uses the Grafana API to automatically upload and update `ritual-roast-mesh-dashboard.json` into the live Grafana instance without requiring manual UI configuration.
+
+Lets take a look at each file one by one.
+
+### 1 [telemetry.yml](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/k8s-manifests/observability/telemetry.yml)
+
+This file houses the manifest for several resources. Below we deep dive into each resource:
+
+1. **ConfigMap (`alloy-config`)** - This is a Kubernetes object used to store non-sensitive configuration data in key-value pairs. Here it is used to store the complete `config.alloy` pipeline script that configures the telemetry agent: We store the rules that tell Grafana Alloy how to discover Istio proxies, scrape metrics every 30 seconds, filter out unwanted data, and push the remaining data to Grafana Cloud. Note, this separates the metric scraping configuration from the collector software itself allowing us to update scraping rules without rebuilding container images.
+
+**Components**
+a. **The destination: sending data off cluster `prometheus.remote_write "grafana_cloud"`** - This defines the exit door for all collected metrics. To ship metrics to Grafana cloud so we can view dashboards without storing heavy historical data inside the cluster. It uses `env(...)` to read secrets (`GRAFANA_CLOUD_TOKEN`, etc.) safely injected into the pod environment. It uses `external_labels` to attach `cluster = "ritual-roast-dev` and `env = "dev"` onto every single metric that passes through. That way if we connect 10 clusters to Grafana cloud later, we can instantly filter metrics by environment.
+b. **The bouncer: cutting out the noise `prometheus.relabel "istio_only"`** - This acts as a quality filter before metrics leave the cluster. Envoy proxies generate thousands of internal metrics per container (memory stats, detailed connection pools, internal buffers). Pushing all of that will blow past Grafana Cloud's free `1,500` samples/second tier. This concists of the following component rules:
+
+    1. `forward_to = [prometheus.remote_write.grafana_cloud.receiver]` - This is the `grafana_cloud` remote write component i.e. what we're sending to provided the conditions in the regular expression are met.
+    2. `source_labels = ["__name__"]` - This looks at the internal name of every metric incoming.
+    3. `regex = "istio_.*|up" & action = "keep"` - Drops everything except metrics starting with `istio_` (like request counts and latency) or named `up` (to tell if a container is alive).
+
+c. **Pipeline 1: Application sidecar proxies (The `dev` namespace**
+This pipeline works in three coordinated stages to collect telemetry from the microservices:
+
+    1. **Stage A: Discovery (`discovery.kubernetes "sidecar_pods"`)** - This asks the Kubernetes API: *"Give me a list of all active pods in the `dev` namespace"*. Pods in Kubernetes die, scale, and move around frequently. Dynamic discovery ensures Alloy never relies on hardcoded IP addresses.
+    2. **Stage B: Cleanup & Prep (`discovery.relabel "sidecar_pods") - Cleans up the raw list of pods provided by Stage A. It has the following component rules:
+       a. `source_labels = ["__meta_kubernetes_pod_annotation_sidecar_istio_io_status"]` - This filters non-mesh pods i.e. if a pod doesn't have an Istio sidecar running, it gets dropped. But if it does then keep (`action = "keep"`).
+
+       b. **Fix the port** - By default Kubernetes discovery points to application ports e.g. port 8080. Istio proxy metrics are served on port `15020`. The regex rule rewrite the address to `IP:15020`.
+
+       c. **Attach metadata labels** - Internal Kubernetes attributes like `__meta_kubernetes_pod_name` are hidden system labels. This stage extracts them into clean standard labels (`namespace`, `pod`, `app`, `version`) so we can filter dashboards by app or version.
+    3. **Stage C: Scraping (`prometheus.scrape "sidecar_pods"`)** - Every 30 seconds, Alloy reaches out over the network to `http://<POD_IP>:15020/stats/prometheus` to fetch raw text metrics. It sends this to `forward_to = [prometheus.relabel.istio_only.receiver]` i.e. it sends the raw metrics straight into the `istio_only` metric filter we built earlier.
+
+d. **Pipeline 2: Ingress gateway (The cluster edge)**
+The ingress gateway pod lives in the `istio-ingress` namespace and handles incoming external traffic. Even though it is an envoy proxy, it does not have a sidecar annotation because it is a standalone gateway rather than an app sidecar. To collect metrics from it, we use a dedicated 3-step pipeline:
+
+    1. **Discovery (`discovery.kubernetes "gateway_pods"`)** - Finds all pods inside the `istio-ingress` namespace.
+    2. **Relabeling (`discovery.relabel "gateway_pods")** - This does the following: Drops everything that isn't explicitly labeled `istio=ingressgateway; rewrites the port to `15020`, where envoy metrics live; attaches standard `namespace` and `pod` labels.
+    3. **Scraping `prometheus.scrape "gateway_pods"`** - Polls `/stats/prometheus` on port **15020** every 30 seconds and passes the metrics to the `istio_only` filter.
+
+**Summary of component chains**
+
+Think of this configuration as two parallel conveyor belts inside a processing factory. They pick up raw data from different parts of the cluster, refine it, merge at a central quality filter and ship the final product out.
+
+**The parallel conveyor belts**
+
+    1. **App belt (`dev` namespace)** - Find pods ➔ Fix port & add labels ➔ Fetch data ➔ Filter noise ➔ Ship to cloud
+    2. **Gateway belt (`istio-ingress` namespace)** - Find gateway ➔ Fix port & add labels ➔ Fetch data ➔ Filter noise ➔ Ship to cloud
+
+**What each stage does**
+
+    a. **Find (Kubernetes discovery)** - Alloy asks the Kubernetes API for a live list of active container IP addresses so it knows where to look.
+    b. **Clean & prep (Target relabeling)** - Alloy ignores non-mesh containers, changes the destination port to Istio's metric port (`15020`), and attaches tags like `app` and `version`.
+    c. **Fetch (Scraping)** - Alloy connects to port `15020` every 30 seconds to download the latest raw performance numbers.
+    d. **Filter (Central convergence)** - Both conveyor belts merge here. Alloy acts as a bouncer, throwing away 90% of internal proxy noise and keeping only metrics starting with `istio_*` to prevent high cloud bill costs.
+    e. **Ship (Remote write)** - The remaining clean, lightweight metrics are packed up and sent over the internet to Grafana Cloud.
+
+2. **ServiceAccount (`alloy`)** - This is a Kubernetes user identity created specifically for applications running inside pods. It provides a digital identity card that pods use to authenticate against the Kubernetes API server. It is attached to the Grafana Alloy pods running in the `observability` namespace. Kubernetes restricts API access by default. Thus the Grafana Alloy needs an identity so Kubernetes knows who is requesting permission to inspect cluster pods and nodes.
+3. **ClusterRole (`Alloy`)** - This is a cluster wide set of permission rules inside Kubernetes **Role-Based Access Control (RBAC)**. It specifies exactly what actions such as: `get`, `list`, `watch` can be performed on cluster resources across all namespaces. It grant read-only permission to inspect nodes, services, endpoints, and pods across the entire cluster. This is needed for scraping metrics dynamically: Grafana Alloy must be allowed to read pod metadata and IP addresses directly from the Kubernetes API.
+4. **ClusterRoleBinding (`alloy`)** - This is an RBAC bridge object that connects a `clusterRole` to a `ServiceAccount`. It binds the permissions defined in the `alloy` ClusterRole directly to the `alloy` ServiceAccount identity. It links our pod identity in the `observability` namespace to the cluster-wide read permissions. Since the permissions (`ClusterRole`), and identities, (`ServiceAccount`) exist separately, this binding activates those permissions for the Alloy agent.
+5. **DaemonSet(`grafana-alloy-agent`)** - A DaemonSet is a specific type of Kubernetes manager (or "workload") designed to run a background service across an entire infrastructure. It guarantees that exactly **one copy** of a specific pod/container is running on **every single node** in the cluster. If we add a brand new server to our cluster to handle more traffic, the DaemonSet instantly notices and automatically places a copy of the DaemonSet pod on that new server. It is the perfect tool for infrastructure tasks like monitoring, logging, or networking. Because Grafana Alloy's job is to collect data from the servers and applications, we absolutely must have an Alloy agent running on every single server. If a server didn't have an Alloy pod, it would be a blind spot in our monitoring.
+
+**Components**
+
+    1. **Annotations: ArgoCD Sync wave (`argocd.argoproj.io/sync-wave: "4"`)** - This is a deployment instruction for ArgoCD (The tool managing our cluster's deployments). It tells ArgoCD to wait until "Wave 4" (Step 4 in the deployment) before trying to create this DaemonSet. Kubernetes deployments often have dependencies. Alloy cannot start until its passwords (Secrets) and configuration files (ConfigMaps) exist. Putting Allow in Wave 4 ensures that Waves 1,2, and 3 have already built the foundation it needs to run successfully i.e. guarantees that the `observability` namespace exists, the `grafana-auth` secret containing our API token is loaded, the `alloy-config` file is mounted and ready. Only then does Alloy spin up, launching smoothly on the first try without crashing or looping on missing dependency errors.
+    2. **Tolerations (`operator: "Exist"`)** - This is a VIP pass that bypasses node restrictions. Since in Kubernetes, administrators often place "taints" on nodes (as we have) to restrict pod placement. This toleration tells Kubernetes, *"I tolerate all taints, put me on this node anyway"*. This is needed as the resource at hand is a DaemonSet meant for cluster-wide monitoring: It needs to monitor everything. Without this rule, the restricted nodes would reject the Alloy pod, leaving those critical servers completely unmonitored.
+    3. **The container image (`image: grafana/alloy:v1.3.1`)** - This is the actual software being downloaded and run. It pulls version 1.3.1 of Grafana Alloy from the internet. We're using a specific pinned version (`v1.3.1`) rather than just asking for `:latest`. If it were set to `:latest`, a new update from Grafana could automatically download, chage how the software works and break our monitoring pipeline without warning. Pinned versions guarantee stability.
+    4. **Environment variables `valueFrom: secretKeyRef`** This is a secure method for handing passwords to a container. Instead of typing the Grafana Cloud password directly into this file, it reaches out to a locked Kubernets *"Secret"* named `grafana-auth`, extracts the `bearer-token` and `instance-id`, and hands them to Alloy in memory as environment variables. This is a security measure: If we typed passwords directly into this YAML file, anyone who can read our code repository could steal our cloud credentials. Referencing a Secret keeps the passwords hidden and safe.
+    5. **Volume and mounts (`volumeMounts & volumes`)** - Thisis the mechanism for giving the container files it needs to read. It takes the `alloy-config` ConfigMap, the pipeline configuration we looked at earlier, and injects it directly into the Alloy container's file system at `/etc/alloy`. The Alloy software is just an empty engine; it doesn't know what to do until we give it instructions. This mount connects the engine to the template so it knows how to route our data. Making it `readOnly: true` ensures the container can't accidentally delete or overwrite its own instructions.
+    6. **Resources (`requests` and `limits`)** - These are the hardware guardrails for CPU (processing power) and Memory (RAM).
+        a. **`requests`** - guarantees the pods get at least `100m` of CPU and `128Mi` of Memory to function.
+        b. **`limits`** - Puts a hard ceiling at 200m CPU and 256Mi memory. If the pod tries to use more, Kubernetes will restrict or restart it.
+    This is needed to protect the rest of the server. If Alloy encounters a bug and tries to consume **100%** of the server's memory, it would crash our actual business applications running on that same server. Limits ensure the monitoring tool never takes down the applications it is supposed to be monitoring.
+
+### 2 [prometheus-app.yml](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/k8s-manifests/observability/prometheus-app.yml)
+
+This manifest tells ArgoCD to install a **lightweight Prometheus server** into our cluster using Helm.
+
+**Prometheus** is an open-source systems monitoring and alerting toolkit. At its core, it is a highly specialized time-series database designed to collect and store metric data like CPU utilization, Memory consumption, request latency, and error rates over time. Instead of waiting for applications to send data to it, Prometheus actively "pulls" (scrapes) metrics over HTTP from endpoints exposed by our applications, infrastructure, and services at regular intervals. It stores this data securely and uses a powerful query language called PromQL to let us analyze performance, build dashboards with Grafana, and trigger alerts when things break.
+
+**Since Grafana Alloy is already shipping our metrics to Grafana Cloud, why do we need a local Prometheus?**
+a. **Alloy's job** - is to collect long-term metrics and ship them out to the cloud.
+b. **This Prometheus's job** - is to keep a super-fast, temporary **2 hour buffer** of local Istio metrics inside the cluster. Tools like **Kiali (Istio's service mesh topology visualizer)** query this local Prometheus to draw real-time traffic maps and service dependency graphs.
+
+The rest of this file review is broken into sections, We'll review them cronologically.
+
+1. **Metadata & Sync Wave** - This opening section declares the resources as an ArgoCD `Application` named `prometheus` inside the `argocd` namespace. By assigning it `argocd.argoproj.io/sync-wave: "1"`, ArgoCD knows to deploy Prometheus early in the cluster rollout. Spinning up the monitoring backend in Wave 1 ensures it is active and ready to collect metrics before application services start up in later waves.
+2. **Helm chart source & version locking** - Here, ArgoCD is directed to pull the official Prometheus Helm chart directly from the community repository. The deployment is explicitly locked to `targetRevision: '29.13.1'`. Pinning the exact chart version ensures that upstream changes won't automatically modify or break our monitoring setup during routine deployments.
+3. **Stripping down unneeded services** - Default Prometheus deployments come bundled with extra sub-tools like alert managers, node exporters, and metrics push gateways. Because Grafana Alloy and Grafana Cloud already handle cluster-wide node monitoring and alerting, all four of these auxiliary services are set to `enabled: false`. This removes unnecessary background containers and keeps the footprint lean.
+4. **Memory-Only server sizing & retention** - The core Prometheus server is customized to act as an ultra-lightweight, short term buffer. Setting `retention: "2h"` and disabling persistent disk storage (`persistentVolume.enabled: false`) forces Prometheus to hold metrics purely in RAM and discard anything older than two hours. Tight resource boundaries (`100-200m CPU` and `256-512Mi RAM`) ensure it provides real-time data to Kiali without inflating cluster storage costs.
+5. **Controlplane node placement** - Using `tolerations` and `nodeAffinity`, Kubernetes is instructed to preferentially schedule this Prometheus pod onto a `control-plane` node, using worker nodes only as a backup. Controlplane nodes typically have spare CPU and memory headroom. Placing Prometheus here offloads monitoring overhead from worker nodes, preserving their resources for actual application traffic.
+6. **Custom Istio scrape pipelines** - Under `extraScrapeConfigs`, three distinct scrape jobs define how Prometheus gathers metrics across the mesh:
+   a. **`istio-mesh`** - Discovers application pods in the `dev` namespace containing Istio sidecars. It rewrites target endpoints to Istio's telemetry port (`15020`), attaches identity tags like `app` and `version`, and filters specifically for `istio_*` and `pilot_*` metrics.
+   b. **istio-ingress-gateway** - Targets the edge gateway in the `istio-ingress` namespace on port `15020` so we can observe external traffic entering the cluster.
+   c. **`istiod`** - Connects to the mesh controlplane in `istio-system` on port `15014` to gather controlplane health and performance metrics.
+7. **Cluster permissions & access** - Setting `rbac.create: true` tells Helm to automatically generate the required ServiceAcounts, ClusterRoles, and RoleBindings. This gives Prometheus the read-only security permissions needed to discover pods and inspect metadata across every namespace in the cluster.
+8. **Target destination & self-healing sync** - The final lines instruct ArgoCD to deploy Prometheus into the `observability` namespace, creating the namespace automatically if it doesn't exist (`createNamespace=true`). Enabling `prune` removes cluster resources if they are deleted from Git, while `selfHeal` automatically reverts any manual cluster tweaks back to match to match Git ground truth.
+
+### 3 [kiali-app.yml](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/k8s-manifests/observability/kiali-app.yml)
+
+Kiali is an open-source observability console and management dashboard built specifically for the Istio service mesh. Kiali automatically discovers the microservices running in a Kubernetes cluster and draws real-time visual diagrams of how they communicate. It maps traffic flows, monitors network health (like HTTP error rates and latency), validates Istio configurations, and allows us to view or edit mesh routing rules directly from its web interface. Here, we're using Kiali strictly as a live, visual topology map for our Istio traffic. By wiring Kiali to the lightweight, 2-hour-retention Prometheus instance we reviewed above, Kiali has exactly the real-time data it needs to draw accurate service dependency graphs and canary traffic splits. We also enable a specific feature flag (`istio_injection_action: true`) that lets us quickly toggle Istio sidecar injection on or off for different namespaces directly from the Kiali UI.
+
+**Components**
+
+1. **ArgoCD metadata & Deployment sequencing** - The manifest defines an ArgoCD `Application` named `kiali`. Noticeably, it is assigned `sync-wave: "2"`. By placing Kiali in Wave 2, ArgoCD waits for Prometheus (deployed in Wave 1) to be fully up and running first. This ensures Kiali doesn't crash on initial startup while trying to reach a monitoring backend that doesn't exist yet.
+2. **Helm source & the operator pattern** - This section pulls the official Kiali Helm chart and locks it to version `2.28.0`. Interestingly, this chart doesn't install the Kiali web UI directly; it installs the **Kiali Operator**. The operator is a background controller that watches for a specific configuration file (**a Custom Resource**) and then builds the Kiali server based on those instructions.
+3. **Operator pod node placement** - Just like we did with Prometheus, `tolerations` and `nodeAffinity` are used to push the Kiali operator pod onto the cluster's `control-plane` nodes. Since the operator just sits in the background watching for config changes, placing it on the controlplane frees up valuable worker node resources for our apps.
+4. **The Kiali CR & Prometheus linking** - This block (`cr.create: true`) provides the instructions that the Kiali operator reads to actually deploy the Kiali server. It bypasses internal login screens (`auth.strategy: "anonymous"`) and explicitly wires Kiali to the local Prometheus instance using internal Kubernetes DNS (`[http://prometheus-server.observability](http://prometheus-server.observability)...`). Links to external Grafana and tracing services are disabled here to keep the setup focused purely on Istio topology.
+5. **Server Web Config & the admission quirk** - The configuration sets the web root to `/kiali` and the port to `20001`. A vital detail here is that the port is wrapped in quotes (`"20001"`). Kiali's custom resource schema strictly requires a string for this field. If provided as an integer, the Kubernetes API would reject the file with an admission error, and the Kiali server would never deploy.
+6. **Server sizing & feature flags** - This section defines the footprint of the actual Kiali web server pod. It is given a lightweight profile (`100-200m CPU` and `128-256Mi RAM`) and is also instructed to prefer `control-plane` nodes. It disables a dedicated ingress, expecting us to route to it via a gateway, and turns on `istio_injection_action: true`, which allows us to toggle Istio sidecars for our namespaces directly from the Kiali UI.
+7. **Target destination & self-healing sync** - This is standard ArgoCD housekeeping: deploy everything into the `observability` namespace, creating it if it's missing. Automated pruning and self-healing enforce that Git remains the strict source of truth for the Operator deployment.
+8. **Advanced drift management** - This final block prevents a common GitOps headache. When the Kiali operator deploys the Kiali server, it automatically fills in missing `.spec` fields with default values. ArgoCD sees these new fields, realizes they aren't in Git, and flags the app as **"Out of Sync"**. By using `ignoreDifferences` and `jqPathExpressions`, ArgoCD is told to ignore modifications the operator makes. Using `jq` specifically is a clever workaround for Kiali's loose schema, avoiding errors that stricter synchronization methods would trigger.
+
+### 4 [dashboards](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/k8s-manifests/observability/dashboards/)
+
+**`dashboards/`** provides a complete, automated workflow for provisioning Istio service mesh observability in Grafana. It concists of two complementary components:
+
+1. **The Dashboard definition (`ritual-roast-mesh-dashboard.json`)** - A pre-configured, production-ready Grafana dashboard template designed specifically for microservices running in the Istio mesh. It visualizes:
+   a. **Traffic split** - Real world traffic distribution across `v1` and `v2` deployments for canary ramps, blue-green cutovers, or shadow traffic.
+   b. **Service reliability** - HTTP 5xx error percentages per version alongside color-coded status cards
+   c. **Latency** - 95th-percentile response times calculated directly from Istio histogram buckets.
+   d. **Mesh & Egress health** - Live scrape target statuses and TCP egress throughput leaving the backend for external MySQL/RDS database
+
+2. **The deployment script (`push-to-grafana.sh`)** - A bash script that automates publishing the dashboard into a target Grafana instance using Grafana's HTTP REST API(`/api/dashboards/import`). It handles:
+   a. **Environment validation** - Verifies required tools (`curl`, `jq`) and authorization tokens (`GRAFANA_API_TOKEN`, `GRAFANA_URL`).
+   b. **Datasource auto-discovery** - Automatically queries Grafana's API to locate an available Prometheus datasource if one isn't explicitly named.
+   c. **Dynamic binding & Import** - Bundles the JSON template, binds the discovered Prometheus datasource to the dashboard's `${DS_PROMETHEUS}` variable, and pushes the payload to Grafana with overwrite enabled.
+
+Together, this directory allows us to manage dashboard definitions as code in Git and continuously push updates to our Grafana environment without manual imports.
+
+**HTTP 5xx errors**
+Lets briefly look at this very important status codes that we might get.
+
+An HTTP 5xx error is a category of HTTP status codes indicating that the server failed to fulfill a valid request. When a user's browser, mobile app, or another microservice sends a request and receives a response in the **`500`** range, the server is essentially saying _"I received your request, but something broke on my side while I was processing it."_
+
+Lets quickly distinguish between error types:
+
+    a. **Client side fault (`4xx Errors`)** - This happens if the client sent a bad request e.g. `404 Not Found`, if we typed an invalid URL; `401 Unauthorized`, we forgot our password.
+    b. **Server-side fault (`5xx Errors`)** - The request was valid, but the server broke e.g. The backend application code crashed, a database query timed out, or a container ran out of memory.
+
+In microservice architectures and automated deployments, **`5xx`** error rates are the primary signal for service health:
+
+    a. **Canary safety nets** - When rolling out version `v2` alongside `v1`, if the dashboard shows `v1` at 0% errors while `v2` jumps to 3% `500 Internal Server Error`, automated deployment pipelines instantly halt the rollout and revert 100% of traffic back to `v1`.
+    b. **Circuit Breaking** - Istio envoy proxies monitor`533` or `502` errors returned by individual pods. If a specific pod starts throwing `5xx` errors, Istio automatically removes that pod from the loadbalancing pool until it recovers.
+
+### 4.1 [dashboards/ritual-roast-mesh-dashboard.json](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/k8s-manifests/observability/dashboards/ritual-roast-mesh-dashboard.json)
+
+Lets jump straight into components
+
+**Components**
+
+1. **Dashboard metadata & inputs** - The top of the JSON manifest declares the prerequisite dependencies and global metadata for the Grafana dashboard:
+   a. **Inputs & Datasource binds** (`__inputs / __requires`): Declares a required parameter (`DS_PROMETHEUS`) that dynamically attaches the dashboard to a Prometheus datasource in Grafana Cloud. This datasource receives the `istio_*` metric series remote-written by Grafana Alloy. It requires Grafana `9.0.0` or higher.
+   b. **Global metadata** - Sets the dashboard title to _`"Ritual Roast — v1/v2 Mesh Traffic (Istio)"`_ with the unique identifier `rr-mesh-traffic`. It configures auto-refreshing every 30 seconds, sets a default time window of the last 6 hours (`now-6h` to `now`), and tags the dashboard for easy filtering (`canary`, `blue-green`, `shadow`, `istio`).
+2. **Traffic split section** - This section begins with a row header titled **`"Traffic split (canary / blue-green / shadow)"`** and contains four timeseries panels to track traffic distribution across microservice versions:
+   a. **Panel 1 (`Frontend request rate by version`)** - Uses PromQL to measure raw request throughput (`reqps`) landing on `rr-frontend-svc`, separated by `destination_version`. It explicitly uses `reporter="destination"` to count requests at the receiving sidecar, avoiding double-counting. Version `v1` is styled in green and `v2` in red.
+   b. **Panel 2 (`Backend request rate by version`)** - Performs the exact same throughput rate calculation for the `ritual-roast-backend` service.
+   c. **Panel 3 (`Frontend traffic share % (observed weight)`)** - Calculate the relative percentage split (0-100%) of frontend traffic across versions. By dividing version-specific traffic by total service traffic, it verifies real-world behaviour against the weights configured in Istio VirtualServices. It seamlessly visualizes moving canary ramps, binary **0/100** blue-green flips, or mirrored/shadow traffic (where `v2` receives requests even with an official weight of `0`).
+   d. **Panel 4 (`Backend traffic share % (observed weight)`)** - Calculates and displays the corresponding percentage traffic split for backend versions.
+3. **Reliability section** - Marked by the **"Reliability"** row header, this section focuses on HTTP 5xx error tracking across both services:
+   a. **Panel 5 `Frontend error rate % by version (5xx)`** - Plots a timeseries line graph showing the percentage of requests returning 5xx status codes for `rr-frontend-svc` per version.
+   b. **Panel 6 `Backend error rate % by version (5xx)`** - Plots the equivalent 5xx error percentage time series for `ritual-roast-backend`.
+   c. **Panels 7 & 8 `Frontend v1 / v2 error rate`** - Single-stat callout cards giving an immediate at a glance health check for frontend versions. Color thresholds dynamically shift from **green (<1%) errors** to **yellow (1-5%)** to **red (>5%)**
+   d. **Panel 9 & 10 `Backend v1 / v2 error rate`** - Matching single stat callout cards enforcing the same 1% and 5% alert thresholds for backend `v1` and `v2`.
+4. **Latency section** - Introduced by the **"Latency (p95)"**, the 95th percentile, row header, this section isolates response time performance:
+   a. **Panel 11 `Frontend p95 latency by version`** - Uses `histogram_quantile(0.95, ...)` against the `istio_request_duration_milliseconds_bucket` metric to graph 95th-percentile latency in milliseconds for `rr-frontend-svc`, broken down by version (`v1` vs `v2`).
+   b. **Panel 12 `Backend p95 latency by version`** - Runs the same p95 histogram quantile calculation for `ritual-roast-backend` to ensure backend database queries or internal logic changes in `v2` do not introduce performance regressions.
+5. **Mesh & Infra health section** - The final section under **"Mesh & infra health"** provides visibility into underlying telemetry scraping and external egress network traffic:
+   a. **Panel 13 `Scrape target health (up)`** - Renders a real time status table querying `up{namespace=~"dev|istio-ingress"}`. It displays a green "1" or red "0" background to confirm whether Grafana Alloy is actively scraping `/stats/prometheus` telemetry from application sidecars and gateway pods.
+   c. **Panel 14 `Backend → RDS TCP bytes (PassthroughCluster)`** - Tracks envoy TCP throughput (bytes sent/received per second) leaving `rr-backend` pods toward external services (like MySQL/RDS) via Istio's `PassthroughCluster`. This confirms healthy database network activity and mirrors the egress lines visualized in Kiali.
+
+### 4.2 [dashboards/push-to-grafana.sh](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/k8s-manifests/observability/dashboards/push-to-grafana.sh)
+
+This is an automation script that deploys the `ritual-roast-mesh-dashboard.json` file directly into a target Grafana instance using the Grafana REST API. It handles the end-to-end import process by performing the following core tasks:
+
+    1.  **Environment Validation** - Verifies that required authentication credentials (`GRAFANA_URL`, `GRAFANA_API_TOKEN`) and system dependencies (`curl`, `jq`) are present before attempting network calls.
+    2. **Datasource Auto-Discovery** - Automatically queries the Grafana API to locate an active Prometheus datasource to bind to the dashboard if one is not explicitly provided.
+    3. **Dynamic Payload Assenbly** - Uses `jq` to safely bundle the raw JSON dashboard with the required important parameters, including the bound datasource and an instructions to overwrite existing versions.
+    4. **Direct impooit** - Pushes the constructed payload to Grafana's `/api/dashboards/import` endpoint and outputs a clickable URL to the newly provisioned dashboard.
+
+By eliminating manual UI uploads, this script allows the dashboard to be managed as code and seamlessly integrated into CI/CD Pipelines
+
+**Components**
+
+1. **Strict shell execution option `set -euo pipefail`** - This is a standard bash safety directive. The options mean:
+   a. `-e` - Immediately exits the script if any command fails.
+   b. `-u` - Treats uninitialized variables as errors and exits.
+   c. `-o pipefail` - Ensures that a pipeline e.g. `command1 | command2` fails if any command in the chain fails, not just the last one.
+   This prevents dangerous silent failures, ensuring the script halts immediately if a network call fails or a variable is missing rather than attempting broken operations.
+2. **Dynamic script path resolution `SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"` `DASHBOARD_JSON="${SCRIPT_DIR}/ritual-roast-mesh-dashboard.json"`** - This is the absolute file path lookup logic. It resolves the exact filesystem directory where `push-to-grafana.sh` resides and constructs the absolute path to `ritual-roast-mesh-dashboard.json`. It allows us to execute the script safely from any directory in our terminal without breaking relative file paths. **Note, this runs locally NOT on Kubernetes nodes.**
+3. **Environment variable validation `${GRAFANA_URL:?Set GRAFANA_URL ...` & `GRAFANA_API_TOKEN ....`** - This uses bash parameter expansion (`: "${VAR:?error}"`) to verify that the required Grafana URL and API token are set in the environment. If either is missing, it instantly halts execution and prints the error message. It then strips any trailing slash (`/`) from the `GRAFANA_URL`. This offers protection against malformed API calls such as `[https://example.com//api/](https://example.com//api/)` and ensures that we are authenticated before attempting network requests.
+4. **Prerequisites check**
+
+```bash
+for bin in curl jq; do
+  command -v "$bin" >/dev/null || { echo "Missing required tool: $bin" >&2; exit 1; }
+done
+[[ -f "$DASHBOARD_JSON" ]] || { echo "Dashboard file not found: $DASHBOARD_JSON" >&2; exit 1; }
+```
+
+This checks the system's `$PATH` to verify that `curl` (for making HTTP API requests) and `jq` (for parsing and building JSON) are installed. It also double-checks that the dashboard JSON file exists. This fails fast with clear, human readable errors if basic dependencies are missing, rather than throwing cryptic binary-not-found errors mid-execution
+
+5. **HTTP Headers array `auth=(-H "Authorization: Bearer ${GRAFANA_API_TOKEN}" -H "Content-Type: application/json")`** - This defines a reusable bash array containing standard HTTP headers for Grafana's API. It keeps the code **DRY (Do not Repeat Yourself)** by allowing subsequent `curl` commands to simply reference `"${auth[@]}"` instead of re-typing the authorization tokens and content types.
+
+6. **Prometheus datasource Auto-Discovery**
+
+```bash
+if [[ -z "${GRAFANA_DATASOURCE_NAME:-}" ]]; then
+  ...
+  ds_json=$(curl -fsS "${auth[@]}" "${GRAFANA_URL}/api/datasources")
+  GRAFANA_DATASOURCE_NAME=$(echo "$ds_json" | jq -r '[.[] | select(.type=="prometheus")][0].name // empty')
+  ...
+fi
+```
+
+If a target datasource name isn't provided via the `GRAFANA_DATASOURCE_NAME` variable, the script proactively queries Grafana's `/api/datasources` endpoint. It uses `jq` to parse the response and automatically extracts the name of the first available Prometheus datasource. This provides a seamless out-of-the-box experience, eliminating the need for developers to manually hunt down exact datasource names in the Grafana UI before deploying the dashboard.
+
+7. **API payload construction**
+
+```bash
+
+payload=$(jq -n \
+  --slurpfile dashboard "$DASHBOARD_JSON" \
+  --arg ds "$GRAFANA_DATASOURCE_NAME" \
+  ...
+  '{
+    dashboard: $dashboard[0],
+    overwrite: true,
+    inputs: [
+      { name: "DS_PROMETHEUS", type: "datasource", pluginId: "prometheus", value: $ds }
+    ]
+  } ...')
+
+```
+
+This uses `jq` to safely construct the JSON payload expected by Grafana's `/api/dashboards/import` endpoint. It embeds the raw dashboard file, sets `overwrite: true`, dynamically binds the discovered Prometheus datasource to the dashboard's internal `${DS_PROMETHEUS}` variable, and optionally assigns a Grafana folder UID if one was provided. By using `jq` to build the payload rather than string concatenation, it guarantees valid, properly escaped JSON output and prevents shell syntax injection errors.
+
+8. **Dashboard deployment `resp=$(curl -fsS -X POST "${auth[@]}" "${GRAFANA_URL}/api/dashboards/import" -d "$payload")`** - This is the execution step that actually provisions or updates the dashboard inside our Grafana our Grafana instance. It executes a **HTTP POST** request to push the freshly constructed JSON payload into Grafana via the Dashboard Import API.
+
+9. **Response parsing & output**
+
+```bash
+url_path=$(echo "$resp" | jq -r '.importedUrl // .imported.url // empty')
+if [[ -n "$url_path" ]]; then
+  echo "Done. Dashboard URL: ${GRAFANA_URL}${url_path}"
+else
+  ...
+```
+
+This inspects the API response JSON for the `.importedUrl` path. If successful, it prints a complete, clickable URL to view the newly imported dashboard. If it fails, it dumps the raw API response for debugging. It provides immediate, actionable visual confirmation of success so we don't have to navigate through the Grafana UI to find the dashboard.
+
+### 5 [istio-app.yml](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/k8s-manifests/observability/istio-app.yml)
+
+Think of a Service mesh as a city's traffic management system. The applications are the buildings, the network is the roads, and Istio is the system that controls the traffic lights, road signs, and security checkpoints.
+
+This file is an ArgoCD GitOps manifest that orchestrates the multi-stage deployment of the Istio service mesh. It defines three distinct ArgoCD `Application` resources that pull Helm charts directly from Istio's repository (pinned to version 1.30.1). The file relies heavily on **ArgoCD sync waves** to enforce a strict dependency hierarchy: creating the foundational custom resource definition (CRDs), first, followed by the controlplane, and finally the ingress gateway.
+
+Lets review each resource:
+
+1. **Istio Base `istio-base`** - Kubernetes natively understands basic concepts like **"Pods" and "Services (internal networking)**. However, it does not natively understand complex traffic rules, like **"send 10% of traffic to the new version of this app"** or **"reject traffic without a specific security token"**. The `istio-base` application installs **Custom Resource Definitions (CRDs)**. CRDs acts like a dictionary expansion pack for Kubernetes. They teach the Kubernetes API brand new, Istio specific words like `VirtualService`, traffic routing rules, or `Gateway`, entry points. This matters because without this base vocabulary installed first, if we try to give Kubernetes an Istio routing rule, Kubernetes will throw an error because it literally does not recognize the commands we're using. Thus this application establishes the foundation of the service mesh by installing Istio's Custom resource definitions (CRDs) and cluster roles. It consists of:
+   a. **Deployment ordering** - It uses `sync-wave: "-1"`, guaranteeing it is the very first component deployed. ArgoCD will wait for these CRDs to be fully healthy before proceeding to the next wave.
+   b. **Namespace automation** - The `CreateNamespace=true` flag ensures the `istio-system` namespace is built dynamically if it does not already exist.
+   c. **State management (Drift ignore)** - It includes an `ignoreDifferences` block for the `ValidatingWebhookConfiguration`. Because Istio's internal controller (`pilot-discovery`) injects CA bundles into this webhook at runtime, ArgoCD would normally interpret this as configuration drift and flag the app as `OutOfSync`. This block tells ArgoCD to ignore runtime mutations by that specific field manager, keeping the GitOps state clean and green.
+
+2. **Istio Controlplane `istiod`** - This application deploys the core Istio daemon, which acts as the brain of the mesh, managing service discovery, configuration translation for envoy proxies, and certificate issuance. In older versions of Istio, the **"brain"** was split into multiple different pieces. Today, it is consolidated into a single application called **istiod**, the "d" stands for daemon. This is the air traffic controller of the mesh. It takes the human readable rules we write, using the vocabulary from the Base layer, and translates them into machine code. It does **not** touch our web traffic directly. Instead, it beams these translated rules down to the thousands of tiny "Envoy proxies" (_traffic cops_) running alongside our actual applications. It also acts as an **internal Certificate Authority (CA)**. It constantly generates and rotates cryptographic certificates for our apps so they can communicate with each other securely (a concept called mTLS), without us having to write security code. It consists of:
+   a. **Deployment ordering** - It uses `sync-wave: "1"`, executing only after the foundational CRDs from the base app are established.
+   b. **Resource isolation (Node pinning)** - The configuration actively prevents `istiod` from running on the Kubernetes controlplane node. By injecting Helm values for `nodeSelector` and `tolerations` (targeting `tier: frontend` and `dedicated: frontend`), it forces the daemon onto frontend worker nodes. The comments note this to prevents `Istiod` from starving critical infrastructure like `etcd` and ArgoCD on a smaller controlplane instance.
+   c. **Resource fencing** - It enforces explicit CPU and memory requests (`100m/128Mi`) and limits (`500m/512Mi) to ensure predictable scaling behaviour.
+3. **Istio Ingress gateway `istio-ingressgateway`** - Our internal applications are hidden away inside the cluster where the outside world cannot reach them. We need a safe, highly controlled entry point. The ingress gateway is a massive, high-performance envoy proxy that sits at the very edge of the cluster. It acts as the receptionist or bouncer. When a user from the internet tries to access our application, their request hits the gateway first. The gateway checks the rules given to it by the brain, `istiod`. It handles the heavy lifting of decrypting HTTPS Web traffic (SSL termination), ensures the request is valid, and then routes that external traffic to the correct internal, hidden application. Thus this application deploys the **"front door"** of the mesh, a standalone envoy proxy that intercepts, inspects, and routes external traffic into the cluster.
+   a. **Deployment ordering** It uses `sync-wave: "2"`, meaning it provisions only after the `istiod`controlplane is fully operational and ready to configure it.
+   b. **Node pinning** - Like the controlplane, the gateway is anchored explicitly to the DMZ/frontend worker nodes via`tolerations`and`nodeSelector`values.
+   c. **Network exposure** - Instead of requesting a cloud native loadbalancer, which provisions external cloud infrastructure, the service is configured as a`NodePort`. It explicitly maps internal HTTP traffic to `nodePort: 30080`on the worker nodes, creating a deterministic bridge for external traffic.
+   d. **Health checks** - It explicitly exposes port`15021`, which is required for Istio's internal proxy health and readiness probes.
+
+**Summary of the flow:**
+
+    1.  **Base** gives us the language to write rules.
+    2.  **Istiod** reads those rules and acts as the brain.
+    3.  **Ingress gateway** - is the muscle at the edge that takes orders from the brain and actually routes the outside traffic.
+
+### 5 [ritual-roast-app.yml](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/k8s-manifests/observability/ritual-roast-app.yml)
+
+This file is an ArgoCD application manifest that bridges the gap between infrastructure and the actual product. While the previous files built the traffic management system (Istio) and monitoring tools, this file is responsible for deploying the actual "Ritual Roast" application workloads into the cluster. Instead of deploying a single Helm chart like the Istio files, this manifest acts as a dynamic folder scanner. It tells ArgoCD to watch a specific directory in a GitHub repository and automatically apply every Kubernetes configuration it finds inside that folder to the cluster. It consists of:
+**ArgoCD Application `ritual-roast-workloads`** - This resource operates as an automated deployment agent for the core application. Think of it as a supervisor that constantly watches our application's template folder and ensures the real-world cluster always matches those templates.
+
+1.  **Deployment ordering - `sync-wave: "3"`** - This is the most critical piece of metadata. By setting the wave to 3, it guarantees that the Ritual Roast application will not attempt to deploy until the Istio base (-1), Istiod (1), and Istio ingress gateway (2) are fully online and healthy. It prevents the application from starting before its network and security foundations exist.
+2.  **Source location & Recursion** - The `source` block points directly to the `main` branch of a GitHub repository, specifically targeting the `infrastructure/05-aws-k8s/k8s-manifests/dev-apps` directory. The `recurse: true` flag is highly powerful here, it tells ArgoCD to drill down into any subfolders within `dev-apps` and deploy every YAML file it finds. This allows developers to organize their app manifests (depployments, services, configmaps) logically into subfolders without having to update this ArgoCD file.
+3.  **Target environment `namespace: dev`** - It directs all the discovered workloads into a dedicated `dev` namespace, keeping the application securely isolated from system components like `istio-system` or `argocd`. The `CreateNamspace=true` flag ensures this `dev` environment is automatically built if it doesn't already exist.
+4.  **Strct state enforcement `syncPolicy`**
+    a. `prune: true` - means if a developer deletes a YAML file from the GitHub repository, ArgoCD will automatically delete the corresponding resource running in the Kubernetes cluster.
+    b. `selfHeal: true` - prevents "configuration drift". If an engineer manually alters a running pod or service directly in the cluster via the command line, ArgoCD will instantly overwrite their changes and revert the system back to exactly what is written in GitHub
+
+### 6 [canary-staging-app.yml](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/k8s-manifests/observability/canary-staging-app.yml)
+
+This is another ArgoCD application manifest. It serves a specialized purpose: deploying the `v2` Ritual Roast application alongside the `v1` for safe testing. This file acts as the automated deployment agent specifically for the `v2`, experimental version. By deploying this alongside the main application, `v1`, we set the stage for Istio to route a small percentage of live traffic to the `v2` to test its performance.
+**ArgoCD application `ritual-roast-canary`** - This resource functions almost identically to the main workload application from our previous file, but it acts as a separate supervisor watching a different set of templates. Lets take a closer look:
+
+1.  **Deployment ordering `sync-wave: "3"`** It deploys at the exact same time as the main `ritual-roast-workloads` application. Because it is on wave 3, it safely waits for all the Istio network and security components to be fully built before trying to launch.
+2.  **Source location (the experimental folder)** - Instead of pointing to the main `dev-apps` folder, this application is hardcoded to watch the `infrastructure/05-aws-k8s/k8s-manifests/canary-staging` directory. The `recurse: true` flag ensures ArgoCD digs through any subfolders to deploy every manifest it finds. These manifests will contain the newer versions of our application code.
+3.  **Shared target environment `namespace: dev`** - This is the most critical detail in the file. It deploys the canary components into the exact same `dev` namespace as the main application. They share the same environment. This shared living space is what allows Istio to seamlessly intercept incoming web traffic and safely split it between the stable version and the new canary version.
+4.  **Strict state enforcement `syncPolicy`** - It uses the same strict GitOps rules `prune: true` and `selfHeal: true`. This is especially useful for canary testing: if the canary version fails its tests, we can simply delete the respective canary file from GitHub. ArgoCD's prune feature will instantly see the files are gone and automatically delete the failing canary pods from the live cluster, instantly stopping the test.
+
+# Instructions
+
+0. The whole project should have already been pushed to GitHub by now, in your own new repo. Thus unless [.github/workflows/deploy-ghcr-k8s.yml](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/.github/workflows/deploy-ghcr-k8s.yml) was disabled, it would have executed and pushed 4 images up to `ghcr.io`. If not, then please enable it by removing the postfix `.disabled` and pushing to GitHub.
+1. Copy the name of the S3 bucket used in Layer 1
+2. Open `05-aws-k8s/environments/dev/providers.tf` and replace the bucket name from `"rr-capstone-5b160b287a99a6d9"` with the value.
+3. If you're using a different region, change the provider region from `"eu-west-2"` to your desired region. Then, open the following files and update `default = "eu-west-2"` under `variable "aws_region" {}` to your desired region:
+   a. `05-aws-k8s/environments/dev/variables.tf`
+   b. `05-aws-k8s/modules/compute_k8s/variables.tf`
+4. Open `05-aws-k8s/environments/dev/shared_locals.tf` and update `Project_owner`, `s3_bucket` and any other values you want to add or remove.
+5. Open the following files and update the URL to your GitHub repo:
+   a. `05-aws-k8s/modules/compute_k8s/user_data_cp.sh` update **Lines: `145` & `206`**
+   b. `05-aws-k8s/k8s-manifests/observability/canary-staging-app.yml` update **Line: `11`**
+   c. `05-aws-k8s/k8s-manifests/observability/ritual-roast-app.yml` update **Line: `11`**
+6. **Find the ghcr.io images:** Update the following with your GitHub account name **`https://github.com/manunebo?tab=packages`** i.e. replace `manunebo` with your account name. Then paste that on your browser to retrieve a list of images in **ghcr.io**. If this is the only project you have, you should have 4 packages. Clicking on the package title e.g `rr-v1-frontend` will open **the image tag history** with the latest at the top. Copy the **current full image reference** e.g. `ghcr.io/manunebo/rr-v1-frontend:46dd0cae58aa503c7ccd4abe03c93820bd4febad` i.e. the one with the docker pull prefix.
+7. Change the ghcr.io image URLs in the following files with their corresponding **current full image reference**:
+   a. `05-aws-k8s/k8s-manifests/dev-apps/deployments/v1-frontend-nextjs-deployment.yml` update **Line: `40`**
+   b. `05-aws-k8s/k8s-manifests/dev-apps/deployments/v1-backend-flask-deployment.yml` update **Line: `37`**
+   c. `05-aws-k8s/k8s-manifests/canary-staging/v2-frontend-vite-deployment.yml` update **Line: `40`**
+   d. `05-aws-k8s/k8s-manifests/canary-staging/v2-backend-go-deployment.yml` update **Line: `37`**
+8. **Grafana setup:** To setup Grafana follow the instructions on `05-aws-k8s/documents/Creating_a_Grafana_account_and_credentials`
+9. If on Linux change directory to the Layer 5 dev directory `cd infrastructure/05-aws-k8s/environments/dev/` and Export the GitHub PAT and Grafana credentials:
+
+```bash
+export TF_VAR_github_pat="ghp..."
+export TF_VAR_grafana_token="glc_..."
+export TF_VAR_grafana_remote_write_url="https://prometheus-..."
+export TF_VAR_grafana_instance_id="123..."
+```
+
+10. Create an alias for terraform `alias tf=terraform`, this is easier than writing out the long word
+11. Initialize terraform: `tf init` and run terraform plan: `tf plan` review the outputs and if you're happy run `tf apply`, or if you trusted the plan `tf apply -auto-approve`
+12. Retrieve the Loadbalancer DNS:
+
+```BASH
+aws elbv2 describe-load-balancers \
+  --query "LoadBalancers[?contains(LoadBalancerName, 'public-alb')].DNSName" \
+  --output text
+```
+
+Copy and paste this on your browser to view the webpage. **Congratulations you've deployed your website with K8S**
+
+13. Retrieve the controlplane instance id for session manager
+
+```bash
+aws ec2 describe-instances \
+  --filters "Name=tag:Name,Values=rr-dev-k3s-control-plane" "Name=instance-state-name,Values=running" \
+  --query "Reservations[0].Instances[0].InstanceId" \
+  --output text
+```
+
+This will retrieve the instance ID which can then be used to open a session into the instance with session manager. The output of this should be a single value such as `i-0d82acd5aa8f15404`. Copy this.
+
+14. Open a session into the instance with sessionManager using:
+
+```bash
+aws ssm start-session --target instance-id
+```
+
+Example including instance ID:
+
+```bash
+aws ssm start-session --target i-0d82acd5aa8f15404
+```
+
+This will give us a terminal into the instance just like an SSH session would. 20.
+
+15. Once in the session, export/Initiate kubeconfig this loads the user configuration
+
+```bash
+sudo su
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+```
+
+16. The cluster will take a while to come up, 5 to 13 minutes. Open `05-aws-k8s/documents/Steps_to_verify_the_cluster_status.txt` and following the instructions to verify various cluster resource status.
+17. To deploy canary, open `05-aws-k8s/documents/Step by step Canary deployment.txt` and follow the instructions.
+18. View observability with Kiali: Take the loadbalancer DNS from `12.` above and add `/kiali` to the end, Open a new tab on the browser and paste it and press enter.
+19. View Observability with Grafana: Open `05-aws-k8s/documents/Creating_a_Grafana_account_and_credentials` and follow the instructions under `Phase 5: Viewing observability with Grafana`

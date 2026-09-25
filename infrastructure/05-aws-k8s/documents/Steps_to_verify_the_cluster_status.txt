@@ -1,0 +1,190 @@
+**********************************************************************************************************
+Steps to verify the cluster status
+**********************************************************************************************************
+
+Use the following commands in verifying the cluster status:
+
+### 1. Create an alias for kubectl
+
+```bash
+alias k=kubectl
+```
+
+**********************************************************************************************************
+
+### 2. Verify that Calico CNI status
+
+To verify that Calico CNI is running and healthy on the Kubernetes cluster, run the following verification steps:
+
+1. Check the node status (Cluster level check): Run the following to check the overall readiness status of all cluster nodes.
+
+```bash
+k get nodes
+```
+
+Verification: All nodes must display a `STATUS` of `READY`. If Calico is down or failing to initialize, nodes will remain in a `NotReady` state.
+
+2. Verify any deployments
+
+```bash
+k get deployment -n calico-system
+```
+
+3. Check Calico System pods. Inspect the Calico daemonSet and control pods. Note "modern" installations run in the calico-system namespace, while legacy/manifest installations run in Kube-system namespace.
+
+```bash
+k get pods -n calico-system -o wide
+```
+
+Verification: Ensure a `calico-node-*` pod is running on every node in your cluster with a `STATUS` of `Running` and `READY` count of `1/1` or `2/2` running with Typha/Feli components.
+
+4. Verify Tigera Operator Status i.e. Query the custom resource status managed by the Tigera operator
+
+```bash
+k get tigerastatus
+```
+
+Verify: Confirm that `AVAILABLE` reads `True`, `PROGRESSING` reads `False`, and `DEGRADED` reads `False`
+
+**********************************************************************************************************
+
+### 3. Verify namespaces
+
+It is important to verify the namespaces as these are the sandboxes that various applications will run in
+
+```bash
+k get ns
+
+```
+
+Alternatively
+
+```bash
+k get namespaces
+```
+
+If this is not fully populated yet, then the cluster hasn't finished the booting process. Step by step the various namespaces will be created, one at a time.
+
+**********************************************************************************************************
+
+### 4. Verify ArgoCD
+
+1. Verify ArgoCD Application health: Confirm all GitOps applications are synced:
+
+```bash
+k get application -n argocd
+```
+
+Verification: The `SYNC STATUS` column should read `Synced` and `HEALTH STATUS` should read `Healthy`.
+
+2. Verify the status of deployments in argocd namespace
+
+```bash
+k get deployment -n argocd
+```
+
+3. Verify the status of pods in `argocd` namespace
+
+```bash
+k get pods -n argocd
+```
+
+4. Verify the status of services in argocd
+
+```bash
+k get svc -n argocd
+```
+
+**********************************************************************************************************
+
+### 5. Verify Istio
+
+Verify Istio controlplane & Ingress gateway: confirm Istio components are healthy and running:
+
+1. Retrieve applications status
+
+```bash
+k get application -n istio-system
+```
+
+2. Retrieve deployment status
+
+```bash
+k get deployment -n istio-system
+```
+
+3. Retrieve pods status
+
+```bash
+k get pods -n istio-system
+```
+
+4. Retrieve services status
+
+```bash
+k get svc -n istio-system
+```
+
+Alternatively, this will return everything in that namespace
+
+```bash
+k get -A -n istio-system
+```
+
+Verification: Ensure `istiod` and `istio-ingressgateway` show a `STATUS` of `Running` and `READY`, counts are fully populated e.g. `1/1`
+
+**********************************************************************************************************
+
+### 6. Verify applications/deployments/pods in the `dev` namespace
+
+1. Retrieve applications status
+
+```bash
+k get application -n dev
+```
+
+2. Retrieve deployment status
+
+```bash
+k get deployment -n dev
+```
+
+3. Retrieve pods status
+
+```bash
+k get pods -n dev
+```
+
+4. Retrieve services status
+
+```bash
+k get svc -n dev
+```
+
+**********************************************************************************************************
+
+### 7. Verify applications/deployments/pods in the `visibility` namespace
+
+1. Retrieve applications status
+
+```bash
+k get application -n visibility
+```
+
+2. Retrieve deployment status
+
+```bash
+k get deployment -n visibility
+```
+
+3. Retrieve pods status
+
+```bash
+k get pods -n visibility
+```
+
+4. Retrieve services status
+
+```bash
+k get svc -n visibility
+```
