@@ -1027,6 +1027,7 @@ Here we're injecting the ARN pointing to the database secret stored in AWS Secre
 
 ## Instructions
 
+0. Ensure that the images have been pushed to ECR.
 1. On the terminal change directory to the project root, `cd ~/terraform/v2-ritual-roast/`
 2. Push the whole project to github, `git push origin main`. Note you must have setup origin prior to running this
 3. Copy the name of the S3 bucket used in Layer 1
@@ -1038,6 +1039,7 @@ Here we're injecting the ARN pointing to the database secret stored in AWS Secre
 9. Create an alias for terraform `alias tf=terraform`, this is easier than writing out the long word
 10. Initialize terraform: `tf init`
 11. Run terraform plan: `tf plan` review the outputs and if you're happy proceed to the next command
-12. Run terraform apply, with caution `tf apply`, or if you trusted the plan `tf apply -auto-approve`
+12. Run terraform apply, with caution `tf apply`, or if you trusted the plan `tf apply --auto-approve`
 13. Copy the Public ALB URL and paste it in the browser.
 14. Congratulations you've deployed your website with ECS Fargate
+15. When you've finished playing with Layer 4 destroy **Layer 4 & Layer 3**: run `tf destroy --auto-approve` on both as we won't need it in Layer 5.

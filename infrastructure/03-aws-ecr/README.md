@@ -370,4 +370,7 @@ Here is the step by step guide to deploy Layer 3 successfully:
 8. Initialize terraform: `tf init`
 9. Run terraform plan: `tf plan` review the outputs and if you're happy proceed to the next command
 10. Run terraform apply, with caution `tf apply`, or if you trusted the plan `tf apply -auto-approve`
-11. Congrats, you've deployed your Layer 3, ECR. Lets now move onto ECS.
+11. Congrats, you've deployed your Layer 3, ECR.
+12. Now we need to push the images to ECR. On your GitHub repo click on **`Actions`**
+13. On the left hand panel of Actions click **`Build and Push V1 to AWS ECR`**
+14. In the centre click on **`Run workflow`** or **`Re-run workflow`**, if this is not the first time. This will populate the ECR registries.

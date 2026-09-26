@@ -9,6 +9,8 @@ Use the following commands in verifying the cluster status:
 ```bash
 alias k=kubectl
 ```
+[root@ip-10-16-118-64 bin]# alias k=kubectl
+[root@ip-10-16-118-64 bin]# 
 
 **********************************************************************************************************
 
@@ -22,6 +24,15 @@ To verify that Calico CNI is running and healthy on the Kubernetes cluster, run 
 k get nodes
 ```
 
+[root@ip-10-16-118-64 bin]# k get nodes
+NAME                                          STATUS   ROLES                       AGE     VERSION
+ip-10-16-118-64.eu-west-2.compute.internal    Ready    control-plane,etcd,master   5m19s   v1.28.15+k3s1
+ip-10-16-180-175.eu-west-2.compute.internal   Ready    control-plane,etcd,master   4m16s   v1.28.15+k3s1
+ip-10-16-187-226.eu-west-2.compute.internal   Ready    <none>                      4m17s   v1.28.15+k3s1
+ip-10-16-48-114.eu-west-2.compute.internal    Ready    control-plane,etcd,master   4m32s   v1.28.15+k3s1
+ip-10-16-63-71.eu-west-2.compute.internal     Ready    <none>                      4m23s   v1.28.15+k3s1
+[root@ip-10-16-118-64 bin]# 
+
 Verification: All nodes must display a `STATUS` of `READY`. If Calico is down or failing to initialize, nodes will remain in a `NotReady` state.
 
 2. Verify any deployments
@@ -30,11 +41,34 @@ Verification: All nodes must display a `STATUS` of `READY`. If Calico is down or
 k get deployment -n calico-system
 ```
 
+[root@ip-10-16-118-64 bin]# k get deployment -n calico-system
+NAME                      READY   UP-TO-DATE   AVAILABLE   AGE
+calico-kube-controllers   1/1     1            1           5m21s
+calico-typha              3/3     3            3           5m21s
+[root@ip-10-16-118-64 bin]# 
+
 3. Check Calico System pods. Inspect the Calico daemonSet and control pods. Note "modern" installations run in the calico-system namespace, while legacy/manifest installations run in Kube-system namespace.
 
 ```bash
 k get pods -n calico-system -o wide
 ```
+[root@ip-10-16-118-64 bin]# k get pods -n calico-system -o wide
+NAME                                       READY   STATUS    RESTARTS        AGE     IP                NODE                                          NOMINATED NODE   READINESS GATES
+calico-kube-controllers-856df57c44-njsfk   1/1     Running   0               5m59s   192.168.105.196   ip-10-16-118-64.eu-west-2.compute.internal    <none>           <none>
+calico-node-hfkvw                          1/1     Running   0               5m59s   10.16.63.71       ip-10-16-63-71.eu-west-2.compute.internal     <none>           <none>
+calico-node-q6wdr                          1/1     Running   0               5m59s   10.16.48.114      ip-10-16-48-114.eu-west-2.compute.internal    <none>           <none>
+calico-node-qnb6s                          1/1     Running   0               5m59s   10.16.118.64      ip-10-16-118-64.eu-west-2.compute.internal    <none>           <none>
+calico-node-sdhkl                          1/1     Running   0               5m52s   10.16.180.175     ip-10-16-180-175.eu-west-2.compute.internal   <none>           <none>
+calico-node-t5h4w                          1/1     Running   0               5m53s   10.16.187.226     ip-10-16-187-226.eu-west-2.compute.internal   <none>           <none>
+calico-typha-558fdbff6d-8fg8t              1/1     Running   0               5m45s   10.16.187.226     ip-10-16-187-226.eu-west-2.compute.internal   <none>           <none>
+calico-typha-558fdbff6d-b6fhn              1/1     Running   0               5m55s   10.16.63.71       ip-10-16-63-71.eu-west-2.compute.internal     <none>           <none>
+calico-typha-558fdbff6d-qpqxz              1/1     Running   1 (5m27s ago)   5m59s   10.16.48.114      ip-10-16-48-114.eu-west-2.compute.internal    <none>           <none>
+csi-node-driver-59vr8                      2/2     Running   0               5m59s   192.168.216.1     ip-10-16-63-71.eu-west-2.compute.internal     <none>           <none>
+csi-node-driver-crkml                      2/2     Running   0               5m59s   192.168.34.1      ip-10-16-48-114.eu-west-2.compute.internal    <none>           <none>
+csi-node-driver-vrjnz                      2/2     Running   0               5m52s   192.168.203.193   ip-10-16-180-175.eu-west-2.compute.internal   <none>           <none>
+csi-node-driver-wwdtc                      2/2     Running   0               5m53s   192.168.69.65     ip-10-16-187-226.eu-west-2.compute.internal   <none>           <none>
+csi-node-driver-zrscj                      2/2     Running   0               5m59s   192.168.105.193   ip-10-16-118-64.eu-west-2.compute.internal    <none>           <none>
+[root@ip-10-16-118-64 bin]# 
 
 Verification: Ensure a `calico-node-*` pod is running on every node in your cluster with a `STATUS` of `Running` and `READY` count of `1/1` or `2/2` running with Typha/Feli components.
 
@@ -43,6 +77,11 @@ Verification: Ensure a `calico-node-*` pod is running on every node in your clus
 ```bash
 k get tigerastatus
 ```
+[root@ip-10-16-118-64 bin]# k get tigerastatus
+NAME        AVAILABLE   PROGRESSING   DEGRADED   SINCE
+apiserver   True        False         False      6m21s
+calico      True        False         False      6m36s
+[root@ip-10-16-118-64 bin]# 
 
 Verify: Confirm that `AVAILABLE` reads `True`, `PROGRESSING` reads `False`, and `DEGRADED` reads `False`
 
@@ -57,11 +96,39 @@ k get ns
 
 ```
 
+[root@ip-10-16-118-64 bin]# k get ns
+NAME               STATUS   AGE
+argocd             Active   7m25s
+calico-apiserver   Active   7m
+calico-system      Active   7m45s
+default            Active   8m42s
+dev                Active   6m43s
+kube-node-lease    Active   8m42s
+kube-public        Active   8m42s
+kube-system        Active   8m42s
+observability      Active   6m39s
+tigera-operator    Active   8m18s
+[root@ip-10-16-118-64 bin]# 
+
 Alternatively
 
 ```bash
 k get namespaces
 ```
+
+[root@ip-10-16-118-64 bin]# k get namespaces
+NAME               STATUS   AGE
+argocd             Active   7m48s
+calico-apiserver   Active   7m23s
+calico-system      Active   8m8s
+default            Active   9m5s
+dev                Active   7m6s
+kube-node-lease    Active   9m5s
+kube-public        Active   9m5s
+kube-system        Active   9m5s
+observability      Active   7m2s
+tigera-operator    Active   8m41s
+[root@ip-10-16-118-64 bin]# 
 
 If this is not fully populated yet, then the cluster hasn't finished the booting process. Step by step the various namespaces will be created, one at a time.
 
@@ -75,6 +142,43 @@ If this is not fully populated yet, then the cluster hasn't finished the booting
 k get application -n argocd
 ```
 
+Initially it might look like the following, don't panic:
+
+[root@ip-10-16-118-64 bin]# k get application -n argocd
+NAME                 SYNC STATUS   HEALTH STATUS
+root-observability   Unknown       Healthy
+[root@ip-10-16-118-64 bin]# 
+
+then it might look like:
+
+[root@ip-10-16-115-140 bin]# k get applications -n argocd
+NAME                   SYNC STATUS   HEALTH STATUS
+istio-base             OutOfSync     Missing
+istio-ingressgateway                 
+istiod                 OutOfSync     Missing
+kiali                                
+prometheus             OutOfSync     Missing
+root-observability     OutOfSync     Missing
+[root@ip-10-16-115-140 bin]# 
+
+Until this is resolved, non of our applications will work as this installs Istio.
+
+But then it will eventually look like:
+
+[root@ip-10-16-115-140 bin]# k get applications -n argocd
+NAME                     SYNC STATUS   HEALTH STATUS
+istio-base               Synced        Healthy
+istio-ingressgateway     Synced        Healthy
+istiod                   Synced        Healthy
+kiali                    Synced        Healthy
+prometheus               Synced        Healthy
+ritual-roast-canary      Synced        Healthy
+ritual-roast-workloads   Synced        Healthy
+root-observability       Synced        Healthy
+[root@ip-10-16-115-140 bin]# 
+
+[##### FILL THIS IN #####]
+
 Verification: The `SYNC STATUS` column should read `Synced` and `HEALTH STATUS` should read `Healthy`.
 
 2. Verify the status of deployments in argocd namespace
@@ -82,18 +186,45 @@ Verification: The `SYNC STATUS` column should read `Synced` and `HEALTH STATUS` 
 ```bash
 k get deployment -n argocd
 ```
+[root@ip-10-16-115-140 bin]# k get deployments -n argocd
+NAME                               READY   UP-TO-DATE   AVAILABLE   AGE
+argocd-applicationset-controller   1/1     1            1           6m11s
+argocd-dex-server                  1/1     1            1           6m11s
+argocd-notifications-controller    1/1     1            1           6m11s
+argocd-redis                       1/1     1            1           6m11s
+argocd-repo-server                 1/1     1            1           6m11s
+argocd-server                      1/1     1            1           6m11s
+[root@ip-10-16-115-140 bin]# 
 
-3. Verify the status of pods in `argocd` namespace
+3. Verify the status of pods in `argocd` namespace this will also tell you which node they're running on.
 
 ```bash
-k get pods -n argocd
+k get pods -n argocd -o wide
 ```
-
-4. Verify the status of services in argocd
+[root@ip-10-16-118-64 bin]# k get pods -n argocd -o wide
+NAME                                               READY   STATUS      RESTARTS   AGE   IP                NODE                                          NOMINATED NODE   READINESS GATES
+argocd-application-controller-0                    1/1     Running     0          10m   192.168.34.3      ip-10-16-48-114.eu-west-2.compute.internal    <none>           <none>
+argocd-applicationset-controller-dc8cfcbdc-w2mn5   1/1     Running     0          10m   192.168.203.196   ip-10-16-180-175.eu-west-2.compute.internal   <none>           <none>
+argocd-dex-server-76cc78cfcf-zb5hr                 1/1     Running     0          10m   192.168.203.197   ip-10-16-180-175.eu-west-2.compute.internal   <none>           <none>
+argocd-notifications-controller-59c46695f5-k5lsd   1/1     Running     0          10m   192.168.34.4      ip-10-16-48-114.eu-west-2.compute.internal    <none>           <none>
+argocd-redis-5cf79bddc4-28ndq                      1/1     Running     0          10m   192.168.203.198   ip-10-16-180-175.eu-west-2.compute.internal   <none>           <none>
+argocd-redis-secret-init-mr4bx                     0/1     Completed   0          11m   192.168.203.194   ip-10-16-180-175.eu-west-2.compute.internal   <none>           <none>
+argocd-repo-server-ccc55876c-7dm4d                 1/1     Running     0          10m   192.168.34.5      ip-10-16-48-114.eu-west-2.compute.internal    <none>           <none>
+argocd-server-77cbc679c-8blr8                      1/1     Running     0          10m   192.168.203.199   ip-10-16-180-175.eu-west-2.compute.internal   <none>           <none>
+[root@ip-10-16-118-64 bin]# 
+4. Verify the status of services in argocd, these are the networking endpoints that connect specific resources to the cluster
 
 ```bash
 k get svc -n argocd
 ```
+[root@ip-10-16-115-140 bin]# k get svc -n argocd
+NAME                               TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)             AGE
+argocd-applicationset-controller   ClusterIP   10.43.73.72     <none>        7000/TCP            7m59s
+argocd-dex-server                  ClusterIP   10.43.12.241    <none>        5556/TCP,5557/TCP   7m59s
+argocd-redis                       ClusterIP   10.43.245.247   <none>        6379/TCP            7m59s
+argocd-repo-server                 ClusterIP   10.43.196.75    <none>        8081/TCP            7m59s
+argocd-server                      ClusterIP   10.43.66.252    <none>        80/TCP,443/TCP      7m59s
+[root@ip-10-16-115-140 bin]# 
 
 **********************************************************************************************************
 
@@ -107,11 +238,31 @@ Verify Istio controlplane & Ingress gateway: confirm Istio components are health
 k get application -n istio-system
 ```
 
+Initially it might look like the following but don't panic:
+
+[root@ip-10-16-118-64 bin]# k get application -n istio-system
+No resources found in istio-system namespace.
+[root@ip-10-16-118-64 bin]# 
+
+
 2. Retrieve deployment status
 
 ```bash
 k get deployment -n istio-system
 ```
+
+Initially it will look like:
+
+[root@ip-10-16-118-64 bin]# k get deployment -n istio-system
+No resources found in istio-system namespace.
+[root@ip-10-16-118-64 bin]# 
+
+
+Eventually it will look like:
+[root@ip-10-16-115-140 bin]# k get deployments -n istio-system
+NAME     READY   UP-TO-DATE   AVAILABLE   AGE
+istiod   1/1     1            1           6m37s
+[root@ip-10-16-115-140 bin]# 
 
 3. Retrieve pods status
 
@@ -119,17 +270,29 @@ k get deployment -n istio-system
 k get pods -n istio-system
 ```
 
+[root@ip-10-16-115-140 bin]# k get pods -n istio-system
+NAME                     READY   STATUS    RESTARTS   AGE
+istiod-dc59cdcb5-jqst5   1/1     Running   0          7m18s
+[root@ip-10-16-115-140 bin]# 
+
 4. Retrieve services status
 
 ```bash
 k get svc -n istio-system
 ```
 
-Alternatively, this will return everything in that namespace
+It might look like:
 
-```bash
-k get -A -n istio-system
-```
+[root@ip-10-16-118-64 bin]# k get svc -n istio-system
+No resources found in istio-system namespace.
+[root@ip-10-16-118-64 bin]#
+
+Eventually it will look like:
+
+[root@ip-10-16-115-140 bin]# k get svc -n istio-system
+NAME     TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)                                 AGE
+istiod   ClusterIP   10.43.190.136   <none>        15010/TCP,15012/TCP,443/TCP,15014/TCP   7m55s
+[root@ip-10-16-115-140 bin]# 
 
 Verification: Ensure `istiod` and `istio-ingressgateway` show a `STATUS` of `Running` and `READY`, counts are fully populated e.g. `1/1`
 
@@ -137,17 +300,21 @@ Verification: Ensure `istiod` and `istio-ingressgateway` show a `STATUS` of `Run
 
 ### 6. Verify applications/deployments/pods in the `dev` namespace
 
-1. Retrieve applications status
-
-```bash
-k get application -n dev
-```
-
-2. Retrieve deployment status
+1. Retrieve deployment status
 
 ```bash
 k get deployment -n dev
 ```
+
+When it's ready it will look like this:
+
+[root@ip-10-16-115-140 bin]# k get deployments -n dev
+NAME                 READY   UP-TO-DATE   AVAILABLE   AGE
+v1-backend-flask     2/2     2            2           9m58s
+v1-frontend-nextjs   2/2     2            2           9m58s
+v2-backend-go        2/2     2            2           10m
+v2-frontend-vite     2/2     2            2           10m
+[root@ip-10-16-115-140 bin]# 
 
 3. Retrieve pods status
 
@@ -155,36 +322,82 @@ k get deployment -n dev
 k get pods -n dev
 ```
 
+[root@ip-10-16-115-140 bin]# k get pods -n dev
+NAME                                  READY   STATUS    RESTARTS   AGE
+v1-backend-flask-75664dc9-6l6b9       2/2     Running   0          10m
+v1-backend-flask-75664dc9-pbgbj       2/2     Running   0          10m
+v1-frontend-nextjs-7ffc4b4599-8cssl   2/2     Running   0          10m
+v1-frontend-nextjs-7ffc4b4599-djrkm   2/2     Running   0          10m
+v2-backend-go-55b6697f7b-qrzs6        2/2     Running   0          10m
+v2-backend-go-55b6697f7b-v7jcc        2/2     Running   0          10m
+v2-frontend-vite-7b64dbcb89-j4k2f     2/2     Running   0          10m
+v2-frontend-vite-7b64dbcb89-pw9dt     2/2     Running   0          10m
+[root@ip-10-16-115-140 bin]# 
+
 4. Retrieve services status
 
 ```bash
 k get svc -n dev
 ```
 
+[root@ip-10-16-115-140 bin]# k get svc -n dev
+NAME                   TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE
+ritual-roast-backend   ClusterIP   10.43.109.138   <none>        5000/TCP   11m
+rr-frontend-svc        ClusterIP   10.43.21.1      <none>        80/TCP     11m
+[root@ip-10-16-115-140 bin]# 
+
+
+5. Lets verify the VirtualServices:
+
+[root@ip-10-16-115-140 bin]# k get vs -n dev
+NAME             GATEWAYS                   HOSTS                      AGE
+backend-route                               ["ritual-roast-backend"]   20m
+frontend-route   ["ritual-roast-gateway"]   ["*"]                      20m
+[root@ip-10-16-115-140 bin]# 
+
 **********************************************************************************************************
 
-### 7. Verify applications/deployments/pods in the `visibility` namespace
-
-1. Retrieve applications status
-
-```bash
-k get application -n visibility
-```
+### 7. Verify applications/deployments/pods in the `observability` namespace
 
 2. Retrieve deployment status
 
 ```bash
-k get deployment -n visibility
+k get deployment -n observability
 ```
+
+[root@ip-10-16-115-140 bin]# k get deployments -n observability
+NAME                   READY   UP-TO-DATE   AVAILABLE   AGE
+kiali                  1/1     1            1           12m
+kiali-kiali-operator   1/1     1            1           13m
+prometheus-server      1/1     1            1           13m
+[root@ip-10-16-115-140 bin]# 
 
 3. Retrieve pods status
 
 ```bash
-k get pods -n visibility
+k get pods -n observability
 ```
+
+[root@ip-10-16-115-140 bin]# k get pods -n observability
+NAME                                    READY   STATUS    RESTARTS   AGE
+grafana-alloy-agent-5dlcs               1/1     Running   0          14m
+grafana-alloy-agent-9f6p6               1/1     Running   0          14m
+grafana-alloy-agent-svr2f               1/1     Running   0          14m
+grafana-alloy-agent-vrhvf               1/1     Running   0          14m
+grafana-alloy-agent-wqb9c               1/1     Running   0          14m
+kiali-7d745479f5-tfcz6                  1/1     Running   0          13m
+kiali-kiali-operator-775bf4b688-6xhd5   1/1     Running   0          14m
+prometheus-server-7fc68f6bb-v2hdr       2/2     Running   0          14m
+[root@ip-10-16-115-140 bin]# 
 
 4. Retrieve services status
 
 ```bash
-k get svc -n visibility
+k get svc -n observability
 ```
+
+[root@ip-10-16-115-140 bin]# k get svc -n observability
+NAME                TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)              AGE
+kiali               ClusterIP   10.43.125.231   <none>        20001/TCP,9090/TCP   14m
+prometheus-server   ClusterIP   10.43.255.102   <none>        80/TCP               15m
+[root@ip-10-16-115-140 bin]# 

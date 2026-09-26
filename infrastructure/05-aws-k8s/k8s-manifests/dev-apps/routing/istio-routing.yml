@@ -31,12 +31,12 @@ spec:
   selector:
     istio: ingressgateway
   servers:
-  - port:
-      number: 80
-      name: http
-      protocol: HTTP
-    hosts:
-    - "*"
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - "*"
 ---
 # -----------------------------------------------------------------
 # 2a. DESTINATION RULE - Frontend subsets by version label
@@ -49,12 +49,12 @@ metadata:
 spec:
   host: rr-frontend-svc
   subsets:
-  - name: v1
-    labels:
-      version: v1          # selects v1-frontend-nextjs pods
-  - name: v2
-    labels:
-      version: v2          # selects v2-frontend-vite pods
+    - name: v1
+      labels:
+        version: v1 # selects v1-frontend-nextjs pods
+    - name: v2
+      labels:
+        version: v2 # selects v2-frontend-vite pods
 ---
 # -----------------------------------------------------------------
 # 2b. DESTINATION RULE - Backend subsets by version label
@@ -67,12 +67,12 @@ metadata:
 spec:
   host: ritual-roast-backend
   subsets:
-  - name: v1
-    labels:
-      version: v1          # selects v1-backend-flask pods
-  - name: v2
-    labels:
-      version: v2          # selects v2-backend-go pods
+    - name: v1
+      labels:
+        version: v1 # selects v1-backend-flask pods
+    - name: v2
+      labels:
+        version: v2 # selects v2-backend-go pods
 ---
 # -----------------------------------------------------------------
 # 3a. VIRTUAL SERVICE - Frontend (ingress -> frontend)
@@ -86,63 +86,63 @@ metadata:
   namespace: dev
 spec:
   hosts:
-  - "*"
+    - "*"
   gateways:
-  - ritual-roast-gateway
+    - ritual-roast-gateway
   http:
-  # (0) Kiali UI — MUST be the FIRST rule. A browser that has loaded the app
-  #     carries an x-frontend cookie; if the cookie matches below are reached
-  #     first, they capture /kiali and route it to the frontend app -> 404
-  #     (v1) or the wrong SPA (v2). Within one VirtualService rules are ordered
-  #     top-down, so a first-position /kiali prefix always wins regardless of
-  #     cookies. Covers the whole prefix: UI + assets + /kiali/api. This lives
-  #     here (not a separate VirtualService) because two VSes on the same
-  #     gateway+host merge with non-deterministic cross-VS ordering.
-  - match:
-    - uri:
-        prefix: /kiali
-    route:
-    - destination:
-        host: kiali.observability.svc.cluster.local
-        port:
-          number: 20001
-  # (1) Established v1 session -> always v1
-  - match:
-    - headers:
-        cookie:
-          regex: ".*x-frontend=v1.*"
-    route:
-    - destination:
-        host: rr-frontend-svc
-        subset: v1
-        port:
-          number: 80
-  # (2) Established v2 session -> always v2
-  - match:
-    - headers:
-        cookie:
-          regex: ".*x-frontend=v2.*"
-    route:
-    - destination:
-        host: rr-frontend-svc
-        subset: v2
-        port:
-          number: 80
-  # (3) New session (no cookie) -> weighted entry. STEADY STATE = 100/0.
-  #     Canary changes ONLY these two weights (via ../../canary-variants/).
-  - route:
-    - destination:
-        host: rr-frontend-svc
-        subset: v1
-        port:
-          number: 80
-      weight: 10
-    - destination:
-        host: rr-frontend-svc
-        subset: v2
-        port:
-          number: 80
-      weight: 90
+    # (0) Kiali UI — MUST be the FIRST rule. A browser that has loaded the app
+    #     carries an x-frontend cookie; if the cookie matches below are reached
+    #     first, they capture /kiali and route it to the frontend app -> 404
+    #     (v1) or the wrong SPA (v2). Within one VirtualService rules are ordered
+    #     top-down, so a first-position /kiali prefix always wins regardless of
+    #     cookies. Covers the whole prefix: UI + assets + /kiali/api. This lives
+    #     here (not a separate VirtualService) because two VSes on the same
+    #     gateway+host merge with non-deterministic cross-VS ordering.
+    - match:
+        - uri:
+            prefix: /kiali
+      route:
+        - destination:
+            host: kiali.observability.svc.cluster.local
+            port:
+              number: 20001
+    # (1) Established v1 session -> always v1
+    - match:
+        - headers:
+            cookie:
+              regex: ".*x-frontend=v1.*"
+      route:
+        - destination:
+            host: rr-frontend-svc
+            subset: v1
+            port:
+              number: 80
+    # (2) Established v2 session -> always v2
+    - match:
+        - headers:
+            cookie:
+              regex: ".*x-frontend=v2.*"
+      route:
+        - destination:
+            host: rr-frontend-svc
+            subset: v2
+            port:
+              number: 80
+    # (3) New session (no cookie) -> weighted entry. STEADY STATE = 100/0.
+    #     Canary changes ONLY these two weights (via ../../canary-variants/).
+    - route:
+        - destination:
+            host: rr-frontend-svc
+            subset: v1
+            port:
+              number: 80
+          weight: 100
+        - destination:
+            host: rr-frontend-svc
+            subset: v2
+            port:
+              number: 80
+          weight: 0
 ---
 # -----------------------------------------------------------------
 # 3b. VIRTUAL SERVICE - Backend (mesh-internal: frontend -> backend)
@@ -160,18 +160,18 @@ metadata:
   namespace: dev
 spec:
   hosts:
-  - ritual-roast-backend
+    - ritual-roast-backend
   http:
-  - route:
-    - destination:
-        host: ritual-roast-backend
-        subset: v1
-        port:
-          number: 5000
-      weight: 10
-    - destination:
-        host: ritual-roast-backend
-        subset: v2
-        port:
-          number: 5000
-      weight: 90
+    - route:
+        - destination:
+            host: ritual-roast-backend
+            subset: v1
+            port:
+              number: 5000
+          weight: 100
+        - destination:
+            host: ritual-roast-backend
+            subset: v2
+            port:
+              number: 5000
+          weight: 0
