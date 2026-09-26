@@ -232,18 +232,6 @@ argocd-server                      ClusterIP   10.43.66.252    <none>        80/
 
 Verify Istio controlplane & Ingress gateway: confirm Istio components are healthy and running:
 
-1. Retrieve applications status
-
-```bash
-k get application -n istio-system
-```
-
-Initially it might look like the following but don't panic:
-
-[root@ip-10-16-118-64 bin]# k get application -n istio-system
-No resources found in istio-system namespace.
-[root@ip-10-16-118-64 bin]# 
-
 
 2. Retrieve deployment status
 

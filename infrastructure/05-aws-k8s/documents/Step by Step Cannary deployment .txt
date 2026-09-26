@@ -7,6 +7,32 @@ Follow these steps for Canary deployment.
 #### Phase 1: Baseline Verification
 
 1. **Confirm initial health:** Ensure the cluster is fully up and running with `selfHeal: true` in `ritual-roast-app.yml`.
+
+[root@ip-10-16-117-217 bin]# k get application -n argocd -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.syncPolicy.automated}{"\n"}{end}'
+istio-base      {"prune":true,"selfHeal":true}
+istio-ingressgateway    {"prune":true,"selfHeal":true}
+istiod  {"prune":true,"selfHeal":true}
+kiali   {"prune":true,"selfHeal":true}
+prometheus      {"prune":true,"selfHeal":true}
+ritual-roast-canary     {"prune":true,"selfHeal":true}
+ritual-roast-workloads  {"prune":true,"selfHeal":true}
+root-observability      {"prune":true,"selfHeal":true}
+[root@ip-10-16-117-217 bin]# 
+
+Alternatively, we can narrow down our inspection with a targeted grep:
+
+[root@ip-10-16-117-217 bin]# k get application ritual-roast-workloads -n argocd -o yaml | grep -A 3 -B 3 "selfHeal:"
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
+status:
+[root@ip-10-16-117-217 bin]# 
+
+
+
 2. **Verify traffic routing:** Confirm that 100% of traffic is currently going to `v1`.
 
 ```bash
@@ -14,17 +40,56 @@ kubectl get vs -n dev
 
 ```
 
+[root@ip-10-16-117-217 bin]# k get vs -n dev
+NAME             GATEWAYS                   HOSTS                      AGE
+backend-route                               ["ritual-roast-backend"]   13m
+frontend-route   ["ritual-roast-gateway"]   ["*"]                      13m
+[root@ip-10-16-117-217 bin]# 
+
 Describe the VirtualService
 
 ```bash
 
-k describe vs -n dev <----- Narrow down what we want to see with grep
+k describe vs -n dev
 
 ```
 
+We can narrow down the output to show just the "Weights"
+
+[root@ip-10-16-117-217 bin]# k describe vs -n dev | grep -b4 "Weight:"
+443-        Host:  ritual-roast-backend
+479-        Port:
+493-          Number:  5000
+517-        Subset:    v1
+539:      Weight:      100
+562-      Destination:
+581-        Host:  ritual-roast-backend
+617-        Port:
+631-          Number:  5000
+655-        Subset:    v2
+677:      Weight:      0
+698-Events:            <none>
+724-
+725-
+726-Name:         frontend-route
+--
+1750-        Host:  rr-frontend-svc
+1781-        Port:
+1795-          Number:  80
+1817-        Subset:    v1
+1839:      Weight:      100
+1862-      Destination:
+1881-        Host:  rr-frontend-svc
+1912-        Port:
+1926-          Number:  80
+1948-        Subset:    v2
+1970:      Weight:      0
+1991-Events:            <none>
+[root@ip-10-16-117-217 bin]# 
+
 **********************************************************************************************************
 
-#### Phase 2: Disable Self-Healing
+#### Phase 2: Disable Self-Healing locally and push to github
 
 3. **Edit the ArgoCD Application manifest:** On your local machine or repository workspace,
      set `selfHeal: false` in `observability/ritual-roast-app.yml`:
