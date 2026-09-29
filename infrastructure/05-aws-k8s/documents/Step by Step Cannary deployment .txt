@@ -120,34 +120,69 @@ git push origin main
 Instead of waiting 3 minutes for ArgoCD to pick up the change, we can apply the change immediately with the following:
 
 ```bash
+# Refresh the root ArgoCD application
+kubectl annotate application root-observability -n argocd argocd.argoproj.io/refresh=normal --overwrite
+```
 
-kubectl apply -f https://raw.githubusercontent.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/main/infrastructure/05-aws-k8s/k8s-manifests/observability/ritual-roast-app.yml
+annotating root-observability refreshes the parent App-of-Apps (causing it to re-render and apply child Application CRDs).
+After a few seconds we can verify that the change occured:
 
+```bash
+k get application ritual-roast-workloads -n argocd -o yaml | grep -A 3 -B 3 "selfHeal:"
+```
+
+The output should look like:
+
+```bash
+[root@ip-10-16-117-217 bin]# k get application ritual-roast-workloads -n argocd -o yaml | grep -A 3 -B 3 "selfHeal:"
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: false
+    syncOptions:
+    - CreateNamespace=true
+status:
+[root@ip-10-16-117-217 bin]# 
 ```
 
 **********************************************************************************************************
 
 #### Phase 3: Execute Canary Traffic Splitting
 
-6. **Apply 10% Canary Variants:**
+To avoid cloning the entire repository onto the control plane node, we stream individual canary manifests directly. Private GitHub repositories return 404 errors for unauthenticated raw URLs, so we pass the GITHUB_PAT authorization header via curl. We include the --fail flag to catch HTTP errors before piping into kubectl apply -f -, safely applying updates in-memory.
+
+6. Export the GitHub PAT: inside the aws ssm session execute the following command:
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/main/infrastructure/05-aws-k8s/k8s-manifests/canary-variants/vs-frontend-canary-10.yml
+export GITHUB_PAT="PASTE GitHub PAT"
 
-kubectl apply -f https://raw.githubusercontent.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/main/infrastructure/05-aws-k8s/k8s-manifests/canary-variants/vs-backend-canary-10.yml
+7. **Apply 10% Canary Variants:**
+```bash
+# 10% Frontend Canary
+curl --fail -H "Authorization: token ${GITHUB_PAT}" \
+  -sSL "https://raw.githubusercontent.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/main/infrastructure/05-aws-k8s/k8s-manifests/canary-variants/vs-frontend-canary-10.yml" \
+  | k apply -f -
+```
 
+```bash
+# 10% Backend Canary
+curl --fail -H "Authorization: token ${GITHUB_PAT}" \
+  -sSL "https://raw.githubusercontent.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/main/infrastructure/05-aws-k8s/k8s-manifests/canary-variants/vs-backend-canary-10.yml" \
+  | k apply -f -
 ```
 
 **********************************************************************************************************
 
 7. **Verify traffic & metrics:** Send requests through the LoadBalancer DNS and monitor
      logs/Grafana dashboards to ensure `v2` handles ~10% of traffic without errors.
+     
+     Note, you must do each of these in a new shell to avoid log monitoring limits.
 
 Monitor logs with:
 
 a. Stream Real-Time Logs for All v2 Pods
 
 ```bash
-k logs -n dev -l version=2 --all-containers=true -f --tail=30
+k logs -n dev -l version=v2 --all-containers=true -f --tail=30
 ```
 
 b. Stream Specific Service Logs (Frontend vs. Backend). Open serparate terminal tabs or

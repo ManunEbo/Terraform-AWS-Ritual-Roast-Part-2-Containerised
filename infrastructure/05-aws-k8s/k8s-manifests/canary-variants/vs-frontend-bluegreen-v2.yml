@@ -1,6 +1,7 @@
 # FRONTEND BLUE/GREEN -> v2. Total instant cutover: ALL traffic to v2,
 # cookie matches intentionally DROPPED so even established v1 sessions
 # move immediately (a true blue/green flip, not a drain).
+# Rule 0 (/kiali) only matches /kiali paths, so it does not weaken the cutover.
 # ROLLBACK: apply vs-frontend-bluegreen-v1.yml (NOT istio-routing.yml -
 # after this flip every browser holds an x-frontend=v2 cookie, so the
 # steady-state file would re-stick them to v2 via the cookie rule).
@@ -11,10 +12,14 @@ metadata:
   namespace: dev
 spec:
   hosts:
-  - "*"
+    - "*"
   gateways:
-  - ritual-roast-gateway
+    - ritual-roast-gateway
   http:
-  - route:
-    - destination: { host: rr-frontend-svc, subset: v2, port: { number: 80 } }
-      weight: 100
+    - match:
+        - uri: { prefix: /kiali }
+      route:
+        - destination: { host: kiali.observability.svc.cluster.local, port: { number: 20001 } }
+    - route:
+        - destination: { host: rr-frontend-svc, subset: v2, port: { number: 80 } }
+          weight: 100

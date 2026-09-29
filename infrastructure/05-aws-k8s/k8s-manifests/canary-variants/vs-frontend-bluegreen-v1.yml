@@ -1,5 +1,6 @@
 # FRONTEND BLUE/GREEN -> v1. Clean rollback of a v2 flip: ALL traffic
 # to v1, cookies ignored, so v2-cookied browsers are forced back to v1.
+# Rule 0 (/kiali) only matches /kiali paths, so it does not weaken the rollback.
 # Once stable, re-apply ../dev-apps/routing/istio-routing.yml to restore
 # the normal cookie-sticky steady state (new v1 sessions re-acquire the
 # v1 cookie naturally).
@@ -10,10 +11,14 @@ metadata:
   namespace: dev
 spec:
   hosts:
-  - "*"
+    - "*"
   gateways:
-  - ritual-roast-gateway
+    - ritual-roast-gateway
   http:
-  - route:
-    - destination: { host: rr-frontend-svc, subset: v1, port: { number: 80 } }
-      weight: 100
+    - match:
+        - uri: { prefix: /kiali }
+      route:
+        - destination: { host: kiali.observability.svc.cluster.local, port: { number: 20001 } }
+    - route:
+        - destination: { host: rr-frontend-svc, subset: v1, port: { number: 80 } }
+          weight: 100

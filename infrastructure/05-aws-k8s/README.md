@@ -1962,7 +1962,7 @@ aws elbv2 describe-load-balancers \
 
 Copy and paste this on your browser to view the webpage. **Congratulations you've deployed your website with K8S**
 
-13. Retrieve the controlplane instance id for session manager
+13. Retrieve the controlplane instance id for session manager: Run the following command in a new shell window.
 
 ```bash
 aws ec2 describe-instances \
@@ -1985,7 +1985,7 @@ Example including instance ID:
 aws ssm start-session --target i-0d82acd5aa8f15404
 ```
 
-This will give us a terminal into the instance just like an SSH session would. 20.
+This will give us a terminal into the instance just like an SSH session would.
 
 15. Once in the session, export/Initiate kubeconfig this loads the user configuration
 

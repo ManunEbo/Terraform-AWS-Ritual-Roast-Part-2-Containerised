@@ -1,7 +1,7 @@
 # FRONTEND CANARY - new sessions: 30% v2 (Vite), 70% v1 (Next.js)
+# Rule 0 (/kiali) MUST stay first: cookie rules would otherwise capture it.
 # Established sessions stay pinned by their x-frontend cookie (rules 1-2).
 # Only the cookie-less ENTRY weight (rule 3) changes between steps.
-# Apply:  kubectl apply -f vs-frontend-canary-30.yml
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
@@ -13,6 +13,10 @@ spec:
   gateways:
   - ritual-roast-gateway
   http:
+  - match:
+    - uri: { prefix: /kiali }
+    route:
+    - destination: { host: kiali.observability.svc.cluster.local, port: { number: 20001 } }
   - match:
     - headers: { cookie: { regex: ".*x-frontend=v1.*" } }
     route:
