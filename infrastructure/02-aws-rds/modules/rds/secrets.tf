@@ -35,6 +35,13 @@ resource "aws_secretsmanager_secret_version" "rr_db_skeleton" {
 #--------------------------------------------------------------
 # 3. THE DYNAMIC POINTER
 #--------------------------------------------------------------
+
+# Delay to wait for AWS propagation of the `rr_db_skeleton` version of the secret
+resource "time_sleep" "wait_for_secret" {
+  create_duration = "30s"
+  depends_on      = [aws_secretsmanager_secret_version.rr_db_skeleton]
+}
+
 # Tracks the "AWSCURRENT" label so ECS, k8s and RDS always have the latest.
 data "aws_secretsmanager_secret_version" "rr_latest_creds" {
   secret_id = aws_secretsmanager_secret.rr_db_secret.id

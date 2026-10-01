@@ -155,7 +155,11 @@ To avoid cloning the entire repository onto the control plane node, we stream in
 ```bash
 export GITHUB_PAT="PASTE GitHub PAT"
 
-7. **Apply 10% Canary Variants:**
+7. **THIS IS IMPORTANT:** Before executing the canary, it is ideal to inject traffic through the system to facilitate the kiali visualization.
+   So open `05-aws-k8s/documents/Traffic_injection_methods_for_Observability.txt` and follow the instructions.
+
+
+8. **Apply 10% Canary Variants:**
 ```bash
 # 10% Frontend Canary
 curl --fail -H "Authorization: token ${GITHUB_PAT}" \
@@ -170,9 +174,13 @@ curl --fail -H "Authorization: token ${GITHUB_PAT}" \
   | k apply -f -
 ```
 
+Now watch the traffic on kiali.
+
+Using the same technique, we can progress through the canaries: 30, 50, 70, 90, 100, bluegreen and shadow
+
 **********************************************************************************************************
 
-7. **Verify traffic & metrics:** Send requests through the LoadBalancer DNS and monitor
+9. **Verify traffic & metrics:** Send requests through the LoadBalancer DNS and monitor
      logs/Grafana dashboards to ensure `v2` handles ~10% of traffic without errors.
      
      Note, you must do each of these in a new shell to avoid log monitoring limits.
@@ -205,7 +213,7 @@ kubectl logs -n dev -l version=v2 -f --tail=100 | grep -E -i "error|exception|fa
 
 **********************************************************************************************************
 
-8. **Progress through remaining stages:** Repeat step 6 for `30%`, `50%`, `70%`, `90%`, and finally `100%`
+10. **Progress through remaining stages:** Repeat step 6 for `30%`, `50%`, `70%`, `90%`, and finally `100%`
    (`vs-frontend-canary-100.yml` and `vs-backend-canary-100.yml`).
 
 **********************************************************************************************************
@@ -216,10 +224,10 @@ kubectl logs -n dev -l version=v2 -f --tail=100 | grep -E -i "error|exception|fa
     If you enable `selfHeal` while Git still points to the `v1` routing manifest,
     ArgoCD will instantly wipe out your live `v2` rollout and revert traffic back to `v1`.
 
-9. **Update Git to match the 100% `v2` state:** Overwrite the contents of your tracked
+11. **Update Git to match the 100% `v2` state:** Overwrite the contents of your tracked
     `dev-apps/routing/istio-routing.yml` with the contents of your `canary-100.yml` variants.
 
-10. **Commit the new baseline:**
+12. **Commit the new baseline:**
 
 ```bash
 git add dev-apps/routing/istio-routing.yml
@@ -229,7 +237,7 @@ git push origin main
 ```
 
 
-11. **Re-enable `selfHeal: true` in the application manifest:** Edit `observability/ritual-roast-app.yml`:
+13. **Re-enable `selfHeal: true` in the application manifest:** Edit `observability/ritual-roast-app.yml`:
 ```yaml
 syncPolicy:
   automated:
@@ -239,7 +247,7 @@ syncPolicy:
 ```
 
 
-12. **Apply updated application spec and commit:**
+14. **Apply updated application spec and commit:**
 ```bash
 kubectl apply -f observability/ritual-roast-app.yml
 
@@ -249,7 +257,7 @@ git push origin main
 
 ```
 
-13. **Final Verification:** Check ArgoCD to ensure the application status transitions back to **Synced** and **Healthy**.
+15. **Final Verification:** Check ArgoCD to ensure the application status transitions back to **Synced** and **Healthy**.
 
 ```bash
 k get application -n argocd

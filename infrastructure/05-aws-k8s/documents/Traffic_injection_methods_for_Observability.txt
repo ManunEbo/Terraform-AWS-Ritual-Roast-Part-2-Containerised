@@ -1,0 +1,59 @@
+**********************************************************************************************************
+				Traffic injection methods for Observability
+**********************************************************************************************************
+
+The simplest way is to run a load generator inside the cluster and point it at the Istio ingress gateway.
+The traffic then enters exactly as user traffic would, and Kiali draws the full path:
+
+	gateway → frontend v1/v2 → backend v1/v2.
+
+Essentially run either ## 1. or ## 2. before you deploy any canary. Doing so will aid
+the visualization in Kiali.
+
+**********************************************************************************************************
+
+## 1. Steady traffic in one command (`hey`)
+
+Run this on the control plane:
+
+```bash
+kubectl run loadgen --image=williamyeh/hey --restart=Never -- \
+  -z 15m -c 5 -q 4 \
+  http://istio-ingressgateway.istio-ingress.svc.cluster.local/
+```
+
+- `-z 10m` runs for 15 minutes.
+- `-c 5 -q 4` means 5 workers at 4 requests per second each, about 20 req/s in total.
+
+That's gentle enough for our node sizes.
+- `hey` sends no cookies, so every request hits the **weighted** rule.
+At `canary-10` you should see roughly 90/10 on the frontend edges in Kiali. That's the split you want to show.
+
+Watch it and clean up with:
+
+```bash
+kubectl logs -f loadgen          # summary prints at the end
+kubectl delete pod loadgen
+```
+
+**********************************************************************************************************
+
+## 2. Make the backend edges appear
+
+Hitting `/` alone may only exercise the frontends.
+The backend VirtualService is mesh-internal, so backend edges show up only when a frontend pod calls the backend.
+To produce that traffic, send requests to the API paths the frontends proxy.
+For example, if `/api/*` is proxied through the frontend:
+
+```bash
+kubectl run loadgen-api --image=williamyeh/hey --restart=Never -- \
+  -z 10m -c 3 -q 4 \
+  http://istio-ingressgateway.istio-ingress.svc.cluster.local/api/get_recipe
+```
+
+If Kiali still shows no frontend → backend edge, the frontends aren't proxying that path.
+Check which path our frontend uses for API calls:
+
+the Next.js rewrites for v1, and the nginx `location` block for v2.
+
+

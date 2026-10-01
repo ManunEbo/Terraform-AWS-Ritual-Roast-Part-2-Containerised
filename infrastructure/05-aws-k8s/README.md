@@ -1996,5 +1996,45 @@ export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
 16. The cluster will take a while to come up, 5 to 13 minutes. Open `05-aws-k8s/documents/Steps_to_verify_the_cluster_status.txt` and following the instructions to verify various cluster resource status.
 17. To deploy canary, open `05-aws-k8s/documents/Step by step Canary deployment.txt` and follow the instructions.
-18. View observability with Kiali: Take the loadbalancer DNS from `12.` above and add `/kiali` to the end, Open a new tab on the browser and paste it and press enter.
+18. View observability with Kiali: Take the loadbalancer DNS from `12.` above and add `/kiali` to the end, Open a new tab on the browser and paste it and press enter (See the images in `05-aws-k8s/documents/kiali-canary-images` for what you should expect.). Do the following in kiali:
+    a. Under Namespace select `dev`
+    b. Under Display play with the selection to see which draws out desireable characteristics. I recommend `traffic animation`.
+
 19. View Observability with Grafana: Open `05-aws-k8s/documents/Creating_a_Grafana_account_and_credentials` and follow the instructions under `Phase 5: Viewing observability with Grafana`
+
+# Next Step: Fix Frontend Version 2 Internal Routing
+
+## The Problem
+
+Our application works normally for end users—pages load, forms submit, and data is saved to the database. However, behind the scenes, internal traffic is not following our canary rules such as 90/10: Instead of sending 10% of backend requests to Version 2, traffic is splitting evenly at 50/50.
+
+## Why It Is Happening (The Mailroom Analogy)
+
+Think of our smart traffic manager (Istio) as an **internal mailroom clerk**.
+
+- The clerk has a rulebook: _"When a message is addressed to **Backend Service**, send 90% to Version 1 and 10% to Version 2."_
+- When **Frontend Version 2** sends a request to the backend, it accidentally puts the **public website address** on the envelope instead of writing "Backend Service.", this was a mistake that was overlooked in development.
+- The mailroom clerk looks at the public address, checks its rulebook, and finds no rule for that name.
+- Rather than dropping the letter, the clerk falls back to basic delivery and splits the mail evenly across all available backend workers (50/50).
+
+Because both backend versions write to the same database, our web app continues to work perfectly. The issue is purely about **which version handles the traffic**, not whether the request succeeds.
+
+In Kiali this shows up as either traffic split or dead end traffic i.e. you'll see traffic going into `v2` and nothing forwarded from `v2` to the `ritual-roast-backend` service or you'll see `v2` traffic split three ways: one headed for `ritual-roast-backend`, another headed for backend `v1` and finally to backend `v2`. **This unexpected behaviour is what uncovered the error to be fixed**.
+
+## Action Item & Next Steps
+
+We need to update Frontend Version 2 so it labels internal envelopes with the correct internal address.
+
+1. **Update Configuration File:**
+   In the Frontend Version 2 web configuration (`default.conf`), update the API proxy rule so it explicitly sets the host name:
+
+```nginx
+# Change from: proxy_set_header Host $host;
+# Change to:   proxy_set_header Host ritual-roast-backend;
+
+```
+
+2. **Rebuild & Redeploy:**
+   Because this configuration file is baked into the application container, rebuild the Frontend `v2` image through the automated pipeline (CI/CD) and deploy the updated image.
+3. **Re-Verify in Kiali:**
+   After deploying the update, observe the Kiali visual map. Traffic moving from Frontend `v2` to the Backend will pass through the service manager node and achieve the target **90% / 10%** split.
