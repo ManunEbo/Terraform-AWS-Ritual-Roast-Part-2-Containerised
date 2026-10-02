@@ -1,6 +1,14 @@
 # Layer 5 - K8s on EC2 with GitOps
 
-This Layer is by far the most jampacked Layer in the whole project. With ECS in Layer 4 we took the serverless route with Fargate where we entrusted the responsibility of managing the servers our ECS Task containers were running on to AWS. In this Layer we take back that control building and operating an entire **Kubernetes cluster from scratch**; the control plane, the pod network, the service mesh, and the **Continuous Deployment (CD) pipeline** that keeps it in sync with Git. We do this on plain EC2 instances, with nothing managed by AWS Serveless. We host a live comparison between the original app ("V1") and a rewritten challenger ("V2"), shifting traffic between them using every major progressive-delivery strategy: Canary, blue-green, and shadow deployment. In summary, we're going to accomplish the following:
+This Layer is by far the most jampacked Layer in the whole project. With ECS in Layer 4 we took the serverless route with Fargate where we entrusted the responsibility of managing the servers our ECS Task containers were running on to AWS. In this Layer we take back that control building and operating an entire **Kubernetes cluster from scratch**; the control plane, the pod network, the service mesh, and the **Continuous Deployment (CD) pipeline** that keeps it in sync with Git. We do this on plain EC2 instances, with nothing managed by AWS Serveless. We host a live comparison between the original app ("V1") and a rewritten challenger ("V2"), shifting traffic between them using every major progressive-delivery strategy: Canary, blue-green, and shadow deployment.
+
+<a href="documents/hld-architecture/layer5-hld.png">
+  <img src="documents/hld-architecture/layer5-hld.png"
+       alt="Layer 5 – HLD Architecture (05-aws-k8s)"
+       width="100%">
+</a>
+
+In summary, we're going to accomplish the following:
 
 1. Spin up EC2 instances and prepare them to house Kubernetes controlplane and worker nodes
 2. Setup the networking and security to facilitate smooth traffic flow

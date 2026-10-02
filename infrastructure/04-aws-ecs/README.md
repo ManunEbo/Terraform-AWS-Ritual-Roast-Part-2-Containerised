@@ -983,25 +983,45 @@ To save space we'll jump right into the components but for the full resource ple
    Essentially, this is a way around the readOnly root filesystem to provide a temporary writable location without the OS throwing an error.
 9. `container_definitions = jsonencode()` - This block defines the individual Docker container settings. Lets expand on its components:
    a. `name = "rr-frontend-container-01"` - This is the container's name inside ECS
+
    b. `image = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.id}.amazonaws.com/rr-${var.environment}` - This is the full URI directing Fargate to fetch the Docker image from the private ECR repo
+
    c. `essential = true` - This tells ECS that if this container crashes or stops, the entire task should be shut down and replaced.
+
    d. `readonlyRootFilesystem = true` - This makes the container OS read-only. Thus if an attacker manages to exploit an application vulnerability, they cannot modify system files, write malware, or download malicious scripts to disk.
+
    e.**`mountPoints = [...]`** - This attaches a Task level storage volume directly into a specified folder inside oru running Docker container. It concists of an array of configuration objects that maps defined storage volumes to paths inside the container. Thus it enables mounting multiple volumes to different directories within a single container. Lets look into its constituents
+
    f. `sourceVolume  = "nextjs-cache"` - This is the exact name of the storage volume declared above, `volume { name = "nextjs-cache" }`, it identifies which underlying Fargate ephemeral storage block to attach.
+
    g. `containerPath = "/app/.next/cache"` - This is the absolute file path inside the container where the volume is mounted. Note, for Next.js `"/app/.next/cache"` is the precise directory where the framework writes compiled build outputs, image optimization files, and server-side rendering caches during runtime.
+
    h. `readOnly = false` - The much talked about **readOnly**; this grants read-write permissions to this specific directory path inside the container. Even when the OS is locked down, this setting applied to the target mount point creates a targeted write exception so Next.js can read and write cache files without crashing.
+
    i. **`portMappings = [...]`** - This is an array of objects defining network access rules for the container. It exposes internal container ports to external traffic such as our public ALB or any other services within our VPC.
+
    j. `containerPort = 3000` - This is the specific port inside the container that our application listens for incoming traffic on.
+
    k. `hostPort = 3000` - The port reserved on the underlying network interface to receive incoming traffic from external resources. Note, because Fargate tasks run in `awsvpc` network mode, where every Task gets its own dedicated ENI and IP, AWS requires `hostPort` t either match `containerPort` exactly or be ommitted entirely
+
    l. `protocol = "tcp"` - Web applications using HTTP/HTTPS require TCP to guarantee reliable, ordered packet delivery.
+
    m. `environment = [...]` - This array object is used to pass environment variables into the container process at runtime. Essentially it decouples application configuration from container build images, making it flexible to pass credentials across environments (dev, staging, prod) without rebuilding the Docker image.
+
    n. `name = "BACKEND_URL"` - This is the exact key name assigned to the environment variable. Application code inside the container reads this value directly at runtime.
-   O. `value = "http://${var.internal_alb_dns_name}"` - This injects the private DNS record of the internal ALB, allowing the Frontend to route API requests to the Backend tier without hardcoding ephemeral container IP addresses. Note this is HTTP traffic.
+
+   o. `value = "http://${var.internal_alb_dns_name}"` - This injects the private DNS record of the internal ALB, allowing the Frontend to route API requests to the Backend tier without hardcoding ephemeral container IP addresses. Note this is HTTP traffic.
+
    p. `logConfiguration = {}` - This configures how ECS captures standard output, `stdout` and standard error, `stderr`, streams from the container and routes them to CloudWatch.
+
    q. `logDriver = "awslogs"` - This specifies the log driver mechanism. The `awslog` driver uses the native AWS log driver to stream console output directly from the container to CloudWatch logs
+
    r. `options = {...}` - These are key-value pairs supplying required parameters specific to the `awslogs` driver.
+
    s. `"awslogs-group" = aws_cloudwatch_log_group.rr_frontend_logs.name` - This specifies the destination CloudWatch Log Group where log entries will be sent. This reference dynamically passes the log group's name, `/ecs/rr-dev-frontend`, and creates a Terraform dependency ensuring the log group exists before the Task definition is registered.
+
    t. `"awslogs-region" = data.aws_region.current.id` - Defines the AWS region hosting the CloudWatch Log Group. The data source ensures that the logs ship to the current deployment region without hardcoding values.
+
    u. `"awslogs-stream-prefix" = "frontend"` - This assigns a prefix to log stream names within the log group. Note CloudWatch formats log stream as `<prefix>/<container-name>/<task-id>` e.g. `frontend/rr-frontend-container-01/a1b2c3d4...`. This makes it easy to filter and distinguish logs across Task deployments.
 
 #### Backend Task `rr_backend_task`
