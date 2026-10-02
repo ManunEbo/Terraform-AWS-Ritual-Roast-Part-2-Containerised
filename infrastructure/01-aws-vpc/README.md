@@ -11,6 +11,7 @@ This is the base layer. Here we build the foundation for our infrastructure: the
 </a>
 
 This layer spans three Availability Zones (AZs) across the AWS London region (`eu-west-2`).
+
 **Key Highlights** Below are the main highlights based on the HLD above:
 
 1. **5-Tier Subnet Isolation** - Segregates infrastructure into distinct, dedicated tiers per AZ:

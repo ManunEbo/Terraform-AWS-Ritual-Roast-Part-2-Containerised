@@ -9,6 +9,18 @@ the IAM role that enables the lambda function to carry out its tasks, and both t
        width="100%">
 </a>
 
+Here we're provisioning the centralized, highly available database tier (**Amazon RDS MySQL**) within the isolated private data subnets, created back in Layer 1, intergrated with automated zero downtime credential management.
+
+**Key Highlights** Below are the main highlights based on the HLD above:
+
+1. **High-Availability Database Tier** - Deploys a Multi-AZ Amazon RDS MySQL instance across three private data subnets, providing synchronous replication and automatic failover.
+
+2. **Automated Credential Rotation** - Integrates AWS Secrets Manager with an automated Python Lambda function to securely rotate database credentials every 7 days.
+
+3. **Strict Private Network Isolation** - Database access (port 3306) is strictly confined within the VPC. Security groups isolate the database so it only accepts connections from authorized sources (the rotation Lambda and upcoming application backends).
+
+4. **Secure In-VPC Secret Management** - The rotation Lambda communicates with AWS Secrets Manager entirely over private VPC Endpoints (`port 443`), preventing sensitive credential traffic from ever crossing the public internet.
+
 Below are the highlights of each section.
 
 ## 1. Environment configuration

@@ -7,6 +7,15 @@ In this layer we setup the GitHub Personal Access Token (PAT) and deploy ECR to 
        alt="Layer 3 – HLD Architecture (03-aws-ecr)"
        width="100%">
 </a>
+
+**Key Highlights** Below are the main highlights based on the HLD above:
+
+1. **Secure Container Repositories** - Provisions dedicated ECR repositories (`rr-dev-frontend` and `rr-dev-backend`) equipped with immutable image tags, automatic vulnerability scanning on push, and automated lifecycle policies to retain the 5 most recent image versions.
+
+2. **Keyless OIDC Authentication** - Establishes OpenID Connect (OIDC) federation between AWS IAM and GitHub Actions. This enables external build pipelines to authenticate securely using temporary tokens without storing long-lived AWS access keys.
+
+3. **Least-Privilege IAM Roles** - Implements isolated IAM roles (`rr_github_frontend_role` and `rr_github_backend_role`) so each pipeline is restricted strictly to pushing images into its respective repository.
+
 ## Dev environment
 
 Structurally, there's nothing we haven't seen before in this environment.

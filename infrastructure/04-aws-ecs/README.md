@@ -8,6 +8,16 @@ In this Layer we deploy the website using severless ECS with Fargate: We pull re
        width="100%">
 </a>
 
+**Key Highlights** Below are the main highlights based on the HLD above:
+
+1. **Serverless Compute Platform** - Runs frontend and backend container workloads across multiple AZs using AWS Fargate and cost-effective Fargate Spot, eliminating server management overhead.
+
+2. **Two-Tier LoadBalancing** - Directs public user traffic to the frontend through a public LoadBalancer, while isolating backend communication behind a dedicated internal LoadBalancer (`dev-internal-alb`).
+
+3. **Chained Defense & Least Privilege** - Uses strict, multi-stage Security Groups so that the frontend can only communicate with the internal LoadBalancer, and only the backend is permitted to access the database.
+
+4. **Private AWS Service Integration** - Container tasks pull images from Amazon ECR and retrieve database credentials from Secrets Manager strictly over private VPC Endpoints, streaming container logs directly to Amazon CloudWatch.
+
 # Dev environment
 
 We have the usual structure but this time it is more populated, simply because we're pulling in resources from all three previous Layers using data sources.

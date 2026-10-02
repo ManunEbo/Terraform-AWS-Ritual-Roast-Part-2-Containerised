@@ -8,6 +8,20 @@ This Layer is by far the most jampacked Layer in the whole project. With ECS in 
        width="100%">
 </a>
 
+This illistrates a highly available, self-managed **K3s Kubernetes cluster** integrated with **Istio Service Mesh** and **ArgoCD** to enable GitOps-driven application delivery, progressive canary rollouts, and comprehensive cluster observability.
+
+**Key Highlights** Below are the main highlights based on the HLD above:
+
+1. **High-Availability K3s Architecture** - Runs a dedicated 3-node Controlplane managed behind an Internal Network LoadBalancer (`Internal NLB`), paired with separate AutoScaling Groups for Frontend and Backend worker nodes.
+
+2. **GitOps & Advanced Traffic Management** - Uses ArgoCD for automated, declarative application synchronization, combined with Istio and Kiali to manage traffic routing, canary rollouts, and microservice visualization.
+
+3. **Tiered Security & Network Isolation** - Ingress traffic flows from the Public ALB to Frontend workers on dedicated NodePorts, while database access (`port 3306`) is strictly restricted to Backend worker nodes.
+
+4. **Full-Stack Observability** - Deploys Prometheus for cluster-level metric gathering and Grafana Alloy to stream telemetry data securely to Grafana Cloud.
+
+5. **Centralized Egress Routing** - Manages outbound internet traffic for container image pulls, Helm chart downloads, and external API requests through a central NAT Gateway.
+
 In summary, we're going to accomplish the following:
 
 1. Spin up EC2 instances and prepare them to house Kubernetes controlplane and worker nodes
