@@ -2,6 +2,12 @@
 
 In this Layer we deploy the website using severless ECS with Fargate: We pull resources from the previous three Layers and add extra resources to ensure our network traffic is secure and cost effective.
 
+<a href="documents/hld-architecture/layer4-hld.png">
+  <img src="documents/hld-architecture/layer4-hld.png"
+       alt="Layer 4 – HLD Architecture (04-aws-ecs)"
+       width="100%">
+</a>
+
 # Dev environment
 
 We have the usual structure but this time it is more populated, simply because we're pulling in resources from all three previous Layers using data sources.

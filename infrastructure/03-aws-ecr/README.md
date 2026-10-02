@@ -2,6 +2,11 @@
 
 In this layer we setup the GitHub Personal Access Token (PAT) and deploy ECR to house the frontend and backend images for **Elastic Container Service (ECS)**. This is the only Layer that doesn't pull anything from it's predecessors. It doesn't need the VPC, subnets, Security groups, RDS, Lambda etc. Its sole purpose is to provision the registry to house docker container images on AWS.
 
+<a href="documents/hld-architecture/layer3-hld.png">
+  <img src="documents/hld-architecture/layer3-hld.png"
+       alt="Layer 3 – HLD Architecture (03-aws-ecr)"
+       width="100%">
+</a>
 ## Dev environment
 
 Structurally, there's nothing we haven't seen before in this environment.

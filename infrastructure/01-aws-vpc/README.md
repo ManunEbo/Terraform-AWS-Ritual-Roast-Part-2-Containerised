@@ -4,6 +4,28 @@ This is the base layer. Here we build the foundation for our infrastructure: the
 
 ## What this layer builds
 
+<a href="documents/hld-architecture/layer1-hld.png">
+  <img src="documents/hld-architecture/layer1-hld.png"
+       alt="Layer 1 – HLD Architecture (01-aws-vpc)"
+       width="100%">
+</a>
+
+This layer spans three Availability Zones (AZs) across the AWS London region (`eu-west-2`).
+**Key Highlights** Below are the main highlights based on the HLD above:
+
+1. **5-Tier Subnet Isolation** - Segregates infrastructure into distinct, dedicated tiers per AZ:
+   a. **DMZ (Public)** - Houses the internet-facing application LoadBalancer (ALB).
+   b. **Web** - Private subnets reserved for frontend web services.
+   c. **App** - Private subnets hosting VPC interface endpoints for secure AWS service access e.g. Secrets Manager.
+   d. **Data** - Isolated subnets dedicated strictly to database resources.
+   e. **K8s** - Decicated subnets pre-tagged for internal EKS/Kubernetes LoadBalancers
+
+2. **Secure Edge Routing** - Public internet traffic enters through an Internet Gateway (`IGW`) directly into the public ALB, keeping all downstream application and database tiers off the public web.
+
+3. **Private AWS Service Connectivity** - Includes a VPC S3 Gateway Endpoint and Secrets Manager Interface Endpoints, allowing workloads to access AWS services privately without routing through the public internet.
+
+4. **Default Egress Protection** - Private subnets are completely isolated from outward internet routing by default, preparing the network for downstream layers to manage NAT egress securely.
+
 | Module                    | Creates                                                                                                                |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | `modules/vpc`             | The VPC itself, 15 subnets (five tiers across three availability zones), three route tables, and the internet gateway. |

@@ -3,6 +3,12 @@
 In this layer we deploy the Relational Database Service (RDS) MySQL database along with the necessary setup to rotate the database secret with a lambda function,
 the IAM role that enables the lambda function to carry out its tasks, and both the database and lambda security groups to ensure restricted access.
 
+<a href="documents/hld-architecture/layer2-hld.png">
+  <img src="documents/hld-architecture/layer2-hld.png"
+       alt="Layer 2 – HLD Architecture (02-aws-rds)"
+       width="100%">
+</a>
+
 Below are the highlights of each section.
 
 ## 1. Environment configuration
