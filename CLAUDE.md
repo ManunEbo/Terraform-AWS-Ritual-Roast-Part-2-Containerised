@@ -42,10 +42,10 @@ The diagram shows the ALB path-routing `/api/*` to the backend directly. The imp
 that diagram is stale. Actual path:
 
 `Internet -> ALB:80 (rule /* ) -> target group :30080 -> frontend node -> kube-proxy ->
-istio-ingressgateway pod :80 -> Gateway/VirtualService -> rr-frontend-nextjs-svc -> Next.js pod :3000`
+istio-ingressgateway pod :80 -> Gateway/VirtualService -> rr-frontend-svc -> Next.js pod :3000`
 
 The Next.js frontend then calls the backend **internally, server-side** (`'use server'`,
-`BACKEND_URL=http://rr-backend-flask-svc:80`) -> Flask :5000 -> RDS :3306 (+ Secrets Manager via VPC
+`BACKEND_URL=http://ritual-roast-backend:5000`) -> Flask :5000 -> RDS :3306 (+ Secrets Manager via VPC
 endpoint). The **NLB is the K3s API load balancer (6443)** for node joins — NOT app ingress.
 
 ## Probes & the v1/v2 health-endpoint contract (load-bearing — read before wiring any v2 probe)

@@ -19,7 +19,7 @@ Run in THIS order — cheap, high-yield checks first:
 
 3. IMAGE PULLS / NAT: kubectl get pods -n dev for ImagePullBackOff; aws ec2 describe-route-tables for the K8s subnets — confirm BOTH AZ subnets (2a/2b) have a 0.0.0.0/0 -> NAT route (there is a single NAT in 2a).
 
-4. ENDPOINTS: kubectl get endpoints -n dev for rr-frontend-nextjs-svc and rr-backend-flask-svc. Empty = no ready pods (loops back to 2/3) or a selector/label mismatch.
+4. ENDPOINTS: kubectl get endpoints -n dev for rr-frontend-svc and ritual-roast-backend. Empty = no ready pods (loops back to 2/3) or a selector/label mismatch.
 
 5. MESH: istioctl proxy-status (every proxy SYNCED), istioctl proxy-config routes deploy/istio-ingressgateway -n istio-ingress (is the frontend route present?). Check the dev namespace for the istio-injection label and pods for 1/1 vs 2/2.
 

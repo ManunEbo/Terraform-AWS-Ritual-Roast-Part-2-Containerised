@@ -817,7 +817,6 @@ This file is identical to _"user_data_worker_frontend.sh"_ with the exception of
 ### [controlplane](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/modules/compute_k8s/controlplane.tf)
 
 This file consists of two sections: In **Section 1** the HA NLB is provisioned while in **Section 2** the controlplane compute resources are provisioned.
-;
 
 #### Section 1: Network Load Balancer for HA Control Plane
 
@@ -2001,6 +2000,14 @@ export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
     b. Under Display play with the selection to see which draws out desireable characteristics. I recommend `traffic animation`.
 
 19. View Observability with Grafana: Open `05-aws-k8s/documents/Creating_a_Grafana_account_and_credentials` and follow the instructions under `Phase 5: Viewing observability with Grafana`
+
+20. When you're done, destroy the Layers in reverse order:
+    a. Layer 5 `tf destroy --auto-approve`, this will take a few minutes, wait until it's done then move to the next.
+    b. Layer 2, go to the Layer 2 terminal and execute `tf destroy --auto-approve`. This will take the longest, wait for it to finish.
+    c. Layer 1, go to the Layer 1 terminal and execute `tf destroy --auto-approve`. This won't take too long, wait for it to finish.
+    d. List the contents of your project s3 bucket with: `aws s3 ls rr-capstone-5b160b287a99a6d9 --recursive`
+    e. Delete all the contents of this s3 bucket in one go with: `aws s3api delete-objects --bucket rr-capstone-5b160b287a99a6d9 --delete "$(aws s3api list-object-versions --bucket rr-capstone-5b160b287a99a6d9 | jq '.Versions + .DeleteMarkers | {Objects: map({Key, VersionId}), Quiet: false}')"`
+    Now the project s3 bucket is cleansed.
 
 # Next Step: Fix Frontend Version 2 Internal Routing
 
