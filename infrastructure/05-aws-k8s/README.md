@@ -239,15 +239,23 @@ This security group is for the controlplane group of nodes. It provides protecti
 4. **Inter-node-connectivity `rr_cp_ingress_self`** - This is a self-referential security group rule. Notice that both `security_group_id` and `source_security_group` point to `aws_security_group.rr_k8s_control_plane_sg.id`. This creates a trusted, private communication zone exclusively between the EC2 instances assigned to the controlplane.
    **Why we need it**
    A High-Availability (HA) Kubernetes controlplane runs multiple nodes that must constantly sync cluster state in real time:
+
    a. **`etcd` Consensus & Leader election** - Embedded `etcd` nodes use the Raft consensus algorithm, ports `2379` and `2380`, to replicate every single cluster change, hold leader elections, and maintain heartbeat signals.
+
    b. **Controlplane Mesh & Health checks** - K3s components; controller-manager, scheduler, API servers; and CNI pods running accross the CP nodes require uninterrupted communication.
    If a single packet or port gets blocked between controlplane nodes during an `etcd` leader election or state sync, `etcd` can lose quorum, putting the entire Kubernetes API into a read-only or frozen state.
+
    **Ports & Protocol** - Setting both ports to `0` acts as a complete wildcard meaning all ports `0-65535`. Note, in AWS Security Group API, whenever Protocol is set to `-1`, **All Protocols**, AWS strictly requires `from_port` and `to_port` to be set to `0`. This is because non-Layer 4 OSI protocols such as ICMP or raw IP protocol 4, don't have the concept of TCP/UDP port numbers.
+
    **Why we use `protocol = -1`**
    In AWS security group syntax, `protocol = -1` represents ALL IP Protocol (TCP, UDP, ICMP, IPIP Protocol 4, GRE, etc). Controlplane nodes communicate using multiple different network protocols:
+
    a. **TCP** - For `etcd` peer sync, K3s datastore traffic, and API endpoints
+
    b. **UDP** - For Calico VXLAN overlay tunneling
+
    c. **ICMP** - For diagnostic pings and MTU path discovery between hosts.
+
    d. **Protocol 4** - For Calico IPIP tunneling fallbacks
    Instead of defining 10+ separate granular rules for node-to-node traffic within the same Security Group, we set `protocol = -1` to create this trusted perimeter. Since traffic is strictly bounded by identity, `source_security_group_id`, traffic originating from unmatched instances will be denied access.
 
@@ -306,8 +314,11 @@ In this section we review the IAM roles and attached policies that enable our va
 Here we create the IAM role for the Frontend worker nodes, `rr_k3s_worker_frontend_role`. It defines the AWS identity and baseline permissions for the Frontend K3S worker EC2 instances. It establishes a trusted relationship with the AWS EC2 service, `ec2.amazonaws.com`, allowing instances to acquire short-term AWS credentials dynamically without storing hardcoded access keys on disk.
 **Custom policy `rr_worker_frontend_custom_policy`** - This enforces strict least-privilege access for frontend worker nodes. It grants permission to read only the K3s cluster join token secret, `rr-${var.environment}-k3s-join-token-*`, from AWS Secrets Manager. Note that the Frontend workers are explicitly restricted from reading sensitive Backend secrets, such as GitHub Pat, Grafana Cloud telemetry tokens, and RDS database credentials. That's because we're operating a zero trust least privilege security posture and the Frontend has no requirement for more credentials than what it's assigned.
 **Policy attachments** - Lets take a look at what the policies we're attaching do:
+
 a. `AmazonSSMManagedInstanceCore` - This enables AWS Systems Manager (SSM) agent functionality. It lets administrators securely connect via **SSM Session Manager** for shell access without opening inbound SSH port `22` in security groups, while enabling automated OS patching and inventory tracking.
+
 b. `rr_worker_frontend_custom_attach` - This attaches the custom join token policy above to the role, enabling the Frontend nodes startup script, userdata, to fetch the `K3S_TOKEN` required to join the K3s controlplane on boot.
+
 **Instance Profile `rr_k3s_worker_frontend_profile`** - An Instance Profile is a bridge container used by AWS to pass an IAM Role to an EC2 instance. This is because an IAM role cannot be attached directly to an EC2 instance in AWS. Instead an Instance Profile is attached to the virtual machine. The Instance Profile delivers the role's temporary credentials to the instance via the **Instance Metadata Service (IMDS)**, which local processes like the AWS CLI or SSM agents query automatically.
 
 ### [worker-backend](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/modules/iam_k8s/worker-backend.tf)
@@ -325,9 +336,13 @@ As usual we'll skip what we've already seen and focus on what is different.
 The custom policy, `rr_cp_custom_policy`, grants two specific permission sets required by the master nodes:
 
 1. **EC2 Peer Discovery `ec2:DescribeInstance`** - This allows startup scripts on controlplane nodes to query the AWS API and discover the IP addresses of sibling controlplane instances. This is necessary for HA leader election and forming the multi-node `etcd` consensus mesh automatically on boot.
+
 2. **Platform Secrets Retrieval `secretsmanager:GetSecretValue` & `DescribeSecret`** - This grants read access to the master set of cluster bootstrapping and management secrets in AWS Secrets Manager:
+
    a. **Cluster Join Token** - To validate and accept joining the cluster. All secondary controlplane nodes must join the cluster using the join token.
+
    b. **GitHub PAT** - To configure ArgoCD with access to private GitHub container registries, `ghcr.io` and repositories within. Without this PAT, ArgoCD cannot authenticate against GitHub.
+
    c. **Grafana Cloud Telemetry Triad** - To pull the Grafana Cloud API token, remote write ingestion URL, and Grafana instance ID for cluster-wide metrics collection i.e to be able to push to Grafana cloud we need these credentials to authenticate and push to the right organisation.
 
 Notice the controlplane doesn't need to access the database thus we have removed the database secrets in the resource section, maintaining our least privileges policy stance.
@@ -357,12 +372,19 @@ This is a logical container that groups together backend destinations such as EC
 3. `vpc_id = var.vpc_id` - This links the target group to the cluster's VPC network i.e. it puts the target group in our VPC.
 4. `target_type = "instance"` - This registers targets by EC2 instance ID rather than pod IP addresses.
 5. `health_check {}` block - The target group continuously executes health probes against registered targets. The ALB routes traffic only to health targets i.e. targets that are currently passing these health checks. Lets examin its components:
+
    a. `enabled = true` - Activates automated health probes from the ALB to the targets.
+
    b. `path = "/"` & `port = "30080"` - This sends HTTP GET requests to `/` on port `30080` to verify Istio's availability.
+
    c. `interval = 15` - This probes target every 15 seconds.
+
    d. `timeout = 5` - Waits 5 seconds for a probe response before marking it failed.
+
    e. `healthy_threshold = 2` - Requires 2 consecutive successful probes to mark a target healthy. Note, this is a preference.
+
    f. `unhealthy_threshold = 3` - Marks a target unhealthy after 3 consecutive failures, removing it from active traffic distribution.
+
    g. `matcher = "200"` - This expects a HTTP status code `200 OK` to pass the health check.
 
 #### ASG attachment `aws_autoscaling_attachment.rr_k8s_frontend_asg_attach`
@@ -452,12 +474,16 @@ Lets take a closer look at the constituent files:
 data sources are used to retrieve resources created in other Layers, modules or AWS managed resources. In this file we retrieve two resources:
 
 1. **`data "aws_ami" "rr_al2023"`** - This queries the AWS API to dynamically retrieve the ID of the latest official **Amazon Linux 2023 Amazon Machine Image (AMI)** in the current region. This ensures all cluster EC2 instances, controlplane and workers, spin up using an up-to-date base operating system without requiring manual hardcoded AMI update across environments.
+
    **Components**
    1. `most_recent = true` - This instructs Terraform to sort all matching results by creation date and pick the single newest AMI.
    2. `owners = ["amazon"]` - This limits the query to images officially published by Amazon Web Services, preventing the accidental selection of third-party or malicious community AMIs.
+
    3. `filter {}` block - This defines the search criteria to narrow down the thousands of available public AMIs:
       a. `name = "name"` - This specifies that the filter targets the system name attribute of the AMI.
+
       b. `values = ["al2023-ami-2023.*-x86_64"]` - This uses wildcard matching to select standard 64-bit(x86_64) Amazon Linux 23 base images e.g. `al2023-ami-2023.4.20240429.0-x86_64`
+
 2. `data "aws_secretsmanager_secret" "rr_db_secret"` - This looks at the existing AWS Secrets Manager resource for the database credentials created in earlier layers, `rr-${var.environment}-db-secret`. By fetching this existing secret's metadata, the `compute_k8s` module can retrieve its exact ARN to pass into launch templates or IAM policies without needing to manage the secret's lifecycle or hardcode AWS account IDs. Note this is just a preference i.e. this data source could be used directly where it is needed, in place.
 
 ### [user_data_cp](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/modules/compute_k8s/user_data_cp.sh)
@@ -465,7 +491,9 @@ data sources are used to retrieve resources created in other Layers, modules or 
 This script is the automated "ignition sequence" for the Kubernetes controlplane. When an EC2 instance boots up, for controlplane, this script transforms it from a blank Linux server into a fully functioning Kubernetes master node. Collectively, it achieves three fundamental milestones:
 
 1. **High Availability (HA) election** - It ensures the three master nodes coordinate with each other to elect a single "leader" to create the cluster, while the other two gracefully join it.
+
 2. **Core infrastructure setup** - The leader node installs the K3s software, sets up cluster networking, Calico, and configures AWS secrets like database passwords and Grafana tokens directly into Kubernetes.
+
 3. **The GitOps Handoff** - It installs ArgoCD, connects it to the private GitHub repository, and deploys a "Root Application". At this point, the script successfully finishes its job and hands all future cluster management over to GitOps.
 
 The file is broken down into 6 sections. Lets dive into the details of each section:
@@ -491,19 +519,32 @@ NLB_DNS="${nlb_dns_name}"
 **Components**
 
 1. **The Shebang `#!/bin/bash`** - Every bash script starts with this line; it tells the Linux operating system to process the rest of the file using the Bash shell interpreter located at `/bin/bash`.
+
 2. **Safety Exit `set -e`** - By default, if a line in a bash script fails, Linux ignores the error and keeps running the next lines. `set -e` forces the script to abort instantly if any single command returns an error. This prevents a broken installation step from snowballing into a larger failure.
+
 3. **System Update `dnf update -y`** - `dnf` is the package manager for Amazon Linux 2023, **Red Hat Linux (RHEL)**, its like an app store for Linux. This updates all installed system software to the latest security patches. The `-y` flag automatically answers **"Yes"** to confirmation prompts so the server doesn't wait for human input.
+
 4. **Installations `dnf install -y jq tar openssl`** - This installs three foundational command line utilities:
    a. `jq` - This is a tool for extracting data from raw JSON strings; it is used to read AWS API responses
+
    b. `tar` - This is an archiving tool used to unpack compressed software files, `.tar.gz` .
+
    c. `openssl` - This is a toolkit for generating and managing encryption keys and certificates.
+
 5. **Helm installation `curl https://raw... | DESIRED_VERSION=v3.14.4 bash`**
+
    a. `curl` - Downloads the official installation script for Helm, the package manager for Kubernetes applications.
+
    b. `|` pipe symbol - this passes the output of the curl command as input to the next command, `bash`, to execute it.
+
    c. `DESIRED_VERSION=v3.14.4` - Sets an environment variable during installation to ensure we lock helm to version `3.14.4` for consistency.
+
 6. Script variables `REGION="${aws_region}" ...` - These three lines set script variables using values injected by Terraform when rendering the template file:
+
    a. `${aws_region}` - Gets replaced with the target AWS region e.g. `us-east-1` .
+
    b. `${environment}` - Gets replaced with our environment name e.g. `dev`, `staging`, and `prod` .
+
    c. `${nlb_dns_name}` - Gets replaced with the NLB domain address created in earlier infrastructure Layers.
 
 #### Section 2: Fetch cluster join token
@@ -518,11 +559,17 @@ K3S_TOKEN=$(aws secretsmanager get-secret-value --region $REGION --secret-id $TO
 **Components**
 
 1. `TOKEN_SECRET_ID="rr-$ENVIRONMENT-k3s-join-token"` - This constructs the unique identifier string for the secret stored in AWS Secrets Manager.
+
 2. `K3S_TOKEN=$()` - The `$()` syntax executes the command inside the parantheses and saves its text output into the `$K3S_TOKEN` variable:
+
    a. `aws secretsmanager get-secret-value` - This calls the Secrets Manager API to retrieve a stored secret.
+
    b. `--region $REGION` - This specifies the geographical region to send the request to.
+
    c. `--secret-id $TOKEN_SECRET_ID` - Specifies the exact secret name we constructed above.
+
    d. `--query SecretString` - This filters the AWS JSON response to extract only the secret value text.
+
    e. `--output text` - This strips out raw JSON formatting and returns clean plain text.
 
 #### Section 3: High-Availability Leader Election
@@ -548,13 +595,21 @@ echo "All 3 CP instances running. Proceeding with leader election."
 **Components**
 
 1. `while true; do ... done` - A continuous loop that repeats the code block inside endlessly until a specific condition forces it to exit, `break` .
+
 2. `CP_COUNT=$(aws ec2 describe-instances` - Asks the AWS API to count how many controlplane EC2 instances are fully booted and active:
+
    a. `--filters "Name=tag:Name,Values=rr-$ENVIRONMENT-k3s-control-plane"` - Filters the search to look only for machines that matches by the `Values` fields
+
    b. `"Name=instance-state-name,Values=running"` - Ignores machines that are still powering on, stopping, or terminated
+
 3. `--query 'length(...)` - Uses JMESPath query syntax to count the total number of matching instances returned.
+
    a. `Reservations[*].Instances[*]` - Flattens the returned nested JSON array by **Reservation & Instances**, collect every matching instance object, `[ {instance1}, {instance2}, {instance3} ]`, and passes it to the length function to count.
+
    b.`2>/dev/null \vert{}\vert{} echo 0`- Suppresses temporary error messages (redirecting errors to`/dev/null`) and defaults the count to `0`if the API call fails during early boot.
+
    c.`[ "$CP_COUNT" -ge 3 ] && break`- Evaluates if`$CP_COUNT`is greater-or-equal,`ge`, to 3. If true, the `break` statement executes immediately, terminating the loop so the script can proceed.
+
    d. `sleep 15` - If fewer than 3 nodes are ready, pauses execution for 15 seconds before looping back to check again.
 
 **Electing the Leader**
@@ -577,9 +632,13 @@ MY_IP=$(curl -sH "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/
 **Components**
 
 1. **Query AWS `aws ec2 describe-instances ...`** - Asks the AWS API for running EC2 instances tagged as controlplane nodes.
+
 2. **Filters running instances `--filters ...`** - Filters the running instances with matching names
+
 3. **Extract IPs `--query "Reservations[*].Instances[*].PrivateIpAddress"`** - Extracts only the `PrivateIpAddress` strings.
+
 4. **Format as text `--output text`** - Converts the JSON response into plain text. Because AWS outputs array items as a single line separated by tab space e.g. `10.0.1.45   10.0.1.12   10.0.1.88`, we get one long tabbed string.
+
 5. **Convert tabs to newlines `| tr '\t' '\n'`** - Swaps every tab character `\t` for a new line `\n`, placing each IP address on its own row:
 
 ```Plaintext
@@ -604,11 +663,13 @@ Every controlplane server running this script independently arrive at the exact 
 **Self-discovery via IMDSv2 `MY_IP`**
 
 1. **Request Session Token `IMDS_TOKEN`** - Sends an HTTP `PUT` reques to **AWS Instance Metadata Service Version 2 `IMDSv2`** at the internal IP `169.254.169.254`. This requests a secure access token valid for 6 hours, `21600` seconds.
+
 2. **Fetch local IP `MY_IP`** - Passes that security token in an HTTP header to query the virtual hardware for this specific EC2 instance's own private IP address, `local-ipv4`.
 
 At the end of these lines, the server holds two IP variables in memory:
 
 1. `$EXISTING_CP` - The IP of the elected leader e.g.`10.0.1.12`
+
 2. `$MY_IP` - Its own actual IP e.g.`10.0.1.45`
 
 The script can then run `if [ "$EXISTING_CP" == "$MY_IP" ]` to decide whether it should initialize the cluster root or join an existing leader.
@@ -625,34 +686,55 @@ In a High Availability setup, exactly one node must initialize the core database
 1. `if [ -z "$EXISTING_CP" ] \vert{}\vert{} [ "$EXISTING_CP" == "$MY_IP" ]; then` - Checks if the variable `EXISTING_CP` is empty `-z`, OR `||` if the designated leader IP matches this machine's own IP `MY_IP`. Note, the `-z` means "is **zero-length (empty)**. Thus the whole thing translates as "**If the leader IP is EMPTY, OR if the leader IP is MINE.**". Because it is an `OR` statement, if the first condition is `false`, it must check the second condition. Lets examine how this plays out in reality.
 1. **Scenario 1: The leader node**
    a. AWS successfully returns an IP e.g. `10.0.1.12`
+
    b. The script checks condition 1: `[ -z "$EXISTING_CP" ]` (Is the IP empty?) Result: **False**
+
    c. Because condition 1 is false, the `OR` forces it to check condition 2: `[ "$EXISTING_CP" == "$MY_IP" ]` (Is the IP my IP?)
+
    d. If yes, it initializes the cluster root. If no, it skips to the `else` block and joins the cluster as a follower
+
 1. **Scenario 2: The AWS API glitches (The Failsafe Path)**
+
    a. Let's say the AWS API times out or returns a blank string. `$EXISTING_CP` is now empty.
+
    b. The script checks condition 1: `[ -z "$EXISTING_CP" ]` (Is the IP empty?) **Result: TRUE**
+
    c. Because condition 1 is true, the `OR` statement is satisfied. The script stops checking and immediately initializes the cluster root.
+
    **Why**
    Because if no leader can be found at all, someone has to step up and build the database, otherwise the whole cluster fails to boot. This is a defensive programming tactic.
 
 **Bootstrapping the leader node**
 
 1. `curl -sfL [https://get.k3s.io](https://get.k3s.io) | ... sh -s - server` - Downloads and runs the official K3s installation script in `server` controlplane mode.
+
    a. `INSTALL_K3S_VERSION="v1.28.15+k3s1"` - Locks the installation to a stable Kubernetes release.
+
    b. `K3S_TOKEN=$K3S_TOKEN` - Passes the cluster join token fetched from Secrets Manager.
+
    c. `--cluster-init` - Tells K3s to initialize a brand-new embedded `etcd` distributed database cluster.
+
    d. `--disable-network-policy` - Turns off default simple firewall rules so we can use enterprise Calico network policies instead.
+
    d. `--disable traefik` - Disables the lightweight Traefik ingress controller included with K3s because Istio will manage ingress traffic.
+
    e. `--flannel-backend=none` - Disable K3s's built-in Flannel networking overlay so Calico can take complete control of pod networking.
+
    f. `--write-kubeconfig-mode 644` - Sets file permissions on `/etc/rancher/k3s/k3s.yaml` so administrative users can read the Kubernetes configuration file without needing `root` privileges.
+
    g. `--cluster-cidr=192.168.0.0/16` - Allocates the internal IP address space for all Kubernetes pods.
+
    h. `--tls-san="$NLB_DNS"` - Injects the NLB's public domain name into the API server's **Security certificate (Subject alternative name)**. This permits remote tools like `kubectl` to securely talk to the cluster through the NLB without certificate errors.
+
    i. `sleep 20` - Pauses for 20 seconds to allow the K3s system process to start and write out system files.
+
    j. `export KUBECONFIG=/etc/rancher/k3s/k3s.yaml` - Tells `kubectl` where to find the cluster connection credentials file.
 
    k. ` kubectl apply --server-side -f ...` - This safely installs the "**brain**" that will manage the cluster's network, essentially hiring a robot administrator. It downloads a massive configuration file from GitHub and installs the **Tigera Operator**:
+
    **Why**
    Instead of manually installing the dozens of individual networking components required to make Calico work, we are installing an "**Operator**". In Kubernetes, an operator is essentially a software robot whose only job is to manage other software. Once we install the Tigera Operator, it runs in the background, waiting for us to give it a simple plan so it can build the network for us
+
    **The hidden trap `--server-side`**
    This is the most critical part of this command. To understand why we need it lets consider how Kubernetes tracks changes:
    1. Normally, when we run `kubectl apply`, our local computer (the client) takes the entire YAML file we're applying, squashe it into a text string, and saves it as a sticky note (an annotation) on the object inside the Kubernete database, `etcd`. This is how Kubernete remembers what we applied last time
@@ -667,7 +749,6 @@ In a High Availability setup, exactly one node must initialize the core database
    **The problem**
    The problem is that the **Tigera Operator** takes a few seconds to unpack itself and teach Kubernetes a brand new vocabulary word called an **Installation**. Thus if we didn't have this `kubectl wait` command, the bash script would instantly move to the next section (the Heredoc block below) and say: _"Hey Kubernetes, create an `Installation` with these network rules!"_
    Because Kubernetes hasn't finished learning that word yet, it would reply: _"Error: I don't know what an `Installation` is"_ and the entire script would crash, leaving us with a broken cluster. Thus the `wait` command acts as a red traffic light. It asks the Kubernetes database over and over again, _"Do you know what an installation is yet?"_ The exact millisecond Kubernetes says _"Yes, the definition is Established"_ the light turns green, and the bash script continues.
-   m.
 
 ##### Heredoc & Calico network configuration
 
@@ -682,7 +763,9 @@ EOF
 **Components**
 
 1. `<<EOF` - Starts a **heredoc**: everything upto a line containing exactly `EOF` becomes the standard input of `cat`.
+
 2. `cat` - With no filename argument just echoes its stdin to stdout.
+
 3. `|` - This passes, pipes, the output into `kubectl apply -f -`. The `-f -` tells `kubectl` "Read the manifest from stdin" rather than from a file path.
 
 The net effect is identical to writing the YAML file e.g. `install.yaml` and running `kubectl apply -f install.yaml`, the heredoc is a useful alternative where we can pass values directly from environment variables which would otherwise require Kubernetes secrets and environment variables, a much lengthier setup.
@@ -775,40 +858,71 @@ This section completes the controlplane bootstrap by splitting execution based o
 
 1. **CRD Stabilization Wait Loop `until kubectl get crd applications.argoproj.io >/dev/null 2>&1; do ...`** - This polls the Kubernetes API server every 5 seconds until the **Custom Resource Definition (CRD)** `applications.argoproj.io` is registered and queryable. All output and errors are silenced (`>/dev/null 2>&1`). This prevents a critical race condition: Section 5 installed ArgoCD via Helm, but the Kubernetes API server registers CRDs asynchronously. If the script immediately attempts to create an `Application` resource before the API server recognizes the CRD type, the command will instantly fail.
 2. **Root Application Manifest `root-observability`** - This YAML creates an ArgoCD `Application` custom resource that registers the GitHUb repository's observability directly with ArgoCD, establishing continuous automated deployment for cluster telemetry components.
+
    a. `namespace: argocd` - This ensures that the resource is created in the `argocd` namespace, where it is needed.
+
    b. `spec:` - Defines the operational specification for how ArgoCD tracks and syncs the workload. This is the top level(parent) configuration key required by the ArgoCD Application schema.
+
    c. `project: default` - Assigns the application to ArgoCD's `default` project scope. It applies ArgoCD access controls; allowed source repositories, and destination clusters defined under that project boundary. ArgoCD can be considered a security fence or sandbox. If applications are not assigned to a project, ArgoCD won't know what rules apply to it. By setting `project: default`, the application is placed inside the `default` sandbox.
+
    **Access controls for the sandbox**
    Without projects, anyone with access to ArgoCD could modify or delete any application. Tying an application to a project, hooks into **ArgoCD's Role-Based Access Control (RBAC)** e.g. We might have a `Frontend` project and a `Backend` project. Assigning the app to the `Frontend` project ensures only the UI developers have the permissions to sync or delete it.
+
    **Allowed source repositorie**
    This is a major security feature: A project dictates exactly which Git repositories are allowed to be deployed. We want to avoid developers pointing an ArgoCD application to a random, unverified personal GitHub repository. The project boundary ensures this application can only pull Kubernetes manifests from specified trusted/approved Git repositories.
+
    **Destination clusters**
    JUst like restricting the source, a project restricts the destination, preventing applications from being deployed into the wrong environment e.g. if the application is in development, the project ensures it can only be deployed to the `dev-cluster`. Thus it acts as a guardrail so that no one accidentally syncs a buggy test app straight into the production environment.
+
    **The open door problem**
    Out of the box, ArgoCD comes with this "default" project pre-installed. By default, it is configured to be completely wide open, it allows any source repository, any destination cluster, and all kinds of Kubernetes resources. Although in this development environment we're using the "default" project, in a production environment we would use custom locked down projects e.g. `project: rr-prod`.
+
    d. `source:` - Groups Git repository location details. It tells ArgoCD where to pull the desired state manifest.
+
    e. `repoURL: ...` - Specifies the target Git repository URL. It directs ArgoCD to the exact codebase holding the application manifests.
+
    f. `targetRevision: main` - Sets the target Git branch, tag, or commit SHA to track, here we're tracking `main`. This ensures that ArgoCD continuously syncs against the primary deployment branch.
+
    g. `path: infrastructure/05-aws-k8s/k8s-manifests/observability` - Points to the precise directory inside the repository containing the Kubernetes YAML manifests for the observability stack. This isolates telemetry manifests from other environment code in the mono-repo.
+
    h. `destination:` - Groups target deployment location details. It instructs ArgoCD where to apply the fetched manifests.
+
    i. `server: 'https://kubernetes.default.svc'` - Specifies the target Kubernetes API server endpoint, `[https://kubernetes.default.svc](https://kubernetes.default.svc)` refers to the local cluster itself i.e. this tells ArgoCD to deploy these resources directly into the cluster it is running on.
+
    j. `namespace: observability` - Defines the default target namespace for all manifests deployed by this application. It ensures observability resources land in the isolated `observability` namespace.
+
    k. `syncPolicy:` - Groups automated reconciliation behaviours. This configures how aggressively ArgoCD forces the cluster state to match Git.
+
    l. `automated:` - Enables automatic synchronization when changes are detected in Git, eliminating manual intervention; pushing code to `main` updates the cluster. Note ArgoCD checks the repo every 3 minutes
+
    m. `prune: true` - Instructs ArgoCD to delete resources from Kubernetes if they are removed from the Git repository. This prevent **"ghost"** or oprhaned resources from lingering in the cluster when manifests are deleted from Git.
+
    n. `selfHeal: true` - Instructs ArgoCD to automatically overwrite manual changes made directly to the cluster e.g. via `kubectl edit` guaranteeing that Git remains the absolute single source of truth and prevents configuration drift.
+
    o. `syncOptions: - CreateNamespace=true` - Passes a directive instructing ArgoCD to automatically create the target namespace if it does not exist prior to deployment. This prevents deployment failures if the `observability` namespace hasn't been created yet.
+
 3. **Follower controlplane join block `curl -sfL https://get.k3s.io | ...`** - This downloads the K3s software and starts it in controlplane mode but instead of creating a brand new cluster, it authenticates with the existing cluster leader, using a secret token, and joins the HA quorum. At the same time it strips out all of K3s's default networking components, `Flannel and Traefik`, so that they don't conflict with the custom networking stack, `Calico/Istio` established earlier, and secures the API server so it can sit behind an AWS NLB.
+
    a. `curl -sfL https://get.k3s.io | ...` - Securely downloads the official K3s installation script; `-s` for silent, `-f` to fail on errors, `-L` to follow redirects; and pipes it directly into the shell, `sh -s -` for immediate execution. Note, this is the standard automated method to pull and run the K3s bootstrap logic without manual file management on the EC2 instance.
+
    b. `INSTALL_K3S_VERSION="v1.28.15+k3s1"` - An environment variable that forces the installer to pull this exact version of K3s, rather than defaulting to the "latest" release. Note, version drift destroys clusters: Every node be it leader, follower or workers, must run the exact same Kubernetes version to ensure API compatibility and stability.
+
    c. `K3S_TOKEN=$K3S_TOKEN` - Passes the shared cluster password, retrieved from AWS Secrets Manager, as an environment variable to the installer. This provides cryptographic proof to the existing cluster leader that this new instance is authorized to join the highly sensitive `etcd` database and controlplane tier.
+
    d. `server` - Instructs the K3s binary to operate as a controlplane node, **running the API server, scheduler, controller manager and database**. Distinguishes this node's role from a standard worker/agent node, ensuring it helps manage the cluster's state.
+
    e. `--server https://$EXISTING_CP:6443` - Provides the IP address and port of the active cluster leader. It is the specific trigger that tells K3s: _"Do not initialize a new cluster. Connect to this address and join its existing cluster instead"_.
+
    f. `--disable-network-policy` - Turns off K3s's lightweight, built-in network policy controller. Since we're using Calico for advanced network security policies, having two different networking controllers fighting to apply rules causes routing failures.
+
    g. `--disable traefik` - Prevents K3s from automatically deploying the Traefik ingress controller upon startup. In this architecture we rely on Istio, envoy sidecars or AWS ALB for traffic routing. Traefik is unnecessary overhead that would consume HTTP/HTTPS ports thus conflicting with the chosen ingress strategy.
+
    h. `--flannel-backend=none` - Completely disables Flannel, which is K3s's default **Container Networking Interface (CNI)** for pod to pod communication. Note, since Tigera operator was installed to manage Calico over VXLAN, if Flannel runs simultaneously, the networking data plane will break.
+
    i. `--write-kubeconfig-mode 644` - Sets the file permissions on the generated `/etc/rancher/k3s/k3s.yaml` admin configuration file to be readable by non-root users, `rw-r--r--`, allowing standard system users like `ubuntu` or `ec2-user` to run kubectl commands directly on the server without having to preface every command with `sudo`.
+
    j. `--cluster-cidr=192.168.0.0/16` - Tells the Kubernetes controller manager the total IP address pool reserved exclusively for Pods across the whole cluster. Note, this must perfectly match the cidr defined in the Calico installation yaml file from `Section 4`. It ensures Kubernetes and Calico agree on what IP addresses are safe to hand out to containers.
+
    k. `--tls-san="$NLB_DNS"` - Adds the NLB DNS name as a Subject Alternative Name (**SAN**) on the Kubernetes API server's TLS certificate. This facilitates the following: When we run `kubectl` from the local computer/laptop, that request hits the AWS NLB, which then forwards the traffic to this node. If the node's TLS certificate doesn't explicitly list the NLB's DNS name as `valid`, the local computer will throw a strict security error and refuse to connect.
 
 ### [user_data_worker_frontend](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/modules/compute_k8s/user_data_worker_frontend.sh)
@@ -820,13 +934,21 @@ Worker nodes are the workhorses of a Kubernetes cluster: they provide the actual
 #### Components
 
 1. `#!/bin/bash & set -e` - Defines the script as a bash script and instructs the shell to exit immediately if any command fails. This failsafes the boot process. If a critical step fails, like a package installation, `set -e` stops the script so we don't end up with a "Zombie" node that is partially configured but broken.
+
 2. `dnf update -y & dnf install -y jq tar` - Updates the Amazon Linux operating system packages and installs the `jq`, JSON parser, and `tar` (archive) utilities. `tar` is strictly required by the K3s installer to unpack the downloaded binaries. `jq` is a standard dependency for parsing JSON responses from the AWS CLI, and running a system update ensures that the node has the latest security patches before joining the cluster.
+
 3. **Terraform variable injection `REGION="${aws_region}", etc`** - Assigns bash variables using Terraform string interpolation. When Terraform provisions the EC2 instance, it replaces `${aws_region}` with the actual value e.g. `eu-west-1` before the script ever runs. This makes the script dynamic and reusable across an AWS region, environment (Dev/Prod), or node tier without having to hardcode values.
+
 4. **The Polling loop `while [ -z "$CLUSTER_TOKEN" ] ...`** - Enters an infinite loop that asks AWS Secrets Manager for the `rr-$ENVIRONMENT-k3s-join-token` every 10 seconds. It suppresses error messages `2>/dev/null` i.e. redirects them to the Linux blackhole until the token is successfully retrieved. This solves a major infrastructure race condition. Worker nodes boot up very fast, but the controlplane node takes minutes to install K3s, configure Calico, deploy ArgoCD, and upload the token. If the worker script doesn't pause and wait for that token , the K3s installation will fail, and the node will never join the cluster.
+
 5. `curl -sfL [https://get.k3s.io](https://get.k3s.io) | ... sh -s - agent` - Downloads and executes the K3s installation script in `agent` mode, which means **"Worker Node"**. This installs the Kubernetes node components; kubelet, container runtime, kube-proxy; required to run application containers.
+
 6. `K3S_URL=https://$NLB_DNS:6443` - Directs the worker node to connect to the Kubernetes API through the AWS NLB rather than a single IP address. It ensures HA i.e. if one controlplane crashes/fails, the NLB seamlessly routes the worker's traffic to a healthy controlplane node.
+
 7. `K3S_TOKEN=$CLUSTER_TOKEN` - Passes the secret password retrieved from AWS Secrets Manager. This cryptographically authenticates this new EC2 instance, proving to the controlplane that it is authorized to join the cluster.
+
 8. `--node-taint dedicated=$NODE_ROLE:NoSchedule` - Applies a Kubernetes **"Taint"** to this node e.g. `dedicated=frontend`. A taint acts like a repellent, no pods can run on this node unless they explicitly have a matching **"Toleration"** in their YAML manifest. This provides/enhances Security and resource isolation. It guarantees that a heavy backend processing pod cannot accidentally be scheduled onto these internet-exposed frontend nodes.
+
 9. `--node-label tier=$NODE_ROLE` - Attaches a key-value tag , `tier=frontend`, to the node object inside Kubernetes. Labels act as magnets: when the frontend web application is deployed `nodeSelector` targeting `tier: frontend` will be used, ensuring Kubernetes schedules those specific pods exactly onto these specific EC2 instances.
 
 ### [user_data_worker_backend](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/modules/compute_k8s/user_data_worker_backend.sh)
@@ -834,6 +956,7 @@ Worker nodes are the workhorses of a Kubernetes cluster: they provide the actual
 This file is identical to _"user_data_worker_frontend.sh"_ with the exception of the node taints and node label.
 
 1. **Node label `--node-label tier=backend`** - Acts as a magnet: Workloads with a `nodeSelector: { tier: backend }` in their deployment manifest will target these instances exclusively.
+
 2. **Node Taint `--node-taint dedicated=backend:NoSchedule`** - Acts as a repellent: blocks any pod from landing on these nodes unless the pod explicitly defines a matching toleration `dedicated=backend`.
 
 ### [controlplane](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/modules/compute_k8s/controlplane.tf)
@@ -849,11 +972,13 @@ This is the cornerstone of a HA Kubernetes cluster: Without this, the worker nod
 Lets have a look at the resources:
 
 1. **The Loadbalancer `aws_lb.rr_k3s_cp_nlb`** - Creates the actual NLB inside the AWS account and by specifying subnets the VPC is implied. The NLB acts as the resilient "front door" to the cluster, capable of handling massive amounts of traffic while spanning multiple physical AZs.
+
    **Components**
    1. `internal = true` - Ensures the NLB is only assigned private IP addresses, making it inaccessible from the public internet. This is a security enhancing feature: The Kubernetes API server grants full control over the infrastructure; it should only ever be accessible via a VPN, Bastion host/SSM sessions, or internal worker nodes.
    2. `load_balancer_type = "network"` - Selects an OSI Layer 4, network, NLB rather than a Layer 7 ALB. An NLB is used here because Kubernetes uses its own internal TLS certificates, and mutual TLS, for API communication. An ALB tries to intercept and decrypt HTTP/HTTPS traffic. An NLB securely passes the raw, encrypted TCP bytes directly to the nodes, which is strictly required here.
    3. `subnets = var.k8s_private_subnets` - Places the NLB interfaces into the specified private subnets. This dictates which AZs the NLB operates in. It must match the subnets where the controlplane EC2 instances live.
    4. `security_groups` - Attaches an AWS security group to the NLB. This restricts which IP addresses are allowed to talk to the NLB in the first place, blocking malicious internal lateral movement i.e. if a malicious actor breaches our system and creates an EC2 instance in say the App subnets, they cannot communicate with this NLB and ultimately the cluster nodes: the NLB security group will drop that traffic as it's not allowed.
+
 2. **The target group `aws_lb_target_group.rr_k3s_cp_tg`** - Defines a logical grouping of backend EC2 instances and establishes the rules for determining if those instances are healthy or broken. Note, the NLB is just a traffic cop; it needs to know where the back rooms are and who inside is actually alive to take requests.
 
    **Components**:
@@ -861,9 +986,13 @@ Lets have a look at the resources:
    2. `protocol = "TCP"` - Instructs the target group to treat the traffic as raw TCP streams. This helps to prevent AWS from trying to intercept or decrypt the Kubernetes API TLS traffic.
    3. `vpc_id = var.vpc_id` - Binds this target group to a specific VPC, this project VPC. This is because AWS requires target groups to be explicitly scoped to a VPC so it knows the network boundaries of the instances it is routing to.
    4. `target_type = "instance"` - Tells the target group to identify its targets by their EC2 instance IDs rather than static IP addresses. Because an **ASG** is used here which creates and destroys instance dynamically, AWS can automatically register/deregister instances by their ID. There are a number of advantages to ASG using IDs instead of IPs:
+
       a. **Native, zero-touch registration** - ASGs are hardwired to speak to target groups using instance IDs: When the ASG provisions a new controlplane node, it automatically hands the new instance ID to the loadbalancer. If the target type is set to `ip`, the ASG cannot do this automatically, its a lengthier process.
+
       b. **Ephemeral IPs vs. Immutable identities** - In an AWS VPC, IP addresses are leased via DHCP, they are temporary. **If a node crashes, its IP goes back into the subnet's available pool**. If the target group is tracking IPs, it risks a race condition: the loadbalancer might still think `10.0.1.55` is a valid Kubernetes API server, but that IP was just reassigned to a newly booted instance serving a different purpose. An instance ID, however, e.g. `i-0abcd1234efgh5678`, is a globally unique, immutable fingerprint. It's born with the VM and dies with the VM, eliminating any chance of misrouting traffic to the wrong server.
+
       c. **Graceful termination, connection draining** - When an ASG decides to terminate a node due to scaling down or the node becomes unhealthy, it uses the instance ID to coordinate with the loadbalancer. It tells the NLB: _"I am about to kill `i-0abcd1234...`. Stop sending it new requests, and give it 60 seconds to finish answering its current requests."_ This is called the connection draining. If mapped by IP, this native handshake breaks, leading to abruptly dropped connections for the users or cluster components.
+
       d. **Automatic network interface resolution** - An EC2 instance can have multiple ENIs thus multiple IP addresses attached to it. When registering by `instance`, AWS automatically knows to route the traffic to the primary private IP of the primary network interface. There' no need for manual/programatical figuring out which IP to use.
 
       Thus using IDs is a superior approach
@@ -871,6 +1000,7 @@ Lets have a look at the resources:
    5. **`health_check { ... }` block** - Configures the NLB to ping the controlplane nodes/servers via TCP on port 6443 every 10 seconds, `interval`. The string `"traffic-port"` is a dynamic placeholder provided by AWS; it tells the loadbalancer to send the health check pings to the exact same port that this target group is configured to use for normal user traffic. If it fails 3 times, `unhealthy_threshold`, it marks the node dead. If it succeeds 3 times, `healthy_threshold`, it marks it alive. Note, this is the heartbeat of HA. If a controlplane node crashes, the health check fails, and the NLB instantly stops sending traffic to that dead node, preventing downtime.
 
 3. **The listener `aws_lb_listener.rr_k3s_cp_listener`** - This essentially opens a specific "door", port, on the NLB and wires it directly to the target group. Without a listener, a loadbalancer drops all incoming traffic. This resource marries the incoming request on the NLB to the controlplane instances in the target group.
+
    **Components**
    1. `load_balancer_arn` - Links this listener to the specific NLB just created because listeners cannot exist in a vacuum; they must be attached to a physical loadbalancer.
    2. `port = 6443 & protocol = "TCP"` - Opens port 6443 on the front of the NLB using TCP. This is the kubernetes default port, behind it is the `kube-apiserver`, this is what external resources communicate with to reach Kubernetes.
@@ -883,9 +1013,12 @@ This section provisions the actual VMs for the Kubernetes controlplane. It creat
 Lets have a look at the resources:
 
 1. **AWS launch template `aws_launch_template.rr_k3s_cp`** - Creates a reusable configuration template defining exactly how a controlplane server should be built. ASGs require a launch template so they know exactly what to build when a new server is needed. This brings together all the VM settings that we've previously prepared; OS images, CPU size, IAM permissions, Network firewalls, and boot scripts (user_data_cp.sh); to construct this vital resource.
+
    **Components**
    1. `name_prefix = "rr-${var.environment}-k3s-cp-"` - This naming convention is very important so lets look into it with a little more detail: This consists of two actions, one by Terraform and the other by AWS:
+
       a. **Terraform interpolation** - The string evaluates to a base prefix e.g. `rr-dev-k3s-cp-`.
+
       b. **AWS/Terraform suffix generation** - Instead of sending `rr-dev-k3s-cp-` directly as the full resource name, Terraform requests AWS to append **a unique 26 character alphanumeric timestamp/hash suffix** at creation time e.g. `rr-dev-k3s-cp-20260903151800123400000001`.
 
       **The problem: AWS uniqueness vs. Terraform replacement**
@@ -915,15 +1048,21 @@ Lets have a look at the resources:
    4. `iam_instance_profile { name = var.iam_profile_control_plane }` - Indirectly attaches a specific IAM role to the EC2 instance: Grants the server permission to call AWS APIs securely. This is strictly required so the bash script can fetch the `K3S_TOKEN` and `GRAFANA_TOKEN` from AWS Secrets Manager.
    5. `network_interfaces { security_groups = [var.control_plane_sg_id] }` - Attaches the controlplane's firewall rules to the instance's network card. This secures the node by explicitly blocking all traffic except what is required such as TCP 6443 from the NLB and SSH from a Bastion host.
    6. `metadata_options { http_tokens = "required" ... }` - Enforces the use of **Instance Metadata Service Version 2 (IMDSv2)**. This is a critical security control: It prevents **Server-Side Request Forgery (SSRF)** attacks from easily stealing the IAM credentials attached to the instance.
+
       **Components**
       1. `http_endpoint = "enabled"` - This is the master on/off switch for the **AWS Instance Metadata Service (IMDS)**. It turns on a hidden, internal web server that lives at a special, non-routablle IP address, `169.254.169.254`. Only the EC2 instance itself can access this address. When the instance visits this address, AWS replies with a massive dictionary of facts about the server e.g. _"You're in the `eu-west-1` region"_, _"Your instance ID is `i-1234"_, _"Here are your IAM credentials"_.
          Without this endpoint enabled, the server is completely blind to its AWS environment. In the architecture, the `user_data_cp.sh` script relies on IAM credentials to securely fetch the `K3S_TOKEN` from AWS Secrets Manager. If the endpoint is disabled, the script cannot retrieve those credentials, and the node will fail to join the cluster
       2. `http_tokens = "required"` - This is a strict security enforcer that disables the older, insecure version of the metadata service (IMDSv1) and forces the server to use the modern, highly secure version (IMDSv2). It changes how applications on the server are allowed to ask for information.
+
          a. **Without it (IMDSv1)** - Any software could just shout a simple request at the metadata IP address and immediately get the server's IAM passwords.
+
          b. **With it (IMDSv2)** - Software must perform a complex, two-step cryptographic handshake. First, it must send a specific type of request(`HTTP PUT`) to ask for a temporary, secret password, a _"token"_; then it must include that exact token in all future requests for information.
          This is needed because it stops a very common and devastating hack, SSRF. In an SSRF attack, a hacker finds a vulnerable search box or URL field on our website and types in `[http://169.254.169.254](http://169.254.169.254)`. If we're using V1 our own web server will obediently fetch its AWS IAM credentials and display them to the hacker. Because V2 requires the complex two-step token handshake, a hacker cannot execute this trick through a simple web form. The attacker fails, and our cloud environment stays secure.
+
       3. `http_put_response_hop_limit = 2` - This is a network travel restriction, technically known as **Time-To-Live or TTL**, applied to the secret token we just talked about. It dictates exactly how many network boundaries, "hops", the metadata token is allowed to cross before it self-destructs.
+
          a. **A value of `1`** means the packet can only travel from AWS hardware directly into the host EC2 OS.
+
          b. **A value of `2`** means the packet can take one more step: from the host EC2 operating system into a virtual network running inside the server.
 
       This is needed for Kubernetes: Kubernetes creates its own internal, virtual network using the Calico CNI layer, where the application containers live. With the AWS default hop limit, `1`, the token would reach the host EC2 server, but when a legitimate Kubernetes pod tried to ask for AWS credentials, the packet would hit the virtual network boundary and die. Setting the limit to `2` ensures the packet survives just long enough to reach the pods running inside Kubernetes while still guaranteeing it cannot be routed entirely off the server to a malicious external network.
@@ -937,34 +1076,47 @@ Lets have a look at the resources:
    2. `desired_capacity, max_size, and min_size = 3` - Hardcodes the fleet size to exactly three nodes. This is because for HA using the embedded `etcd` database, Kubernetes requires an odd number of nodes for consensus quorum. This is an important concept so lets look into this with a little detail:
 
    **Quorum**
+
    Quorum is the minimum number of servers/nodes that must be online and communicating with each other to make a valid decision. It's like a board meeting; if a majority of the board members aren't in the room, no official votes can take place. The rule for quorum is always **"more than half"**, strict majority.
+
    a. If we have 3 nodes, we need at least 2 to agree.
+
    b. If we have 5 nodes, we need at least 3 to agree. If a group of nodes cannot reach that "more than half" number, they automatically lock themselves down and refuse to make any changes.
+
    **The maths formula**
    The mathematical formula to calculate quorum, **Q** for a cluster size of N is:
    `Q = (N/2) + 1`
 
    a. For a 1-node cluster: `Q = (1/2) + 1 = 1` (Tolerance: 0 failures)
+
    b. For a 3-node cluster: `Q = (3/2) + 1 = 2` (Tolerance: 1 failure)
+
    c. For a 5-node cluster: `Q = (5/2) + 1 = 3` (Tolerance: 2 failures)
 
    **Why do we need it?**
    This is needed to prevent a disaster called **"split-brain"**. Imagine a 3-node cluster where a network cable is cut, separating Node A from Nodes B & C.
+
    a. Nodes B & C can still talk, they form a quorum, 2 out of 3, and keep working normally.
+
    b. Node A is isolated, because it knows it doesn't have a quorum, 1 out of 3, it stops accepting new data.
    Without quorum, both sides would try to keep working independently. We'd end up with two conflicting versions of the database, permanently ruining the database
 
    **How does it work: The Raft consensus algorithm**
    Raft is a set of rules, an algorithm, that allows a group of separate servers to work together as if they were a single, highly reliable computer. Raft organises the servers by assigning them roles. At any given time, one server is the **Leader** and the others are **Followers**.
+
    a. The leader is the boss. It handles all incoming traffic and tells the followers what to do.
+
    b. The followers simply listen to the leader and copy its actions.
+
    c. If the leader crashes, the followers realise the boss is gone and immediately hold an election to choose a new leader from among themselves.
    When we have data spread across multiple machines, it is veryeasy for them to get out of sync e.g. one server might think a password was updated, while another server missed the memo. Raft guarantees that every single server in in the cluster records the exact same data in the exact same data in the exact same order, no matter what crashes.
 
    **Node active voting**
    Active voting is the automated way nodes make decisions together without human intervention. They use voting primarily for one major task: electing a new leader when the old one dies.
+
    **How it works**
    Every follower node has an internal countdown timer. As long as they keep hearing from the leader, the timer resets. If the leader crashes and goes silent, a follower's timer will eventually run out. When the timer hits zero, that follower raises its hand and says, _"I want to be the new leader! Vote for me!"_ The other active nodes check if this candidate has the most **up-to-date data**. If it does, they cast a **"Yes"** vote. Once the candidate gets a majority, a quorum of "Yes" votes, it becomes the new boss.
+
    **Why do we need it**
    We need voting so the cluster can fix itself automatically in seconds. If a server dies at 3:00 AM, we don't want to wake up an engineer to manually choose a new leader. Voting ensures a smooth, instant transition of power so the system stays online.
 
@@ -972,8 +1124,11 @@ Lets have a look at the resources:
    A "Write operation" is any action that adds, changes, or deletes data in the cluster. Deploying a new application, changing configuration, or save a secret passwords are means of performing write operations.
    **How it works**
    When saving new data, a request is sent to the leader node. The leader doesn't just save it locally and say "Done." instead the following happens:
+
    a. The leader sends a message to the followers: _"Please write this down"_
+
    b. The followers write it down and reply _"Got it!"_.
+
    c. Once the leader receives _"Got it"_ from a quorum, a majority, of the nodes, it permanently saves the data and tells you the operation was successful.
    **Why we need it**
    This process guarantees data safety. If the leader saved the data only to its own hard drive and immediatly caught on fire, the data would be gone forever. By forcing the leader to wait for the followers to copy the data first, ensures the information is safely stored on multiple machines before we consider the job finished.
@@ -996,9 +1151,13 @@ It achieves this by declaring two core AWS resources:
    **Components of interest**
    1. `Userdata` - This is the bridge between Terraform, which povisions the bare metal infrastructure, and the node's operating system. It takes a raw bash script, injects live information from our AWS environment into it, and hands it to the EC2 instance to execute as the `root` user exactly once during its very first boot sequence. Without this Terraform would build an empty Amazone Linux server that does nothing. This block is what magically transforms a blank VM into a fully configured Kubernetes worker node that instantly joins the cluster.
    2. `base64encode(templatefile("${path.module}/user_data_worker_frontend.sh"` - This combines two distinct Terraform functions:
+
       a. `templatefile(...)` - This opens the `user_data_worker_frontend.sh` file, looks for variable placeholders, like `${node_role}`, and swaps them out for the real values provided in the block below it. This is necessary because hardcoding URLs and environment names directly into a bash script destroys code reusability. We want Terraform to dynamically calculate things such as the NLB URL and inject them at the exact moment the server is built.
+
       b. `base64encode(...)` - Once the script is fully rendered with the real values, it converts the entire text document into a Base64-encoded string i.e. a single, unbroken line of alpha numeric characters (A-Z,a-z,0-9,+,and /). This is necessary as the AWS API strictly require it: If Terraform sent a raw bash script containing special characters, quotes, and line breaks over the internet, the AWS API request would break. Encoding it into Base64 ensures the script is transmitted safely as a single string of safe characters. AWS then automatically decodes it back into text before running it on the server.
+
       c. `control_plane_endpoint = aws_lb.rr_k3s_cp_nlb.dns_name` - This grabs the exact, dynamically generated DNS address of the controlplane NLB e.g. `rr-dev-k3s-cp-nlb-1234.elb.eu-west-1.amazonaws.com`. This is needed so that the worker nodes know exactly where to send their **"join cluster"** request. If this wasn't retrieved dynamically, we would have to guess the NLB's URL before it was even created, which is impossible.
+
       d. `node_role = "frontend"` - This passes a static string defining the workload tier of the node. This string is injected directly into the final K3s installation command to set the Kubernetes Taint, `dedicated=frontend`, and Labels , `tier=frontend`. It is the singular configuration that tells Kubernetes this node is meant for web traffic, ensuring pods are scheduled correctly.
 
 2. **ASG `aws_autoscaling_group.rr_k3s_worker_frontend_asg`** - This is the automated fleet manager. It makes use of the launch template above to deploy frontend instances across multiple private subnets for HA. Unlike the static controlplane, this ASG is configured for elasticity; scaling between 1 and 4 instances, allowing the infrastruture to automatically expand during traffic spikes and contract during quiet periods to optimize compute costs.
@@ -1163,24 +1322,23 @@ There is also the **Blast radius control & stability**: If an envoy proxy experi
       a. `nodeSelector` - forces the pod to search only for nodes labeled `tier: frontend`.
       b. `toleration` - unlocks those nodes so the pod can actually be scheduled onto them.
 
-  Here's why we need `Taints` and `Tolerations`:
-
+      **Here's why we need `Taints` and `Tolerations`**:
       1.  **Aligning Kubernetes with the AWS Network Isolation** - In Terraform we built two separate EC2 instance groups with distinct AWS security groups and subnet placements:
-         a. **worker-frontend** nodes sit in subnets reachable by public loadbalancers
-         b. **worker-backend** - nodes sit in isolated private subnets.
-      However, Kubernetes is completely blind to AWS subnets and security groups. Without taints, Kubernetes would treat all worker nodes as one giant pool and could schedule the Next.js web app onto a backend EC2 instance or the internal/backend Go/Flask API onto a public frontend instance. **Taints enforce the AWS architecture boundaries inside Kubernetes**, guaranteeing that workloads land on the exact EC2 tier designed for them and no where else.
+          a. **worker-frontend** nodes sit in subnets reachable by public loadbalancers
+          b. **worker-backend** - nodes sit in isolated private subnets.
+          However, Kubernetes is completely blind to AWS subnets and security groups. Without taints, Kubernetes would treat all worker nodes as one giant pool and could schedule the Next.js web app onto a backend EC2 instance or the internal/backend Go/Flask API onto a public frontend instance. **Taints enforce the AWS architecture boundaries inside Kubernetes**, guaranteeing that workloads land on the exact EC2 tier designed for them and no where else.
 
       2.  **Containing security breaches, Blast-Radius Control** - The `v1-frontend-nextjs` deployment handles raw, untrusted user request coming through the Istio gateway. Public facing web apps face the highest risk of attack e.g. node module vulnerabilities or Remote Code Execution.
-         a. **With taints** - If an attacker breache the Next.js container, they are trapped on a `worker-frontend` EC2 instance. They cannot read host memory, capture internal API credentials, or pivot directly to the `worker-backend` instances, because the backend pods run on physically separate EC2 hardware.
-         b. **Without Taints** - The frontend pod could be co-located on the same EC2 node as the backend API. A breach of the web container could compromise the entire physical node and all adjacent backend pods sharing that host's kernel and RAM.
+          a. **With taints** - If an attacker breache the Next.js container, they are trapped on a `worker-frontend` EC2 instance. They cannot read host memory, capture internal API credentials, or pivot directly to the `worker-backend` instances, because the backend pods run on physically separate EC2 hardware.
+          b. **Without Taints** - The frontend pod could be co-located on the same EC2 node as the backend API. A breach of the web container could compromise the entire physical node and all adjacent backend pods sharing that host's kernel and RAM.
 
       3.  **Enforcing AWS Security group boundaries (Network layer)** - AWS security groups attach at the EC2 node's ENI level. As pod traffic egresses the worker node, it is encapsulated with host-level headers that carry the node's security group identity. Without taints, a frontend pod scheduled onto a backend node would inherit that node's security group context, opening unauthorized network paths directly to private databases and AWS Secrets Manager endpoints.
 
       4.  **Preserving IAM instance profile scoping (Identity layer)** - Worker nodes assume tier specific IAM roles via EC2 instance profiles, exposed to local containers via **IMDSv2**. Each tier enforces strict least privileges: frontend nodes only retrieve cluster join tokens, backend nodes access db credentials, and controlplane nodes hold GitHub PAT and Grafana credentials. Tains prevent a public-facing frontend pod from landing on a higher-privileged node and harvesting elevated AWS credentials via IMDS.
 
       5.  **Protecting user experience on fixed compute `t3.medium` nodes** - We're running `t3.medium` EC2 instances (`2 vCPUs, 4GiB RAM`). Compute resources on these nodes are strictly constrained:
-         a. **With Taints** - The CPU and RAM on the `worker-frontend` EC2 nodes are reserved exclusively for rendering web pages and serving frontend assets.
-         b. **Without Taints** - Heavy backend workloads (like data processing or Go API spikes) could bleed onto the frontend nodes, starving Next.js of CPU and causing page loads to freeze for end users. Taints create an operational firewall between the tiers.
+          a. **With Taints** - The CPU and RAM on the `worker-frontend` EC2 nodes are reserved exclusively for rendering web pages and serving frontend assets.
+          b. **Without Taints** - Heavy backend workloads (like data processing or Go API spikes) could bleed onto the frontend nodes, starving Next.js of CPU and causing page loads to freeze for end users. Taints create an operational firewall between the tiers.
 
 8. **Container definitions & Immutability `containers.image` & `ports`** - This is the exact cryptographic binary path referencing the application image stored in `ghcr.io`: `ghcr.io/manunebo/rr-v1-frontend:46dd0cae58aa503c7ccd4abe03c93820bd4febad` (note, your's will be different, see instructions below on how to retrieve this). Instead of referencing a loose, moving target like `:latest` or `:dev`, this configures Kubernete to pull a container built from a specific, unalterable git commit hash (`46dd0cae...`). Every time a pod starts or reschedules across the EC2 worker nodes, the container runtime uses this exact identifier to locate and pull the image layers. There are a few benefits to this:
    1. **Eliminates environment drift & "silent re-pulls"** Standard tags like `:latest` or version numbers like `:v1.0.0` are mutable, they can be overwritten in the container registry at any time. If an EC2 node restarts or scales up, a node with `:latest` might pull a newly overwritten image, while an existing node runs then old image. Pinning the SHA guarantees that all worker nodes in the cluster execute 100% identical code.

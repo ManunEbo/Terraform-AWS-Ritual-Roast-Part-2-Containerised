@@ -104,7 +104,7 @@ The example above shows how we pass parameter values as inputs to the `vpc modul
 
 Any values starting with `local.` is coming from `shared_locals.tf` . Any values starting with `var.` is coming from `variables.tf`, however, due to the variable precedence that value might be coming from an environment variable or from `terraform.tfvars`, for example all the subnets data is coming from `terraform.tfvars` file.
 
-`source = "../../modules/vpc"` specigies the module path for the vpc module. Note the `../../` means change directory back 2 parent directories.
+`source = "../../modules/vpc"` specifies the module path for the vpc module. Note the `../../` means change directory back 2 parent directories.
 
 **Dependency graph:**
 
