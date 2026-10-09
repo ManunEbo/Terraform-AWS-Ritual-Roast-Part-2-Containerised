@@ -175,7 +175,6 @@ resource "aws_iam_policy" "rr_lambda_secrets_custom_policy" {
         "secretsmanager:PutSecretValue",
         "secretsmanager:UpdateSecretVersionStage" #  Permits shifting the "AWSCURRENT" label
       ]
-      # FIXED: Capitalized 'Resource'
       Resource = "arn:aws:secretsmanager:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:secret:rr-${var.environment}-db-secret-*"
       },
       {
@@ -195,13 +194,13 @@ resource "aws_iam_policy" "rr_lambda_secrets_custom_policy" {
 The statement section of the policy has two elements; there are a few important factors here to disect and what they facilitate, so lets break them down:
 
 ```hcl
-    Action = [
-    "secretsmanager:GetSecretValue",
-    "secretsmanager:DescribeSecret",
-    "secretsmanager:UpdateSecret",
-    "secretsmanager:PutSecretValue",
-    "secretsmanager:UpdateSecretVersionStage" #  Permits shifting the "AWSCURRENT" label
-    ]
+Action = [
+  "secretsmanager:GetSecretValue",
+  "secretsmanager:DescribeSecret",
+  "secretsmanager:UpdateSecret",
+  "secretsmanager:PutSecretValue",
+  "secretsmanager:UpdateSecretVersionStage" #  Permits shifting the "AWSCURRENT" label
+]
 
 ```
 
@@ -215,17 +214,16 @@ These are essentially the permissions for the different tasks that the lambda fu
 
 Note, the above permissions apply to specific resources:
 
-`Resource = "arn:aws:secretsmanager:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:secret:rr-${var.environment}-db-secret-*"
-      }`
+`Resource = "arn:aws:secretsmanager:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:secret:rr-${var.environment}-db-secret-*"}`
 
 This specifically restricts the above actions to secrets with the name **`rr-${var.environment}-db-secret-*`**. Thus the lambda function will not be able to do anything with any other secrets in Secrets Manager. Notice also how the data source is used directly in this code to retrieve the AWS region and the current account_id.
 
 On the second statement we have:
 
 ```hcl
-        Action = [
-          "cloudwatch:PutMetricData"
-        ]
+Action = [
+  "cloudwatch:PutMetricData"
+]
 ```
 
 1. `"cloudwatch:PutMetricData"` - Permission to write custom metric data points into CloudWatch. Note this doesn't include read permissions (GetMetricData/ListMetrics would be the read-side equivalents).
@@ -246,7 +244,6 @@ The lambda function will assume this role when it is invoked so that it can rota
 This lambda role's ARN is required in the lambda module. So we output it, making it available to the root module.
 
 ```hcl
-
 output "lambda_role_arn" {
   description = "The lambda role ARN"
   value       = aws_iam_role.rr_lambda_secrets_role.arn

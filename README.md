@@ -97,59 +97,59 @@ In a layered infrastructure setup a directory like `01-aws-vpc/environments/dev`
 2. **Terraform lock file `.terraform.lock.hcl`** - This is the **Provider Dependency Lock file**. When we write Terraform code, we rely on external plugins called "providers", like the AWS provider to talk to AWS. These plugins are version controlled. When we run `terraform init` for the first time, Terraform downloads those providers. It then creates the `.terraform.lock.hcl` file, recording the **exact version numbers** and **cryptographic hashes**, unique digital fingerprints, of the downloaded plugins. On any future runs, Terraform reads this lock file and forces our system to use those exact versions, even if AWS or HashiCorp released a newer version overnight. **Note, this lock file contains no sensitive data thus it can be stored in our Git repository.**
 
    **What are we using it for?**
-   1. **Guaranteed consistency** - It solves the _"it works on my machine"_ problem. By committing it to Git, we guarantee that our local laptop, our co-worker's laptop and our automated GitHub Actions CI/CD pipeline are all using the exact same version of the AWS provider.
+   - **Guaranteed consistency** - It solves the _"it works on my machine"_ problem. By committing it to Git, we guarantee that our local laptop, our co-worker's laptop and our automated GitHub Actions CI/CD pipeline are all using the exact same version of the AWS provider.
 
-   2. **Preventing unexpected breakages** - If the AWS provider releases a major update with breaking changes, our infrastructure won't suddenly fail to deploy, because the lock file pins us to the older, **known-working**, version until we explicitly run `terraform init -upgrade`.
+   - **Preventing unexpected breakages** - If the AWS provider releases a major update with breaking changes, our infrastructure won't suddenly fail to deploy, because the lock file pins us to the older, **known-working**, version until we explicitly run `terraform init -upgrade`.
 
-   3. **Security** - Because it stores cryptographic hashes, Terraform will block the deployment if it detects that the provider code was tampered with maliciously.
+   - **Security** - Because it stores cryptographic hashes, Terraform will block the deployment if it detects that the provider code was tampered with maliciously.
 
 3. **Terraform state lock file `terraform.state.lock`** - This is a temporary safety mechanism that prevents any two entities (people and or processes) from modifying the same infrastructure state file at the exact same time.
 
    **How does it work**
-   1. **Lock acquisition** - Whenever we execute a command that reads or modifies state such as `terraform plan`, `terraform apply`, or `terraform destroy`, Terraform automatically attempts to create a lock before making any changes.
+   - **Lock acquisition** - Whenever we execute a command that reads or modifies state such as `terraform plan`, `terraform apply`, or `terraform destroy`, Terraform automatically attempts to create a lock before making any changes.
 
-   2. **Recording lock info** - It creates a temporary record containing details about the current operation: A unique **Lock ID**; the user or system running the command e.g. our local username or GitHub Actions runner; the timestamp when the operation started; the operation type e.g. `OperationTypeApply`.
+   - **Recording lock info** - It creates a temporary record containing details about the current operation: A unique **Lock ID**; the user or system running the command e.g. our local username or GitHub Actions runner; the timestamp when the operation started; the operation type e.g. `OperationTypeApply`.
 
-   3. **Blocking concurrent runs** - If another engineer or CI/CD pipeline tries to run `terraform apply` on that same layer while the lock is active, Terraform reads the lock, stops immediately, and displays an error showing who is currently holding the lock.
+   - **Blocking concurrent runs** - If another engineer or CI/CD pipeline tries to run `terraform apply` on that same layer while the lock is active, Terraform reads the lock, stops immediately, and displays an error showing who is currently holding the lock.
 
-   4. **Lock release** - Once the command completes successfully or fails safely, Terraform deletes the lock record, allowing the next queued operation to run.
+   - **Lock release** - Once the command completes successfully or fails safely, Terraform deletes the lock record, allowing the next queued operation to run.
 
    **How are we using it**
-   1. **Preventing state file corruption** - If two entities such as a developer and GitHub Actions ran `terraform apply` on Layer 1 at the same time, both would try to write to the same AWS S3 state file simultaneously, resulting in a corrupted, unusable state file.
+   - **Preventing state file corruption** - If two entities such as a developer and GitHub Actions ran `terraform apply` on Layer 1 at the same time, both would try to write to the same AWS S3 state file simultaneously, resulting in a corrupted, unusable state file.
 
-   2. **Enforcing order in CI/CD** - This file ensures automated pipelines and team members wait their turn, preserving a single, consistent sequence of changes.
+   - **Enforcing order in CI/CD** - This file ensures automated pipelines and team members wait their turn, preserving a single, consistent sequence of changes.
 
-   3. **Auditability and debugging** - If a deployment is stuck or blocked, the state lock error provides immediate visibility into who holds the lock, on what machine, and when the operation started, making it easy to identify stale or hanging deployments.
+   - **Auditability and debugging** - If a deployment is stuck or blocked, the state lock error provides immediate visibility into who holds the lock, on what machine, and when the operation started, making it easy to identify stale or hanging deployments.
 
 4. **State file isolation** - Terraform tracks everything it builds in a state file. **It's Terraform's single source of truth**, a JSON file that maps our declarative code to real-world cloud resources.
 
    **How does it work?**
-   1. **Resource mapping** - When we declare `resource "aws_vpc" "main"`, Terraform provisions it in AWS, gets back an ID like `vpc-0a1b2c3d4e` and records that mapping in the state file.
-   2. **Metadata & attribute tracking** - It stores the exact live attributes of our managed infrastructure; IP addresses, Amazon resource names (ARNs), route tables, and secrets.
-   3. **Drift detection** - Whenever we run `terraform plan` or `terraform apply`, Terraform performs a three-way comparison between:
-      1. our local `.tf` code, what we want.
+   - **Resource mapping** - When we declare `resource "aws_vpc" "main"`, Terraform provisions it in AWS, gets back an ID like `vpc-0a1b2c3d4e` and records that mapping in the state file.
+   - **Metadata & attribute tracking** - It stores the exact live attributes of our managed infrastructure; IP addresses, Amazon resource names (ARNs), route tables, and secrets.
+   - **Drift detection** - Whenever we run `terraform plan` or `terraform apply`, Terraform performs a three-way comparison between:
+     - our local `.tf` code, what we want.
 
-      2. The `.tfstate` file, what Terraform thinks exists.
+     - The `.tfstate` file, what Terraform thinks exists.
 
-      3. The real cloud environment, what actually exists in AWS.
+     - The real cloud environment, what actually exists in AWS.
 
-   4. **Storing the state file** - There are several options when it comes to storing the `terraform.tfstate` file:
-      1. **Local storage** - Here we save the file directly in our project folder. This is problematic for team environments as it risks file loss, concurrent overwritten changes, and exposes secrets in plain text on our laptop.
+   - **Storing the state file** - There are several options when it comes to storing the `terraform.tfstate` file:
+     - **Local storage** - Here we save the file directly in our project folder. This is problematic for team environments as it risks file loss, concurrent overwritten changes, and exposes secrets in plain text on our laptop.
 
-      2. **Remote backends (Recommended)** - There are a few options here:
-         1. **AWS S3 bucket** a central encrypted object storage, standard for AWS architectures, this is what we're using
-         2. **Terraform Cloud / HashiCorp Cloud Platform (HCP)**, managed state handling, access controls, and policy enforcement
-         3. **Azure blob Storage / Google Cloud Storage (GCS)**, these are object storage equivalents for Azure and GCP environments respectively
-         4. **HTTP / GitLab / GitHub State Storage**, API-based remote state management from GitHub
+     - **Remote backends (Recommended)** - There are a few options here:
+       - **AWS S3 bucket** a central encrypted object storage, standard for AWS architectures, this is what we're using
+       - **Terraform Cloud / HashiCorp Cloud Platform (HCP)**, managed state handling, access controls, and policy enforcement
+       - **Azure blob Storage / Google Cloud Storage (GCS)**, these are object storage equivalents for Azure and GCP environments respectively
+       - **HTTP / GitLab / GitHub State Storage**, API-based remote state management from GitHub
 
-   5. **Comparing the files** - These three files manage completely different aspects of Terraform stability and safety:
-      1. **`terraform.lock.hcl`** - ensures everyone uses the exact same plugin binaries to build the code
-      2. **`terraform.state.lock`** - blocks multiple engineers or CI/CD pipelines from modifying the state file simultaneously.
-      3. **`terraform.tfstate`** - records the final result of those builds once the lock releases.
-   6. **How are we using the state file**
-      1. **Decoupled layer states** - In this multi-layered architecture, Layer 1 - Layer 5, every layer maintains its own isolated state file in AWS S3 e.g. `dev/layer1-vpc/terraform.tfstate`. This isolates blast radius so an apply in Layer 5 never risks corrupting Layer 1.
+   - **Comparing the files** - These three files manage completely different aspects of Terraform stability and safety:
+     - **`terraform.lock.hcl`** - ensures everyone uses the exact same plugin binaries to build the code
+     - **`terraform.state.lock`** - blocks multiple engineers or CI/CD pipelines from modifying the state file simultaneously.
+     - **`terraform.tfstate`** - records the final result of those builds once the lock releases.
+   - **How are we using the state file**
+     - **Decoupled layer states** - In this multi-layered architecture, Layer 1 - Layer 5, every layer maintains its own isolated state file in AWS S3 e.g. `dev/layer1-vpc/terraform.tfstate`. This isolates blast radius so an apply in Layer 5 never risks corrupting Layer 1.
 
-      2. **Secure remote storage & team collaboration** - Storing state files in an encrypted AWS S3 bucket keeps sensitive infrastructure data off local machines while allowing developers and GitHub Actions to share a single ground truth.
+     - **Secure remote storage & team collaboration** - Storing state files in an encrypted AWS S3 bucket keeps sensitive infrastructure data off local machines while allowing developers and GitHub Actions to share a single ground truth.
 
 5. **The execution point** - This is the directory where we actually run our commands (`terraform init`, `terraform plan`, `terraform apply`). The code inside this folder pulls in the generic layers we built (Layer 1, Layer 2 etc), injects the `dev` variables into them, reads the `dev` remote state, and orchestrates the actual deployment to AWS.
 
@@ -191,18 +191,18 @@ A data source in Terraform is a read-only query that fetches real time informati
 
 1.  **Declaration** - We declare a `data` block to tell Terraform what to look for, **resource type** and how to find it, using **`filters` like `tag: Name`, or `ID`**
 
-Here's an example:
+    Here's an example:
 
-```hcl
-data "aws_vpc" "main" {
-filter {
-   name   = "tag:Name"
-   values = ["rr-dev-RR-vpc"]
-}
-}
-```
+    ```hcl
+    data "aws_vpc" "main" {
+    filter {
+       name   = "tag:Name"
+       values = ["rr-dev-RR-vpc"]
+    }
+    }
+    ```
 
-Here we're looking for a `aws_vpc` resource type filtering by tags and the matching value is `"rr-dev-RR-vpc"`. This will return all matching values. `"main"` is the name we're attaching to this data source for referencing the returned resource.
+    Here we're looking for a `aws_vpc` resource type filtering by tags and the matching value is `"rr-dev-RR-vpc"`. This will return all matching values. `"main"` is the name we're attaching to this data source for referencing the returned resource.
 
 2.  **API query** - When Terraform runs, it makes a direct API call to AWS using those filters.
 3.  **Attribute exposure** - AWS responds with the live resource's details and Terraform makes those attributes available to the rest of our configuration using the syntax `data.<TYPE>.<NAME>.<ATTRIBUTE>` e.g. `data.aws_vpc.main.id` or `data.aws_vpc.main.cidr_block`.
@@ -229,17 +229,29 @@ In the Ritual Roast architecture, data sources serve as the **glue between isola
 
 Far too often, when I've wanted to learn a new technology I jumped to GitHub looking for a great repo that will gently introduce the topic and guide me through the material to PRO level in a digestable orderly fashion with plenty of examples. 100% of the time, I came away disappointed:
 
-1. Most repos were either too advanced or not worth reading.
+1. Most repos were either too advanced and taking the liberty of technical jargon or not worth reading.
 2. There were no instructions or step by step implementation guides that I could follow to deploy
 3. The author is always difficult to reach.
 
-I wanted these series of repos on Ritual Roast to be the learning resource I needed if I was learning Terraform with AWS from scratch. However, it's not perfect! The following section's README.md were written by Claude code and I verified them.
+I wanted these series of repos on Ritual Roast to be the learning resource I needed if I was learning Terraform with AWS from scratch. However, it's not perfect! The following section's README.md were written by Claude code and I verified them and made minor changes.
 
 1. **`.claude/`** - A single README.md sits at the base of this directory
 2. **`.github/workflows/`** - A single README.md can be found at the base of this directory
 3. **`apps/*`** - Each of the four images directories have their own README.md
 
 I did not rewrite these READMEs to make them more educational simply because these were not the main focus of the project. The main focus of the project was everything under `infrastructure/`. In each of the sub directories, there's a single README.md which covers the deployment file by file and explains each resource and its components step by step, unless it's something we've already covered at that point.
+
+## Instructions
+
+As you explore the repo, you will find that each layer in `infrastructure/` ends with **Instructions**. I recommend that you read the whole respective README.md before commencing the deployment. Please ensure you've read the instructions carefully and completed every task before running `tf plan` or `tf apply`.
+
+## AWS Costs
+
+**These deployments will incur a cost on your account**. To minimize the cost here are my best tips:
+
+1. **Read all the repos first** - It would be a waste of your time and money to jump to the instructions and deploy without having studied and or understood what the deployment is doing.
+2. Avoid leaving the deployment running for long hours on end.
+3. Layer 5 is the most costly, it is possible to run it on smaller instance types to reduce costs e.g. `t3.small` but I opted for slightly more headroom with `t3.medium`.
 
 ## Infracost
 
@@ -255,6 +267,39 @@ It performs the following steps:
 4. **Exports summary totals (`per_layer_totals.csv`)** - Aggregates the total monthly costs for each layer and appends a calculated grand total row across the entire architecture. This file provides summaries just for a glance, it's not used for anything else
 
 I may explore this further in the future but for now it will remain incomplete and out of scope.
+
+## 🛠️ Technology Stack
+
+| Category                        | Technology / Tool                          | Purpose in Project                                                                                                                       |
+| :------------------------------ | :----------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------- |
+| **Infrastructure as Code**      | **Terraform**                              | Declarative IaC structured into 5 decoupled, isolated layers (`VPC`, `RDS`, `ECR/CI`, `ECS/Fargate`, `K3s/Istio`).                       |
+|                                 | **AWS Native Data Sources**                | Dynamic inter-layer resource lookups (`data "aws_vpc"`, `data "aws_subnets"`) eliminating state coupling (`terraform_remote_state`).     |
+|                                 | **S3 & DynamoDB**                          | Remote backend state storage (`.tfstate`) and distributed concurrency state locking.                                                     |
+|                                 | **HCL Provider Locks**                     | Deterministic plugin version pinning (`.terraform.lock.hcl`) across local and CI/CD pipelines.                                           |
+| **AWS Compute & Networking**    | **AWS VPC**                                | Core network foundation with public and private subnet tiers, Internet Gateways, NAT Gateways, and Route Tables.                         |
+|                                 | **AWS EC2**                                | Virtual machine instances powering host compute and K3s cluster nodes (Layer 5).                                                         |
+|                                 | **AWS Elastic Load Balancing (ALB / NLB)** | Application & Network Load Balancers managing public traffic ingress, health checks, and target group routing.                           |
+|                                 | **AWS ECS (Fargate)**                      | Serverless container execution engine running microservices (Layer 4).                                                                   |
+|                                 | **AWS Lambda & Layers**                    | Event-driven serverless compute leveraging shared runtime dependency layers.                                                             |
+| **AWS Data & Governance**       | **AWS RDS (MySQL)**                        | Managed relational database engine with automated password generation and security group isolation.                                      |
+|                                 | **AWS ECR**                                | Private container image registry backing ECS and K3s deployments.                                                                        |
+|                                 | **AWS Secrets Manager & SSM**              | Secure handling and parameter distribution of database credentials, runtime keys, and environment configs.                               |
+| **Containers & Orchestration**  | **Docker**                                 | Containerization engine and multi-stage image packaging for microservice workloads.                                                      |
+|                                 | **K3s**                                    | Lightweight, highly resilient Kubernetes distribution for cluster orchestration.                                                         |
+|                                 | **Calico**                                 | Container Network Interface (CNI) providing pod networking and fine-grained `NetworkPolicy` security enforcement.                        |
+|                                 | **Istio**                                  | Service mesh managing ingress gateway routing, dynamic traffic distribution, and pod-to-pod mTLS encryption.                             |
+|                                 | **ArgoCD**                                 | GitOps continuous delivery controller automating Kubernetes manifest deployment and drift reconciliation.                                |
+|                                 | **Helm**                                   | Kubernetes package manager for templating and releasing cluster services, add-ons, and mesh configurations.                              |
+| **Application & Microservices** | **Go**                                     | High-performance compiled backend microservices and custom infrastructure tooling.                                                       |
+|                                 | **Python & Flask**                         | Lightweight REST APIs, backend service logic, and automated data processing scripts.                                                     |
+|                                 | **Next.js & Vite**                         | Modern full-stack React framework and build tool powering the Ritual Roast frontend interface.                                           |
+| **Observability & Monitoring**  | **Prometheus**                             | Metrics scraping, time-series storage, and alerting engine for Kubernetes and cloud infrastructure telemetry.                            |
+|                                 | **Grafana**                                | Observability visualization platform providing real-time dashboards for metrics, mesh traffic, and resource usage.                       |
+| **CI/CD & FinOps**              | **GitHub Actions**                         | Automated CI/CD pipelines with AWS OIDC authentication for sequential Terraform deployments.                                             |
+|                                 | **Infracost CLI**                          | Automated per-layer cloud cost estimation (`infracost-config.yml`).                                                                      |
+|                                 | **Bash & `jq`**                            | Shell automation parsing raw JSON cost outputs into structured FinOps CSV reports (`unified_infracost_raw.csv`, `per_layer_totals.csv`). |
+| **AI Engine & Agent Tooling**   | **Claude & Claude Code**                   | Terminal-native AI execution, sub-agent configurations (`.claude/agents/`), automated refactoring, and agentic workflows.                |
+|                                 | **Gemini**                                 | Multi-modal AI thought partnership, architectural review, technical validation, and documentation synthesis.                             |
 
 ## Last words
 

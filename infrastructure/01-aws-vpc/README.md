@@ -15,11 +15,11 @@ This layer spans three Availability Zones (AZs) across the AWS London region (`e
 **Key Highlights** Below are the main highlights based on the HLD above:
 
 1. **5-Tier Subnet Isolation** - Segregates infrastructure into distinct, dedicated tiers per AZ:
-   a. **DMZ (Public)** - Houses the internet-facing application LoadBalancer (ALB).
-   b. **Web** - Private subnets reserved for frontend web services.
-   c. **App** - Private subnets hosting VPC interface endpoints for secure AWS service access e.g. Secrets Manager.
-   d. **Data** - Isolated subnets dedicated strictly to database resources.
-   e. **K8s** - Decicated subnets pre-tagged for internal EKS/Kubernetes LoadBalancers
+   - **DMZ (Public)** - Houses the internet-facing application LoadBalancer (ALB).
+   - **Web** - Private subnets reserved for frontend web services.
+   - **App** - Private subnets hosting VPC interface endpoints for secure AWS service access e.g. Secrets Manager.
+   - **Data** - Isolated subnets dedicated strictly to database resources.
+   - **K8s** - Decicated subnets pre-tagged for internal EKS/Kubernetes LoadBalancers
 
 2. **Secure Edge Routing** - Public internet traffic enters through an Internet Gateway (`IGW`) directly into the public ALB, keeping all downstream application and database tiers off the public web.
 
@@ -34,12 +34,13 @@ This layer spans three Availability Zones (AZs) across the AWS London region (`e
 | `modules/load_balancers`  | The one public Application Load Balancer every later layer shares, with a deliberately minimal catch-all listener.     |
 | `modules/endpoints`       | A private, in-VPC network path to AWS Secrets Manager, so credential lookups never have to leave the VPC.              |
 
-## 0. Environment configuration
+# 0. Environment configuration
 
 Since the `01-aws-vpc/environments/dev` is the subdirectory that holds all the configuration for this layer lets look at some of the important settings and the role they play in this layer.
 
-1. [providers.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/01-aws-vpc/environments/dev/providers.tf):
-   **`required_version = "1.14.3"`** - This defines which terraform version we're using with ensuring reproducability i.e. when you clone this repo you will need this version of Terraform or upgrade/downgrade to it to ensure everything works as expected.
+## a. [providers.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/01-aws-vpc/environments/dev/providers.tf):
+
+**`required_version = "1.14.3"`** - This defines which terraform version we're using with ensuring reproducability i.e. when you clone this repo you will need this version of Terraform or upgrade/downgrade to it to ensure everything works as expected.
 
 **S3 Backend**:
 
@@ -77,7 +78,7 @@ provider "aws" {
 
 Here we configure the AWS provider plugin and set the region that our deployment will be operating in. This is important as some resources might be region specific e.g. in `us-east` there are 6 AZs instead of the usual 3, code that doesn't account for this might deploy insufficient resources or break, in the case of loops and counts.
 
-2. [main.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/01-aws-vpc/environments/dev/main.tf):
+## b. [main.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/01-aws-vpc/environments/dev/main.tf):
 
 Since this layer is the base, there's no data sources used to import resource by their IDs from another layer. All parameters and their values are pulled in from variables.tf linked to terraform.tfvars and or directly from shared_locals.tf
 
@@ -106,7 +107,7 @@ Any values starting with `local.` is coming from `shared_locals.tf` . Any values
 
 `source = "../../modules/vpc"` specifies the module path for the vpc module. Note the `../../` means change directory back 2 parent directories.
 
-**Dependency graph:**
+### Dependency graph:
 
 Terraform likes to do things in parallel, however, it's clever enough to know that when deploying project resources there can be relationships/dependencies between the resources. Instead of following a top-to-bottom execution process during a `tf plan` or `tf apply`, Terraform checks every file and maps out all the relationships (builds the dependency graph, [graph.svg](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/01-aws-vpc/environments/dev/graph.svg) ). Then it sorts this into a topological execution order. If it finds any circular dependency, (A references B, B references A) then it throws an error. Thus dependencies are automatically detected when a module requires a resource that is created from another module. In such cases the dependency must exist, there fore created, first.
 
@@ -128,9 +129,9 @@ module "endpoints" {
 
 Above the endpoints module needs the endpoints security group `endpoints_sg_id = module.security_groups.endpoints_sg_id` there fore that security group needs to be create before the endpoints module resources. When the dependency relationships are not so clear, we can specify the dependency with `depends_on` argument; In layer 5 main.tf, we have such an example where the **compute_k8s** module depends on the **network_k8s** module `depends_on = [ module.network_k8s ]`.
 
-3. [share_locals.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/01-aws-vpc/environments/dev/shared_locals.tf):
+## c. [share_locals.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/01-aws-vpc/environments/dev/shared_locals.tf):
 
-locals is another flexible way to create variables and assign values to them. Locals are module scoped object (immutable and static, at the point of call) variables that can take the form of lists, maps and single variable. Their values can't be set by .tfvars nor values from the cli. They can only be set by module specific internal, computed/derived values; any externally derived values must be passed through a variable and the variable can then be assigned to the locals. Locals are referenced using local.<name> i.e. we drop the s in local(s).
+locals is another flexible way to create variables and assign values to them. Locals are module scoped object (immutable and static, at the point of call) variables that can take the form of lists, maps and single variable. Their values can't be set by .tfvars nor values from the cli. They can only be set by module specific internal, computed/derived values; any externally derived values must be passed through a variable and the variable can then be assigned to the locals. Locals are referenced using `local.<name>` i.e. we drop the s in local(s).
 
 ```hcl
 locals {
@@ -173,7 +174,7 @@ resource "aws_lb" "rr_public" {
 
 This is how we defined our ALB: the tags section, labels, is a merge between the `Name` and the `common_tags` defined above in `shared_locals.tf` but since this is in the **alb module** where it's passed in as a variable, it's referenced as `var.common_tags`. This is how we make use of locals. As can be seen, we can reference the locals values individually, hence they can be passed into variables in `variables.tf` so long as the actual file holding the locals (`shared_locals.tf` in our case) is within the same module.
 
-4. [terraform.tfvars](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/01-aws-vpc/environments/dev/terraform.tfvars):
+## d. [terraform.tfvars](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/01-aws-vpc/environments/dev/terraform.tfvars):
 
 To better understand the use of `.tfvars` it's useful to understand the variable precedence in Terraform: Terraform resolves variable values from multiple possible sources, and when the same variable is set in more than one place, the highest priority source wins. The precedence from lowest to highest:
 
@@ -185,7 +186,7 @@ variable "environment" {
 }
 ```
 
-2. Environment variables ( "TF*VAR*<variable-name>" )
+2. Environment variables ( "TF_VAR\_<variable-name>" )
 
 ```hcl
 export TF_VAR_environmenstaging
@@ -236,7 +237,7 @@ public_subnet_list = [
 
 The all objects in terraform.tfvars must have a matching name in variables.tf for their values to be passed onto the variable. If there's no match the `.tfvars` value is ignored.
 
-5. [variables.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/01-aws-vpc/environments/dev/variables.tfvars):
+## e. [variables.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/01-aws-vpc/environments/dev/variables.tfvars):
 
 This file contains all the variable definitions for the respective scope, in this case the layer root module. Since the corresponding `terraform.tfvars` file has created lists of maps (key value pairs) the corresponding objects in `variables.tf` must also match the type else terraform will throw an error, see example below:
 
@@ -263,7 +264,7 @@ variable "vpc_name" {
 
 Above this is how the VPC name is defined, with a default value of `RR-vpc`, if no value is set using higher priority source then the default value will be used.
 
-6. [outputs.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/01-aws-vpc/environments/dev/outputs.tf):
+## f. [outputs.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/01-aws-vpc/environments/dev/outputs.tf):
 
 For resources created in one module to be consumed by other modules those resources need to be shared with other modules. A module shares its resources by outputing the resource name/ID. This is how the root module main.tf is able to pass resource IDs from one child module into another child module:
 
@@ -310,14 +311,14 @@ then the root module picks it up and passes it into the child module as a variab
 
 To make resources created inside this base layer available in other layers, one method is to do the exact same thing but at root module level. The root module has its own `outputs.tf` file that exports the contents as the root modules own top level outputs. The contents of this file is read by the `terraform_remote_state`, it essentially prints this information in the state file. Other layers can then query this information. Note, `terraform_remote_state` only makes visible the root module outputs, there's no visibility on the child modules such as vpc. Thus every value another layer needs to consume via remote state has to be explicitly outputed by both the child module and the root module, for it to appear in the state file. Note, this is not the cleanest method; the state file prints these values i.e. they are visible in the log. An alternative is to use **data source** directly. This is cleaner; leaves no log trail and only needs the tags to match the resource. In this project data sources is how cross-layer resource sharing is applied. This will be demonstrated later.
 
-## 1. Virtual Private Cloud (VPC)
+# 1. Virtual Private Cloud (VPC)
 
 Consider is a private intranet closed off from the outside world i.e. the IP addresses of resources within the VPC are not routable on the internet; they cannot be found online and they cannot speak to the internet, by default. To enable internet access we use an Internet Gateway (`igw`) or a Network Address Translation (NAT) Gateway placed in tha subnet with access to the `igw`. Then we create a route table with a rule that sends all outgoing/egress traffic to the `igw` on a specific port. Equally, we can create an incoming/ingress rule that allows traffic on a specific port.
 
 An important component of the VPC is the VPC CIDR block, this is the broad IP range of the entire VPC e.g. **10.16.0.0/16** results in 65,536 distinct IP addresses.
 It is common practice to break this large network into smaller isolated chuncks.
 
-## 2. Subnets
+## a. Subnets
 
 Those smaller isolated chuncks are called subnets. Essentially they re-arrange the number of bits allocated to the network and the host portions of the CIDR block through an exchange called borrowing network bits. The more network bits borrowed the higher the number of networks and the lower the number host IP addresses. For a comprehensive derivation of the subnets used in this project please see the first project, [Terraform-AWS-Ritual-Roast-Part-1](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-1) section 6. 🚀 Technical Highlights, VPC and Subnetting. In this project we use 15 subnet groups, to isolate the various resources deployed, see network layouts below.
 
@@ -349,48 +350,48 @@ Note, the **K8s** subnets consists of left over subnets from the original calcul
 
 The K8s tier is tagged `kubernetes.io/role/internal-elb=1`, a label AWS's own Kubernetes cloud-controller looks for so it can automatically discover the right subnets if an internal Kubernetes-managed load balancer is ever created — a small detail, but one that has to be right before Kubernetes exists, since it's a property of the subnet, not something Kubernetes can add after the fact.
 
-## 3.Routing
+## b.Routing
 
 In this section we create three route tables in [routing.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/01-aws-vpc/modules/vpc/routing.tf):
 
 1. **Public route table**
 
-```hcl
+   ```hcl
 
-resource "aws_route_table" "public" { ... }
-resource "aws_route" "public_internet_access" {
-  route_table_id         = aws_route_table.public.id
-  destination_cidr_block = "0.0.0.0/0"
-  gateway_id              = aws_internet_gateway.main.id
-}
+   resource "aws_route_table" "public" { ... }
+   resource "aws_route" "public_internet_access" {
+     route_table_id         = aws_route_table.public.id
+     destination_cidr_block = "0.0.0.0/0"
+     gateway_id              = aws_internet_gateway.main.id
+   }
 
-```
+   ```
 
-A route to the public internet is then added to this route table by adding `route_table_id  = aws_route_table.public.id` to the route:
+   A route to the public internet is then added to this route table by adding `route_table_id  = aws_route_table.public.id` to the route:
 
-```hcl
+   ```hcl
 
-resource "aws_route" "public_internet_access" {
-  route_table_id         = aws_route_table.public.id
-  destination_cidr_block = "0.0.0.0/0"
-  gateway_id             = aws_internet_gateway.main.id
-}
+   resource "aws_route" "public_internet_access" {
+     route_table_id         = aws_route_table.public.id
+     destination_cidr_block = "0.0.0.0/0"
+     gateway_id             = aws_internet_gateway.main.id
+   }
 
-```
+   ```
 
-As can be seen above, we've specified `destination_cidr_block = "0.0.0.0/0"` which means any non-internal destination should be routed to our IGW, `gateway_id = aws_internet_gateway.main.id`. We then associate all public subnets to this route table, giving any resource placed in those subnets access to the internet. Note such resources are also exposed i.e. they will be reachable from the internet
+   As can be seen above, we've specified `destination_cidr_block = "0.0.0.0/0"` which means any non-internal destination should be routed to our IGW, `gateway_id = aws_internet_gateway.main.id`. We then associate all public subnets to this route table, giving any resource placed in those subnets access to the internet. Note such resources are also exposed i.e. they will be reachable from the internet
 
-```hcl
+   ```hcl
 
-resource "aws_route_table_association" "public_assoc" {
-  count          = length(aws_subnet.public)
-  subnet_id      = aws_subnet.public[count.index].id
-  route_table_id = aws_route_table.public.id
-}
+   resource "aws_route_table_association" "public_assoc" {
+     count          = length(aws_subnet.public)
+     subnet_id      = aws_subnet.public[count.index].id
+     route_table_id = aws_route_table.public.id
+   }
 
-```
+   ```
 
-Later on we can place a NAT gateway in any of these public subnet to enable egress internet access for our resources in private subnets.
+   Later on we can place a NAT gateway in any of these public subnet to enable egress internet access for our resources in private subnets.
 
 2. **Private route table**
    There is a default route table that all subnets within a VPC are associated to, initially. Instead of using that table which would include the public subnets, we create a private route table and associate all the non-public subnets, with the exception of k8s subnets, to it. The process is exactly as above so no illustrations needed. Since there is no route to the internet, resources in these subnets will not have internet access. All our ECS resources will be deployed in these private subnets. Every AWS service they need (Secrets Manager, ECR, CloudWatch Logs, S3) is reachable through a private VPC endpoint instead which is both cheaper than a NAT gateway (no per-GB processing charge, no hourly charge) and more secure (traffic never transits the public internet at all, even privately).
@@ -398,30 +399,27 @@ Later on we can place a NAT gateway in any of these public subnet to enable egre
 3. **K8s route table**
 
    The Kubernetes cluster requires access to the internet because we are deploying Kubernetes on EC2 and we need internet access to perform several tasks:
-   1. Updates & Upgrades - Our EC2 instances will need to pull updates and upgrades from the internet.
-   2. Gitops with ArgoCD - When the cluster is up, it will need to pull images from ghcr.io and send metrics to grafana.
+   - Updates & Upgrades - Our EC2 instances will need to pull updates and upgrades from the internet.
+   - Gitops with ArgoCD - When the cluster is up, it will need to pull images from ghcr.io and send metrics to grafana.
 
    If we placed the Kubernetes subnets on the private route table above, we'd have to add a NATGW to that private route table. That would violate the least privileges principle, giving internet access to resources that don't need it. Hence, increasing the attack surface by enabling any breached resource in any of the private subnets the means to communicate with external neferious website, sending them data. The more secure approach is to isolate the Kubernetes cluster with it's own route table that we can route to a NAT gateway, allowing egress only internet access.
 
-## 4. Security Groups
+## c. Security Groups
 
 To achieve the network isolation we use security groups. While security groups attach to Elastic Network Interfaces (ENIs) they are used as access pass i.e. we can create a rule that says permit any resource that has the following security group id attached to perform tasks against resources that have this other security group id. Thus any resource that does not have the necessary security group would not be permitted to perform any actions against a target resource such as a database.Thus by assigning a specific security group to resources in a specific subnet, we can isolate ingress and egress communication with respect to that subnet. We can attach a security group at the front door of our VPC restricting and or permitting traffic from the internet to specific internal resources.
 
 **Security groups: two shells, populated by later layers**
 
-**START-HERE!!**
 This layer creates exactly two security groups:
 
 1. [sg-endpoints.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/01-aws-vpc/modules/security_groups/sg-endpoints.tf)
-
-- **`rr_endpoints_sg`** — created with no rules, it exists purely as a stable, named target other layers can attach ingress rules to later, without this layer needing to know in advance what will need to reach it. This makes the security group flexible for future use.
-- The `create_before_destroy = true` lifecycle rule ensures that we create the replacement first then destroy the old one; that way replacing it doesn't leave a dependent VPC endpoint briefly orphaned.
+   - **`rr_endpoints_sg`** — created with no rules, it exists purely as a stable, named target other layers can attach ingress rules to later, without this layer needing to know in advance what will need to reach it. This makes the security group flexible for future use.
+   - The `create_before_destroy = true` lifecycle rule ensures that we create the replacement first then destroy the old one; that way replacing it doesn't leave a dependent VPC endpoint briefly orphaned.
 
 2. [sg-loadbalancer.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/01-aws-vpc/modules/security_groups/sg-loadbalancer.tf)
+   - **`rr_alb`** — this is the load balancer's SG (frontdoor's security group), with ingress (inbound) rules for HTTP (port 80) and HTTPS (port 443). There's no egress rules specified here hence the AWS's default allow-all-outbound applies. Although this means the front door is open and any accepted traffic can go anywhere it isn't a security issue: In Layer 4 & 5, we have security groups that only accept ingress from this security group on specific ports. This channels that broad spectrum into a narrow stream, with intent.
 
-- **`rr_alb`** — this is the load balancer's SG (frontdoor's security group), with ingress (inbound) rules for HTTP (port 80) and HTTPS (port 443). There's no egress rules specified here hence the AWS's default allow-all-outbound applies. Although this means the front door is open and any accepted traffic can go anywhere it isn't a security issue: In Layer 4 & 5, we have security groups that only accept ingress from this security group on specific ports. This channels that broad spectrum into a narrow stream, with intent.
-
-## 4. LoadBalancer
+## d. LoadBalancer
 
 LoadBalancers perform a number of tasks: they can act as the front door and the traffic conductor, redirecting traffic to specific resources or they can distribute traffic to a group of resources based on some algorithm. That's just a few of its attributes. By placing the LoadBalancer in a public subnet, we can attach a security group that permits the LoadBalancer to communicate with specific resources in private subnets enabling website traffic from the internet to traverse our frontend, backend servers and the database. Note, however, there are costs involved with internet traffic on AWS in particular NAT gateways.
 
@@ -471,7 +469,7 @@ resource "aws_security_group_rule" "alb_allow_443_inbound" {
 
 It is addressed/annotated that a HTTPS, port 443, is a must have for production. It also a placeholder for adding a TLS listener and an **AWS Certificate Manager (ACM)** certificate later, without needing a second change to the security group when that happens.
 
-## 5. VPC Endpoints
+## e. VPC Endpoints
 
 There are two types of VPC Endpoints used in this project:
 **Gateway** This works by injecting a route into a route table; this is a routing trick instead of a real network presence. It's only available for S3 and DynamoDB.
@@ -511,12 +509,12 @@ resource "aws_vpc_endpoint" "rr_secretsmanager" {
 Above it can be seen that the ENIs will be injected inside the App subnets, `subnet_ids = var.app_subnet_ids` . `private_dns_enabled = true` makes AWS's standard DNS name for Secrets Manager (`secretsmanager.eu-west-2.amazonaws.com`) resolve inside the VPC to this private endpoint, ENI's private IP, instead of a public IP. So the boto3 / AWS SDK calls in `apps/v1-backend-flask` and `apps/v2-backend-go` that fetch database credentials need zero code changes to use it; they just call the standard AWS API and the network quietly keeps the traffic private, resolving to the ENIs private IP address.
 Note, this endpoint incurs hourly and per gigabyte costs in additions to the ENIs that need to be injected into the three app subnets.
 
-## 6. Where this fits in the bigger picture
+# 2. Where this fits in the bigger picture
 
 Every later layer depends on this layer and none of them can be usefully applied without it. The sequential deploy order that runs through this whole project — VPC, then RDS, then ECR, then ECS, then (after destroying ECR/ECS) Kubernetes — exists specifically because layers 2 onward all read this layer's subnet IDs, VPC ID, and security groups as inputs. See the root project documentation for the full five-layer sequence, and `infrastructure/04-aws-ecs/README.md` /
 `infrastructure/05-aws-k8s/README.md` for how each of them attaches its own listener rule onto the one ALB this layer creates.
 
-## 7. Instructions
+# 3. Instructions
 
 Perform the following tasks to deploy Layer 1:
 

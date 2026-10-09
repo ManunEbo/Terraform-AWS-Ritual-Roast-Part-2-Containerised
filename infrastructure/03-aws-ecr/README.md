@@ -166,9 +166,10 @@ Above, the resource, `aws_ecr_lifecycle_policy`, attaches a lifecycle policy to 
 3. `rulePriority = 1` - Like IAM policies, lifecycle policies can have multiple rules. `rulePriority` sets the order of evaluation, the lower the number the higher the priority.
 4. `description  = "Keep last 5 images"` - Self explanatory: explains in words what the function does
 5. `selection = {}` - This is the criteria that determines the number of images to keep. Lets look at its components:
-   a. `tagStatus = "any"` - This applies to every image in the repo regardless of whether it's tagged or untagged. The alternatives are `tagged` or `untagged`.
-   b. `countType = "imageCountMoreThan"` - This is the count threshold, this would delete older image(s) when the threshold is reached. The alternative is `sinceImagePushed`, which would delete images older than a given number of days.
-   c. `countNumber = 5` - This is the threshold, once there are more than 5 images matching this selection, the extra images get deleted, oldest first, most recent last.
+   - `tagStatus = "any"` - This applies to every image in the repo regardless of whether it's tagged or untagged. The alternatives are `tagged` or `untagged`.
+   - `countType = "imageCountMoreThan"` - This is the count threshold, this would delete older image(s) when the threshold is reached. The alternative is `sinceImagePushed`, which would delete images older than a given number of days.
+   - `countNumber = 5` - This is the threshold, once there are more than 5 images matching this selection, the extra images get deleted, oldest first, most recent last.
+
 6. `action = { type = "expire" }` - This is what the policy will do; `expire` means delete if the selection criteria is met
 
 Everything we've looked at for the frontend applies to the backend.
@@ -259,22 +260,25 @@ Lets examin the components:
 2. `assume_role_policy = jsonencode()` - This is the trust policy, it acts as the bouncer for this IAM role. It explicitly defines who or what is allowed to assume the role. `jsonencode converts the HCL (HashiCorp Configuration Language) object into the JSON string format that AWS requires.
 3. `Version = "2012-10-17"` - This is the standard, current version of the AWS IAM policy language
 4. `Statement = [{}]` - This is the core of the IAM policy, within the block `[]`, denoting an array/list, is where the permissions/rules are defined; each `{...}` represents a single rule i.e. it contains specific configuration for a single permission; it consists of:
-   a. `Effect` - Are we allowing or denying access?
-   b. `Action` - What specific AWS actions are permitted?
-   c. `Principal/Resource` - Who is allowed to do it, and to what?
-   d. `Condition` - Under what specific circumstances is this rule valid?
+
+- `Effect` - Are we allowing or denying access?
+- `Action` - What specific AWS actions are permitted?
+- `Principal/Resource` - Who is allowed to do it, and to what?
+- `Condition` - Under what specific circumstances is this rule valid?
+
 5. `Action = "sts:AssumeRoleWithWebIdentity"` - This allows an entity, our GitHub Actions workflow, to exchange the **JWT** for a temporary AWS credentials via AWS Security Token Service (STS)
 6. `Effect = "Allow"` - This explicitly grants the permission to perform the action(s)
 7. `Principal = { Federated = var.oidc_provider_arn }` - This defines the trust identity. In passing `var.oidc_provider_arn` we're telling AWS to trust our pre-configured GitHub Actions OIDC identity provider.
 8. `Condition = {}` - This is the critical security guardrails: Even though AWS trusts GitHub, **the Principal**, it shouldn't let just any GitHub repository assume this role. Thus the condition restricts audience/target and the subject/originator to the specified and nothing else.
 9. `"token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"` - This identifies who the token is for. Lets break it down:
-   a. `token.actions.githubusercontent.com` tells AWS to look at the token claims coming specifically from GitHub's OIDC URL.
-   b. `aud` tells AWS to extract the `aud` field from inside that GitHub token's JSON payload, see above section on JWT.
-   c. `sts.amazonaws.com` - This is the required value, if matched then pass else fail.
-   Note, this also helps prevents token replay attacks: If our workflow used the OIDC to talk to multiple third-party services e.g. AWS, Datadog and HashiCorp Vault, GitHub would create a new token for each request. If a malicious actor somehow intercepts a token GitHub generated for HashiCorp Vault, they might try to send that stolen token to AWS to steal our AWS credentials, **a replay attack**. The `aud` condition blocks this: **AWS checks the token**, sees it was intended for HashiCorp Vault instead of AWS STS and immediately rejects it. Note, the use of `StringEquals` enforces an exact, case-sensitive match, character by character.
+   - `token.actions.githubusercontent.com` tells AWS to look at the token claims coming specifically from GitHub's OIDC URL.
+   - `aud` tells AWS to extract the `aud` field from inside that GitHub token's JSON payload, see above section on JWT.
+   - `sts.amazonaws.com` - This is the required value, if matched then pass else fail.
+     Note, this also helps prevents token replay attacks: If our workflow used the OIDC to talk to multiple third-party services e.g. AWS, Datadog and HashiCorp Vault, GitHub would create a new token for each request. If a malicious actor somehow intercepts a token GitHub generated for HashiCorp Vault, they might try to send that stolen token to AWS to steal our AWS credentials, **a replay attack**. The `aud` condition blocks this: **AWS checks the token**, sees it was intended for HashiCorp Vault instead of AWS STS and immediately rejects it. Note, the use of `StringEquals` enforces an exact, case-sensitive match, character by character.
+
 10. `"token.actions.githubusercontent.com:sub" = "repo:ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised:*"` - This restricts access to a specific repository. Lets break it down, without repetition:
-    a. `sub` - This is the subject condition, it specifies the repository/originator of the request
-    b. `*` - The wild card operator means any workflows running inside this repo, on any branch or tag, is allowed to assume this role. Note, without this line, any GitHub user on the planet could potentially assume our AWS role if they knew its ARN.
+    - `sub` - This is the subject condition, it specifies the repository/originator of the request
+    - `*` - The wild card operator means any workflows running inside this repo, on any branch or tag, is allowed to assume this role. Note, without this line, any GitHub user on the planet could potentially assume our AWS role if they knew its ARN.
 
 **aws_iam_role_policy**
 
@@ -321,35 +325,35 @@ Lets look at the components:
 4. `policy = jsonencode()` - This is the core policy object converted into JSON format required by AWS.
 5. `Statement = [...]` - This block houses the necessary permissions rules. In this case it concists of 2 permissions rules, separated by `{},`.
 
-Lets look at the statememt in detail:
+   Lets look at the statememt in detail:
 
-**Statement 1**
+   **Statement 1**
+   - `Sid  = "AllowECRLogin"` - This is an optional human-readable label to easily identify what this rule does, "AllowECRLogin"
+   - `Effect = "Allow"` - This enables/authorizes the action to be performed
+   - `Action = "ecr:GetAuthorizationToken"` - Grants permission to generate a temporary authentication token to log into the **Docker CLI** using AWS credentials
+   - `Resource = "*"` - Since getting an authorization token is an account level, registry-wide operation, not a repository-level one. AWS explicitly requires `ecr:GetAuthorizationToken` to be paired with `*`, other wise the login will fail. Note, the wildcard `*` here means any resource.
 
-a. `Sid  = "AllowECRLogin"` - This is an optional human-readable label to easily identify what this rule does, "AllowECRLogin"
-b. `Effect = "Allow"` - This enables/authorizes the action to be performed
-c. `Action = "ecr:GetAuthorizationToken"` - Grants permission to generate a temporary authentication token to log into the **Docker CLI** using AWS credentials
-d. `Resource = "*"` - Since getting an authorization token is an account level, registry-wide operation, not a repository-level one. AWS explicitly requires `ecr:GetAuthorizationToken` to be paired with `*`, other wise the login will fail. Note, the wildcard `*` here means any resource.
+   **Statement 2**
+   This array lists the exact, granular API calls the Docker CLI needs under the hood to pull and push image layers to AWS ECR.
+   Docker container images are made up of two main things: individual filesystem layers, the raw data chunks; image manifest, a JSON file listing the layers and tags.
 
-**Statement 2**
-This array lists the exact, granular API calls the Docker CLI needs under the hood to pull and push image layers to AWS ECR.
-Docker container images are made up of two main things: individual filesystem layers, the raw data chunks; image manifest, a JSON file listing the layers and tags.
+   When we run `docker push`, the Docker CLI makes several granula API calls under the hood. Here's what each action does broken down by phase:
+   1. **Phase 1: Checking Existing Layers & Metadata**
+      Before pushing anything, Docker checks what ECR already has so it doesn't waste bandwidth re-uploading identical layers.
+      - `ecr:BatchCheckLayerAvailability` - This asks ECR "Do you already have layers with these SHA-256 hashes?" This answer is needed because ECR uses layer deduplication: if a base layer say `Node18-alpine` is already in ECR, ECR tells Docker to skip uploading it.
+      - `ecr:GetDownloadUrlForLayer` - This provides a temporary, pre-signed download URL pointing to ECR's underlying S3 storage, for a specific image layer. This is needed when our build pipeline needs to pull or inspect an existing base layer from the registry during multi-stage builds
+      - `ecr:BatchGetImage` - This retrieves the manifest data or metadata for one or more existing image tags. It allow Docker or CI/CD tools to check if a specific tag already exists, inspect image digest details or fetch manifest specifications.
 
-When we run `docker push`, the Docker CLI makes several granula API calls under the hood. Here's what each action does broken down by phase:
+   2. **Phase 2: Uploading missing Layers**
+      If ECR doesn't have a layer, Docker uploads it in a 3-step transaction: Initiate ---> Part ---> Complete
+      - `ecr:InitiateLayerUpload` - This tells ECR: "I'm about to send you a new layer". This is needed because ECR initializes an upload session and returns a unique **Upload ID** to track the incoming data stream.
+      - `ecr:UploadLayerPart` - This streams the actual byte chunks of a layer to ECR i.e. large Docker layers are broken into smaller parts and uploaded sequentially or in parallel. Note however, our images are very small.
+      - `ecr:CompleteLayerUpload` - This tells ECR: "I've finished sending all parts for this layer". This is needed because ECR verifies the total layer checksum/digest against what was uploaded to ensure no corruption occurred, then closes the upload session and marks the layer as ready.
 
-1. **Phase 1: Checking Existing Layers & Metadata**
-   Before pushing anything, Docker checks what ECR already has so it doesn't waste bandwidth re-uploading identical layers.
-   a. `ecr:BatchCheckLayerAvailability` - This asks ECR "Do you already have layers with these SHA-256 hashes?" This answer is needed because ECR uses layer deduplication: if a base layer say `Node18-alpine` is already in ECR, ECR tells Docker to skip uploading it.
-   b. `ecr:GetDownloadUrlForLayer` - This provides a temporary, pre-signed download URL pointing to ECR's underlying S3 storage, for a specific image layer. This is needed when our build pipeline needs to pull or inspect an existing base layer from the registry during multi-stage builds
-   c. `ecr:BatchGetImage` - This retrieves the manifest data or metadata for one or more existing image tags. It allow Docker or CI/CD tools to check if a specific tag already exists, inspect image digest details or fetch manifest specifications.
-2. **Phase 2: Uploading missing Layers**
-   If ECR doesn't have a layer, Docker uploads it in a 3-step transaction: Initiate ---> Part ---> Complete
-   a. `ecr:InitiateLayerUpload` - This tells ECR: "I'm about to send you a new layer". This is needed because ECR initializes an upload session and returns a unique **Upload ID** to track the incoming data stream.
-   b. `ecr:UploadLayerPart` - This streams the actual byte chunks of a layer to ECR i.e. large Docker layers are broken into smaller parts and uploaded sequentially or in parallel. Note however, our images are very small.
-   c. `ecr:CompleteLayerUpload` - This tells ECR: "I've finished sending all parts for this layer". This is needed because ECR verifies the total layer checksum/digest against what was uploaded to ensure no corruption occurred, then closes the upload session and marks the layer as ready.
-3. **Phase 3: Tagging & Publishing**
-   Once all individual layers exist in ECR, the final step is linking them together
-   a. `ecr:PutImage` - This uploads the final image manifest JSON and attaches our specified tag e.g. `:latest`, `:v1.0.2` or sha256 hash `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`. Until `PutImage` runs, the uploaded layers are just floating data chunks in ECR. `PutImage` turns those layers into a complete, pullable Docker image inside our repository.
-   b. `Resource = var.frontend_repo_arn` - This is a crucial security guardrail adhearing to **Principle of Least Privilege**: It confines the GitHub Action workflow runner's permissions to push and or delete only to this frontend ECR repo i.e. all of the actions discussed above are restricted to this specific frontend ECR repo.
+   3. **Phase 3: Tagging & Publishing**
+      Once all individual layers exist in ECR, the final step is linking them together
+      - `ecr:PutImage` - This uploads the final image manifest JSON and attaches our specified tag e.g. `:latest`, `:v1.0.2` or sha256 hash `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`. Until `PutImage` runs, the uploaded layers are just floating data chunks in ECR. `PutImage` turns those layers into a complete, pullable Docker image inside our repository.
+      - `Resource = var.frontend_repo_arn` - This is a crucial security guardrail adhearing to **Principle of Least Privilege**: It confines the GitHub Action workflow runner's permissions to push and or delete only to this frontend ECR repo i.e. all of the actions discussed above are restricted to this specific frontend ECR repo.
 
 All that we've discussed above applies equally to the backend IAM role.
 
@@ -385,6 +389,7 @@ Here is the step by step guide to deploy Layer 3 successfully:
 9. Run terraform plan: `tf plan` review the outputs and if you're happy proceed to the next command
 10. Run terraform apply, with caution `tf apply`, or if you trusted the plan `tf apply -auto-approve`
 11. Congrats, you've deployed your Layer 3, ECR.
-12. Now we need to push the images to ECR. On your GitHub repo click on **`Actions`**
-13. On the left hand panel of Actions click **`Build and Push V1 to AWS ECR`**
-14. In the centre click on **`Run workflow`** or **`Re-run workflow`**, if this is not the first time. This will populate the ECR registries.
+12. Open [Adding-AWS-Account-ID-to-GitHub-Actions.txt](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/03-aws-ecr/documents/Adding-AWS-Account-ID-to-GitHub-Actions.txt) and follow the instructions to store your AWS Account ID as a GitHub Actions Secret.
+13. Now we need to push the images to ECR. On your GitHub repo click on **`Actions`**
+14. On the left hand panel of Actions click **`Build and Push V1 to AWS ECR`**
+15. In the centre click on **`Run workflow`** or **`Re-run workflow`**, if this is not the first time. This will populate the ECR registries.

@@ -1,0 +1,27 @@
+****************************************************************************************************************
+				Adding AWS Account ID to GitHub Actions
+****************************************************************************************************************
+
+To add your AWS account ID as a GitHub Actions secret (the workflow uses it to build the IAM role ARN)
+follow the steps below:
+
+# Step 1: Find your Account ID with aws cli:
+
+   aws sts get-caller-identity --query Account --output text
+
+# Step 2: Log into your github and click on this repo
+
+    -> On the top menu bar click on Settings
+    -> On the left handside menu scroll down and click on "Secrets and variables"
+    -> Under "Secrets and variables" click on Actions
+    -> The new page will load "Actions secrets and variables"
+    -> Click on "New repository secret"
+    -> The new page will load "New secret"
+    -> Under "Name" paste "AWS_ACCOUNT_ID"
+    -> Under Value paste your 12-digit account ID that you retrieved in step 1.
+    
+Alternatively you can run this in the cli (If you have GitHub cli installed)
+
+    gh secret set AWS_ACCOUNT_ID --body "$(aws sts get-caller-identity --query Account --output text)"
+
+The above will store your AWS Account ID in the repo secret. The GitHub Actions workflows will use this to push images to ECR.
