@@ -1,7 +1,7 @@
 # Deploying RDS with Lambda Secret Rotation
 
-In this layer we deploy the Relational Database Service (RDS) MySQL database along with the necessary setup to rotate the database secret with a lambda function,
-the IAM role that enables the lambda function to carry out its tasks, and both the database and lambda security groups to ensure restricted access.
+In this layer we deploy the Relational Database Service (RDS) MySQL database along with the necessary setup to rotate the database secret with a Lambda function,
+the IAM role that enables the Lambda function to carry out its tasks, and both the database and Lambda security groups to ensure restricted access.
 
 <a href="documents/hld-architecture/layer2-hld.png">
   <img src="documents/hld-architecture/layer2-hld.png"
@@ -9,7 +9,7 @@ the IAM role that enables the lambda function to carry out its tasks, and both t
        width="100%">
 </a>
 
-Here we're provisioning the centralized, highly available database tier (**Amazon RDS MySQL**) within the isolated private data subnets, created back in Layer 1, intergrated with automated zero downtime credential management.
+Here we're provisioning the centralized, highly available database tier (**Amazon RDS MySQL**) within the isolated private data subnets, created back in Layer 1, integrated with automated zero downtime credential management.
 
 **Key Highlights** Below are the main highlights based on the HLD above:
 
@@ -27,14 +27,14 @@ Below are the highlights of each section.
 
 This is a modular setup identical to Layer 1: We have the environment that sets up the deployment configuration `02-aws-rds/environment/dev`. In [main.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/02-aws-rds/environments/dev/main.tf) we have four child modules:
 
-1. Security groups - Here we create the security groups for locking down the database and for the lambda function
-1. iam - Here we create the IAM role with the necessary policy attachments (permissions) for lambda to perform all of its tasks
-1. lambda - Here we create the lambda function to rotate the secrets using the lambda role
+1. Security groups - Here we create the security groups for locking down the database and for the Lambda function
+1. iam - Here we create the IAM role with the necessary policy attachments (permissions) for Lambda to perform all of its tasks
+1. Lambda - Here we create the Lambda function to rotate the secrets using the Lambda role
 1. rds - Finally we create the database
 
 ### Dependency graph
 
-The Security group module and the IAM module do not have any dependency thus they would most likely run in parallel. While the lambda module needs the IAM role and the lambda security group to exist before hand, those are dependency requirements that must be met before hand. The rds module needs the database security group and the lambda function ARN to exist before hand, that's the database dependency requirements; it must be met before hand.
+The Security group module and the IAM module do not have any dependency thus they would most likely run in parallel. While the Lambda module needs the IAM role and the Lambda security group to exist beforehand, those are dependency requirements that must be met beforehand. The rds module needs the database security group and the Lambda function ARN to exist beforehand, that's the database dependency requirements; it must be met beforehand.
 
 ### Data sources
 
@@ -87,33 +87,33 @@ These values will be exported in the terminal into Terraform environment variabl
 ### Outputs and shared_locals
 
 Note, the outputs in Layer 1 were just for show, we have no outputs from here on in as we will be retrieving resources via data sources.
-In `shared_locals` we have a new set of common tags, `common_tags_vpc`, these were intended to be used to in data source filters that look back to Layer 1 but they are not used, they can be removed.
+In `shared_locals` we have a new set of common tags, `common_tags_vpc`, these were intended to be used in data source filters that look back to Layer 1 but they are not used, they can be removed.
 
-**Next, lets look at the modules and highlight some interesting components.**
+**Next, let's look at the modules and highlight some interesting components.**
 
 ## 2. IAM module
 
-Here we create the IAM role and role policies and attach them to the role to enable the lambda function to rotate secrets, communicate with the database and write logs.
+Here we create the IAM role and role policies and attach them to the role to enable the Lambda function to rotate secrets, communicate with the database and write logs.
 
 ### data source
 
-Notice that the module has its own data.tf which it uses to retrieve the current user datas source and the AWS region; why when the root module already does this? The answer is simply a matter of preference and we did not pass those data sources as variables into this module in `environment/dev/main.tf`. Having data.tf here means these data sources can be referenced directly within the module, in any file without having to define a variable in variables.tf.
+Notice that the module has its own data.tf which it uses to retrieve the current user data source and the AWS region; why when the root module already does this? The answer is simply a matter of preference and we did not pass those data sources as variables into this module in `environment/dev/main.tf`. Having data.tf here means these data sources can be referenced directly within the module, in any file without having to define a variable in variables.tf.
 
 ```hcl
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 ```
 
-From the first data source we can retrieve the account id. From the second we can retrive the current AWS region, set by the user.
+From the first data source we can retrieve the account id. From the second we can retrieve the current AWS region, set by the user.
 
 ### IAM Lambda role
 
-In [iam-lambda.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/02-aws-rds/modules/iam/iam-lambda.tf)
-file we create the magic that permits the lambda function to do what it needs to do. Firstly, we create the role:
+In [iam-Lambda.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/02-aws-rds/modules/iam/iam-Lambda.tf)
+file we create the magic that permits the Lambda function to do what it needs to do. Firstly, we create the role:
 
 ```hcl
-resource "aws_iam_role" "rr_lambda_secrets_role" {
-  name = "rr-${var.environment}-lambda-secrets-role"
+resource "aws_iam_role" "rr_Lambda_secrets_role" {
+  name = "rr-${var.environment}-Lambda-secrets-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -121,7 +121,7 @@ resource "aws_iam_role" "rr_lambda_secrets_role" {
       Action = "sts:AssumeRole"
       Principal = {
         # FIXED: Capitalized 'Service'
-        Service = "lambda.amazonaws.com"
+        Service = "Lambda.amazonaws.com"
       }
       Effect = "Allow"
       Sid    = ""
@@ -129,7 +129,7 @@ resource "aws_iam_role" "rr_lambda_secrets_role" {
   })
 
   tags = merge(var.common_tags, {
-    Name = "rr-${var.environment}-lambda-secrets-role"
+    Name = "rr-${var.environment}-Lambda-secrets-role"
   })
 }
 ```
@@ -140,30 +140,30 @@ Now that the role is created we can load it with permissions. First we attach so
 
 ```hcl
 
-resource "aws_iam_role_policy_attachment" "rr_lambda_vpc_access" {
-  role       = aws_iam_role.rr_lambda_secrets_role.name
+resource "aws_iam_role_policy_attachment" "rr_Lambda_vpc_access" {
+  role       = aws_iam_role.rr_Lambda_secrets_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
-resource "aws_iam_role_policy_attachment" "rr_lambda_basic_execution" {
-  role       = aws_iam_role.rr_lambda_secrets_role.name
+resource "aws_iam_role_policy_attachment" "rr_Lambda_basic_execution" {
+  role       = aws_iam_role.rr_Lambda_secrets_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
 ```
 
-The first policy attachment gives the lambda function access to our VPC: the lambda function does not reside within our VPC, this attachment will permit it to communicate with our RDS instance in our database subnet as if the lambda function lives within our VPC.
+The first policy attachment gives the Lambda function access to our VPC: the Lambda function does not reside within our VPC, this attachment will permit it to communicate with our RDS instance in our database subnet as if the Lambda function lives within our VPC.
 
-The second policy attachment gives the lambda function the capability to write logs to CloudWatch logs. This is very important as we have no eyes on the lambda function i.e. it runs blind in a container managed by AWS and we don't see this. Thus it is prone to failing silently, no logs. We need logs to be able to find faults and fix them, so allowing lambda to write to CloudWatch gives us eyes into the job that ran and to see whether it was a success or failure.
+The second policy attachment gives the Lambda function the capability to write logs to CloudWatch logs. This is very important as we have no eyes on the Lambda function i.e. it runs blind in a container managed by AWS and we don't see this. Thus it is prone to failing silently, no logs. We need logs to be able to find faults and fix them, so allowing Lambda to write to CloudWatch gives us eyes into the job that ran and to see whether it was a success or failure.
 
 ### Custom policy
 
-This is the crux of the lambda role, the permissions for rotating the secrets in Secrets Manager
+This is the crux of the Lambda role, the permissions for rotating the secrets in Secrets Manager
 
 ```hcl
 
-resource "aws_iam_policy" "rr_lambda_secrets_custom_policy" {
-  name = "rr-${var.environment}-lambda-secrets-manager-policy"
+resource "aws_iam_policy" "rr_Lambda_secrets_custom_policy" {
+  name = "rr-${var.environment}-Lambda-secrets-manager-policy"
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -178,7 +178,7 @@ resource "aws_iam_policy" "rr_lambda_secrets_custom_policy" {
       Resource = "arn:aws:secretsmanager:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:secret:rr-${var.environment}-db-secret-*"
       },
       {
-        # Allow lambda to write metrics to CloudWatch Metrics
+        # Allow Lambda to write metrics to CloudWatch Metrics
         Effect = "Allow"
         Action = [
           "cloudwatch:PutMetricData"
@@ -191,7 +191,7 @@ resource "aws_iam_policy" "rr_lambda_secrets_custom_policy" {
 
 ```
 
-The statement section of the policy has two elements; there are a few important factors here to disect and what they facilitate, so lets break them down:
+The statement section of the policy has two elements; there are a few important factors here to dissect and what they facilitate, so let's break them down:
 
 ```hcl
 Action = [
@@ -204,10 +204,10 @@ Action = [
 
 ```
 
-These are essentially the permissions for the different tasks that the lambda function can perform against the specified resource(s) in Secrets Manager. **They are directly aligned with the python functions for rotating the secret**. We will see this later. They are mostly self explanatory:
+These are essentially the permissions for the different tasks that the Lambda function can perform against the specified resource(s) in Secrets Manager. **They are directly aligned with the Python functions for rotating the secret**. We will see this later. They are mostly self explanatory:
 
 1. `"secretsmanager:GetSecretValue"` - Permission to read the actual secret value. The Lambda needs this to retrieve the current credentials so it can connect to the database and verify/rotate them.
-1. `"secretsmanager:DescribeSecret"` - Permission to reads metadata about the secret, not the value itself: which version is currently staged as AWSCURRENT/AWSPENDING/AWSPREVIOUS etc. The rotation Lambda uses this to figure out which step of the rotation cycle it's currently in.
+1. `"secretsmanager:DescribeSecret"` - Permission to read metadata about the secret, not the value itself: which version is currently staged as AWSCURRENT/AWSPENDING/AWSPREVIOUS etc. The rotation Lambda uses this to figure out which step of the rotation cycle it's currently in.
 1. `"secretsmanager:UpdateSecret"` - Permission to modify the secret's configuration, not primarily its value — things like the KMS encryption key or description.
 1. `"secretsmanager:PutSecretValue"` - Permission to create a new version of the secret with new credential values, normally staged as AWSPENDING.
 1. `"secretsmanager:UpdateSecretVersionStage"` - Permission to move the staging labels between versions: promotes AWSPENDING to AWSCURRENT (and bumps the old AWSCURRENT down to AWSPREVIOUS). This is the last step in secrets rotation.
@@ -216,7 +216,7 @@ Note, the above permissions apply to specific resources:
 
 `Resource = "arn:aws:secretsmanager:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:secret:rr-${var.environment}-db-secret-*"}`
 
-This specifically restricts the above actions to secrets with the name **`rr-${var.environment}-db-secret-*`**. Thus the lambda function will not be able to do anything with any other secrets in Secrets Manager. Notice also how the data source is used directly in this code to retrieve the AWS region and the current account_id.
+This specifically restricts the above actions to secrets with the name **`rr-${var.environment}-db-secret-*`**. Thus the Lambda function will not be able to do anything with any other secrets in Secrets Manager. Notice also how the data source is used directly in this code to retrieve the AWS region and the current account_id.
 
 On the second statement we have:
 
@@ -228,31 +228,31 @@ Action = [
 
 1. `"cloudwatch:PutMetricData"` - Permission to write custom metric data points into CloudWatch. Note this doesn't include read permissions (GetMetricData/ListMetrics would be the read-side equivalents).
 
-Then we finally attach the custom policy to the lambda role using a aws_iam_role_policy_attachment:
+Then we finally attach the custom policy to the Lambda role using an `aws_iam_role_policy_attachment`:
 
 ```hcl
 resource "aws_iam_role_policy_attachment" "rr_custom_policy_attach" {
-  role       = aws_iam_role.rr_lambda_secrets_role.name
-  policy_arn = aws_iam_policy.rr_lambda_secrets_custom_policy.arn
+  role       = aws_iam_role.rr_Lambda_secrets_role.name
+  policy_arn = aws_iam_policy.rr_Lambda_secrets_custom_policy.arn
 }
 ```
 
-The lambda function will assume this role when it is invoked so that it can rotate the secrets in **Secrets Manager**, write logs to CloudWatch and change passwords in the database.
+The Lambda function will assume this role when it is invoked so that it can rotate the secrets in **Secrets Manager**, write logs to CloudWatch and change passwords in the database.
 
-### Outputing the lambda role ARN
+### Outputting the Lambda role ARN
 
-This lambda role's ARN is required in the lambda module. So we output it, making it available to the root module.
+This Lambda role's ARN is required in the Lambda module. So we output it, making it available to the root module.
 
 ```hcl
-output "lambda_role_arn" {
-  description = "The lambda role ARN"
-  value       = aws_iam_role.rr_lambda_secrets_role.arn
+output "Lambda_role_arn" {
+  description = "The Lambda role ARN"
+  value       = aws_iam_role.rr_Lambda_secrets_role.arn
 }
 ```
 
 ## 3. Security groups module
 
-Here we create the security groups to lock down the database and the lambda function respectively. We use a data source to pull the endpoints security group to enable access to Secrets Manager endpoints for the lambda function.
+Here we create the security groups to lock down the database and the Lambda function respectively. We use a data source to pull the endpoints security group to enable access to Secrets Manager endpoints for the Lambda function.
 
 ```hcl
 data "aws_security_group" "rr_endpoints_sg" {
@@ -265,54 +265,54 @@ data "aws_security_group" "rr_endpoints_sg" {
 
 ### Lambda security group
 
-[sg-lambda.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/02-aws-rds/modules/iam/sg-lambda.tf) houses the lambda security group. Below we outline the highlights of this security group:
+[sg-Lambda.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/02-aws-rds/modules/iam/sg-Lambda.tf) houses the Lambda security group. Below we outline the highlights of this security group:
 
 ```hcl
-resource "aws_security_group" "rr_lambda" {
-  name        = "rr-${var.environment}-lambda-sg"
+resource "aws_security_group" "rr_Lambda" {
+  name        = "rr-${var.environment}-Lambda-sg"
   description = "RR: Allow Lambda to reach RDS and Secrets Manager VPC Endpoints"
   vpc_id      = var.vpc_id
 
   tags = merge(var.common_tags, {
-    Name = "rr-${var.environment}-lambda-sg"
+    Name = "rr-${var.environment}-Lambda-sg"
   })
 }
 
 ```
 
-This defines **rr_lambda** security group. The `vpc_id = var.vpc_id` ensures that this security group is created inside our VPC. As usual the tags merge all the common tags and the **Name** tag.
+This defines **rr_Lambda** security group. The `vpc_id = var.vpc_id` ensures that this security group is created inside our VPC. As usual the tags merge all the common tags and the **Name** tag.
 
-Next we add egress security groups rules to enable outwards communication from the lambda security group to the database security group and the VPC endpoints security group for Secrets Manager.
+Next we add egress security groups rules to enable outwards communication from the Lambda security group to the database security group and the VPC endpoints security group for Secrets Manager.
 
 ```hcl
-resource "aws_security_group_rule" "rr_lambda_egress_to_db" {
+resource "aws_security_group_rule" "rr_Lambda_egress_to_db" {
   type                     = "egress"
   description              = "RR: Allow Lambda to rotate DB credentials"
   from_port                = 3306
   to_port                  = 3306
   protocol                 = "tcp"
-  security_group_id        = aws_security_group.rr_lambda.id
+  security_group_id        = aws_security_group.rr_Lambda.id
   source_security_group_id = aws_security_group.rr_database.id
 }
 ```
 
-A few things to note above: Since this is an egress rule the `security_group_id` is the originating security group and the `source_security_group_id` is the destination security group. Essentially this is the outbound passport that allows anything with **rr_lambda** security group attached to communicate with anything with the database security group, **rr_database**, on port 3306 using `tcp` protocol. The same applies to the second security group rule, `rr_lambda_egress_to_endpoints` the difference being the use of port 443, HTTPS, and the correspoinding source security id for VPC endpoints, `data.aws_security_group.rr_endpoints_sg.id`.
+A few things to note above: Since this is an egress rule the `security_group_id` is the originating security group and the `source_security_group_id` is the destination security group. Essentially this is the outbound passport that allows anything with **rr_Lambda** security group attached to communicate with anything with the database security group, **rr_database**, on port 3306 using `tcp` protocol. The same applies to the second security group rule, `rr_Lambda_egress_to_endpoints` the difference being the use of port 443, HTTPS, and the corresponding source security id for VPC endpoints, `data.aws_security_group.rr_endpoints_sg.id`.
 
-Since security groups are stateful, we don't need to specify a rule for the return traffic for anything initiated within the security group i.e. the security group will match/allow the return traffic with it's origin. However, expected inbound communication initiated from a given security group needs an ingress rule to enable that communication. Since the database **does not initiate any outbound communication anywhere**, we don't need an ingress communication from the database security group. But we do expect inbound communication from the endpoints security group to the lambda security group, so we create an ingress rule for that:
+Since security groups are stateful, we don't need to specify a rule for the return traffic for anything initiated within the security group i.e. the security group will match/allow the return traffic with it's origin. However, expected inbound communication initiated from a given security group needs an ingress rule to enable that communication. Since the database **does not initiate any outbound communication anywhere**, we don't need an ingress communication from the database security group. But we do expect inbound communication from the endpoints security group to the Lambda security group, so we create an ingress rule for that:
 
 ```hcl
-resource "aws_security_group_rule" "endpoints_ingress_from_lambda" {
+resource "aws_security_group_rule" "endpoints_ingress_from_Lambda" {
   type                     = "ingress"
   description              = "RR: Injected by Layer 2 - Allow Lambda into Endpoints SG"
   from_port                = 443
   to_port                  = 443
   protocol                 = "tcp"
   security_group_id        = data.aws_security_group.rr_endpoints_sg.id
-  source_security_group_id = aws_security_group.rr_lambda.id
+  source_security_group_id = aws_security_group.rr_Lambda.id
 }
 ```
 
-As can be seen, above we have an ingress type security group enabling inbound communication from the endpoints security group. Notice how the `security_group_id` and the `source_security_group_id` values have reversed in comparison to the corresponding egress rule above it, see this in `sg-lambda.tf`. That just indicates the direction of communication from where it was initiated.
+As can be seen, above we have an ingress type security group enabling inbound communication from the endpoints security group. Notice how the `security_group_id` and the `source_security_group_id` values have reversed in comparison to the corresponding egress rule above it, see this in `sg-Lambda.tf`. That just indicates the direction of communication from where it was initiated.
 
 ### Database security group
 
@@ -337,43 +337,43 @@ resource "aws_security_group" "rr_database" {
 
 There are two interesting components worth noting here: `lifecycle` rule and `name_prefix` label: The `create_before_destroy = true` lifecycle rule ensures that we create the replacement first then destroy the old one; that way replacing it doesn't leave a dependent database briefly without a security group. When this new security group is created it will have the same name as the old one. This will cause a conflict and Terraform will reject this. To bypass this error we use the `name_prefix` convention with `"rr-${var.environment}-database-sg-"`, this allows Terraform to add some hex characters after the `-` at the end, ensuring that the new security group has a slightly different name to the old one. Then it proceeds to destroying the old security group.
 
-In this layer there is a single service that communicates with the database, that is the lambda function. As we move to layer 4 and layer 5, they will add their own corresponding security group rules to the database security group. Below is the ingress security group rule that enables inbound communication from the lambda security group to the database security group.
+In this layer there is a single service that communicates with the database, that is the Lambda function. As we move to layer 4 and layer 5, they will add their own corresponding security group rules to the database security group. Below is the ingress security group rule that enables inbound communication from the Lambda security group to the database security group.
 
 ```hcl
-resource "aws_security_group_rule" "rr_db_ingress_from_lambda" {
+resource "aws_security_group_rule" "rr_db_ingress_from_Lambda" {
   type                     = "ingress"
   description              = "RR: Lambda rotation access to MySQL"
   from_port                = 3306
   to_port                  = 3306
   protocol                 = "tcp"
   security_group_id        = aws_security_group.rr_database.id
-  source_security_group_id = aws_security_group.rr_lambda.id
+  source_security_group_id = aws_security_group.rr_Lambda.id
 }
 ```
 
-This rule will allow the lambda function access to the database so that it can update the password after completing the password rotation in Secrets Manager. There's nothing particularly new here that we haven't seen before.
+This rule will allow the Lambda function access to the database so that it can update the password after completing the password rotation in Secrets Manager. There's nothing particularly new here that we haven't seen before.
 
 ## 4. Lambda module
 
-In this module we build and package the lambda function with its dependencies ready for shipping. The module itself has two dependencies: lambda security group from the security_groups module and lambda IAM role from the iam module. Thus both those resources must be created before the lambda module can start running.
+In this module we build and package the Lambda function with its dependencies ready for shipping. The module itself has two dependencies: Lambda security group from the security_groups module and Lambda IAM role from the iam module. Thus both those resources must be created before the Lambda module can start running.
 
 We have the usual setup; `variables.tf`, `outputs.tf` but no `data.tf`. The only data source required in this module is `database_subnet_ids` passed in via the root module. Nothing else of real interest in those files.
 
 The main events of this module occur in 3 files:
 
 1. `index.py` - This has a function for each step of the rotation from creating the new random password to switching the pointer, `AWSCURRENT`, to the new value.
-1. `layers.tf` - This creates a lambda layer, packaging index.py and its dependency ready for shipping
-1. `rotation.tf` - This creates the lambda function and gives the execution permission to Secrets Manager to invoke the lambda function
+1. `layers.tf` - This creates a Lambda layer, packaging index.py and its dependency ready for shipping
+1. `rotation.tf` - This creates the Lambda function and gives the execution permission to Secrets Manager to invoke the Lambda function
 
-Lets look into these files in detail:
+Let's look into these files in detail:
 
 ### index.py
 
-The is the source code for the lambda function. It assumes that the pymysql dependency is installed. It starts off importing the necessary python modules then it sets the logging level to **INFO**. The majority of the functions below write logs.
+This is the source code for the Lambda function. It assumes that the pymysql dependency is installed. It starts off importing the necessary Python modules then it sets the logging level to **INFO**. The majority of the functions below write logs.
 
 **Generating a random password**
 
-```python
+```Python
 def generate_random_password(length=16):
     characters = string.ascii_letters + string.digits + "!@#$%^&*"
     return ''.join(random.choices(characters, k=length))
@@ -383,8 +383,8 @@ The function above then generates a sixteen character random password using lett
 
 **Lambda handler function: the co-ordinator function**
 
-```python
-def lambda_handler(event, context):
+```Python
+def Lambda_handler(event, context):
     arn = event['SecretId']
     token = event['ClientRequestToken']
     step = event['Step']
@@ -412,8 +412,8 @@ def lambda_handler(event, context):
 
 This function is passed two values:
 
-1. `event` - A dictionary containing three key value pairs: `SecretId` this is the secret ARN, used to isolate the secret at hand so that we know which secret we're working with; `ClientRequestToken` this is Secrets Manager's unique version-tracking key for this specific rotation attempt, it's also the `Versionid` attached to the new secret version created during `createSecret`. Note, the same token is re-used across all four steps of the same rotation attempt; execution `Step`, this is how we know our where abouts along the execution sequence, valid values are what's tested in the `if... elif ...else` of the function.
-2. `context` - this is the lambda runtime context object, automatically supplied by the lambda service itself on every invocation. It carries metadata about the invocation and execution environment.
+1. `event` - A dictionary containing three key value pairs: `SecretId` this is the secret ARN, used to isolate the secret at hand so that we know which secret we're working with; `ClientRequestToken` this is Secrets Manager's unique version-tracking key for this specific rotation attempt, it's also the `Versionid` attached to the new secret version created during `createSecret`. Note, the same token is re-used across all four steps of the same rotation attempt; execution `Step`, this is how we know our whereabouts along the execution sequence, valid values are what's tested in the `if... elif ...else` of the function.
+2. `context` - this is the Lambda runtime context object, automatically supplied by the Lambda service itself on every invocation. It carries metadata about the invocation and execution environment.
 
 The `client` specifies which AWS resource we're working with, as the parameters retrieved above it are specific to the `secretsmanager` client. We invoke the client to retrieve the secrets metadata with `client.describe_secret(SecretId=arn)`. Then an initial verification of whether the secret rotation is enabled is carried out. If this fails an error is logged **before** a `ValueError()` is raised, **exiting** the function.
 
@@ -421,7 +421,7 @@ If all is well then we proceed through the steps passing to the corresponding fu
 
 **get_secret_dict**
 
-```python
+```Python
 def get_secret_dict(client, arn, stage, token=None):
     if token:
         response = client.get_secret_value(SecretId=arn, VersionId=token, VersionStage=stage)
@@ -435,7 +435,7 @@ This function retrieves the secret value whether the token is set or not. We pas
 
 **create_secret**
 
-```python
+```Python
 def create_secret(client, arn, token):
     current_dict = get_secret_dict(client, arn, "AWSCURRENT")
     current_dict['password'] = generate_random_password()
@@ -455,11 +455,11 @@ This function performs a number of tasks:
 
 1. retrieves a dictionary of the **AWSCURRENT** password and passes it into a variable: `current_dict = get_secret_dict(client, arn, "AWSCURRENT")`
 2. calls `generate_random_password()` function and updates the **password** field of the dictionary with the output: `current_dict['password'] = generate_random_password()`
-3. Writes that new dictionary into **AWSPENDING** with a try block. Thus, this will write the new value into **AWSPENDING** if there is no current value with the same ClientRequestToken. If one already exist then the exception will catch this and skip, this happens when we're recovering from a network blackout or timeout failure.
+3. Writes that new dictionary into **AWSPENDING** with a try block. Thus, this will write the new value into **AWSPENDING** if there is no current value with the same ClientRequestToken. If one already exists then the exception will catch this and skip, this happens when we're recovering from a network blackout or timeout failure.
 
 **Set secret**
 
-```python
+```Python
 def set_secret(client, arn, token):
     current_dict = get_secret_dict(client, arn, "AWSCURRENT")
     pending_dict = get_secret_dict(client, arn, "AWSPENDING", token)
@@ -493,11 +493,11 @@ This function performs the following tasks:
 2. Extracts several components for DB credentials into variables
 3. Attempts to connect to the database with the current credentials
 4. If connection is successful it proceeds to alter the database user's password i.e. change the password setting it to the new password from `AWSPENDING`: `cursor.execute(f"ALTER USER '{username}'@'%' IDENTIFIED BY '{new_password}';")` commits the change, making it permanent, and closes the connection.
-5. If it fails to update the password, the exception catches this and logs the error before triggering a bare raise which **"re-raises"** the exception currently being handled, with the same message, and sends this back to Secrets Manager's rotation logic for debugging, and the most crucial part, causing this lambda invocation to fail. As a result Secrets Manager knows that the database secret remains unchanged.
+5. If it fails to update the password, the exception catches this and logs the error before triggering a bare raise which **"re-raises"** the exception currently being handled, with the same message, and sends this back to Secrets Manager's rotation logic for debugging, and the most crucial part, causing this Lambda invocation to fail. As a result Secrets Manager knows that the database secret remains unchanged.
 
 **test_secret**
 
-```python
+```Python
 def test_secret(client, arn, token):
     pending_dict = get_secret_dict(client, arn, "AWSPENDING", token)
 
@@ -515,11 +515,11 @@ def test_secret(client, arn, token):
         raise
 ```
 
-Now that the password has been changed successfully, this function attempts to login with the new password to ensure that the password was updated successfully. It starts off by retrieving the pending password: `pending_dict = get_secret_dict(client, arn, "AWSPENDING", token)`. Then the try block extracts the DB credentials from the pending dictionary and establishes a connection then immediately closes it. If it fails, the exception catches and logs the error before a bare raise which would **re-raise** the error and send it back to the Secrets Manager location logic, essentially terminating the rotation.
+Now that the password has been changed successfully, this function attempts to log in with the new password to ensure that the password was updated successfully. It starts off by retrieving the pending password: `pending_dict = get_secret_dict(client, arn, "AWSPENDING", token)`. Then the try block extracts the DB credentials from the pending dictionary and establishes a connection then immediately closes it. If it fails, the exception catches and logs the error before a bare raise which would **re-raise** the error and send it back to the Secrets Manager location logic, essentially terminating the rotation.
 
 **finish_secret**
 
-```python
+```Python
 
 def finish_secret(client, arn, token):
     metadata = client.describe_secret(SecretId=arn)
@@ -540,7 +540,7 @@ def finish_secret(client, arn, token):
 
 ```
 
-Now that the new database credentials has been tested successfully, it is time to complete the rotation: This function performs the following tasks:
+Now that the new database credentials have been tested successfully, it is time to complete the rotation: This function performs the following tasks:
 
 1. Retrieves the secrets metadata `metadata = client.describe_secret(SecretId=arn)` this returns a dictionary with all existing versions. Note the version here refers to the token.
 2. The function then loops through all the current versions mapped to the stages; the stages are either `AWSCURRENT` or `AWSPENDING`. It checks if the version attached to the `AWSCURRENT` matches the token. If so then we're already using the latest, no further action is taken and the function exits. Else it assigns that version to a variable called `current_version`.
@@ -552,9 +552,9 @@ Now the rotation is complete.
 
 In this file we install the pymysql dependency, zip it and cleanly remove the installation directory
 
-**What is lambda layers?**
+**What are Lambda layers?**
 
-Lambda functions run inside an AWS managed environment. That environment is a runtime container that installs and executes the lambda function. It is best practice to make these lambda functions as lean and light as possible, that's a factor in how quickly the function boots up. This means stripping away all non essential codes such as dependency libraries from the function source code. But we need these dependencies available to the function at runtime. So we bundle up the dependencies into a zipped file that gets uploaded with the function. AWS will unzip/extract this into **/opt** inside the runtime container. Since we're using Python, the dependencies can be stored in **/opt/python** while the function itself gets stored under **/var/task**. Note a function can attach up to five layers, and the combined unzipped size of function code + all layers is capped at 250 MB, very light. One of the main flexibilities of lambda layers is that a single lambda layer can be used and reused by multiple lambda functions, eliminating unnecessary duplications.
+Lambda functions run inside an AWS managed environment. That environment is a runtime container that installs and executes the Lambda function. It is best practice to make these Lambda functions as lean and light as possible, that's a factor in how quickly the function boots up. This means stripping away all non essential code such as dependency libraries from the function source code. But we need these dependencies available to the function at runtime. So we bundle up the dependencies into a zipped file that gets uploaded with the function. AWS will unzip/extract this into **/opt** inside the runtime container. Since we're using Python, the dependencies can be stored in **/opt/Python** while the function itself gets stored under **/var/task**. Note a function can attach up to five layers, and the combined unzipped size of function code + all layers is capped at 250 MB, very light. One of the main flexibilities of Lambda layers is that a single Lambda layer can be used and reused by multiple Lambda functions, eliminating unnecessary duplications.
 
 **Packaging the dependency**
 
@@ -569,74 +569,74 @@ resource "null_resource" "rr_build_and_clean_layer" {
     command = <<EOT
         set -e
         # 1. Clean up any previous builds
-        rm -rf ${path.module}/layers/python
+        rm -rf ${path.module}/layers/Python
         rm -f ${path.module}/layers/db_driver.zip
 
-        mkdir -p ${path.module}/layers/python
+        mkdir -p ${path.module}/layers/Python
 
         # 2. Install purely from source, ignore caches
-        pip install pymysql -t ${path.module}/layers/python/ --no-cache-dir --upgrade
+        pip install pymysql -t ${path.module}/layers/Python/ --no-cache-dir --upgrade
 
         # 3. Zip while STRICTLY preserving permissions (-r = recursive, -q = quiet, -y = preserve symlinks)
         cd ${path.module}/layers
-        zip -rqy db_driver.zip python/
+        zip -rqy db_driver.zip Python/
 
         # 4. Clean up the unzipped folder
-        rm -rf python/
+        rm -rf Python/
     EOT
   }
 }
 ```
 
-The first step above in packaging pymysql is to specify the dependency version, this facilitates a smooth transition between upgrades i.e. if we were to upload a newer version of pymysql we increment the dependency_version to pymysql-v1.2`. If we face compatibility issues after this upgrade, we can always downgrade to the previous version `pymysql-v1.1".
+The first step above in packaging pymysql is to specify the dependency version, this facilitates a smooth transition between upgrades i.e. if we were to upload a newer version of pymysql we increment the dependency_version to `pymysql-v1.2`. If we face compatibility issues after this upgrade, we can always downgrade to the previous version `pymysql-v1.1`".
 
-Next we have the provisioner block, this is a meta-block that runs arbitrary local or remote commands as a side effect of creating (or destroying) a resource i.e. this is Terraforms unconventional(not managed by state file) way of executing code in your local machine or in a remote machine. Lets take a closer look at the block:
+Next we have the provisioner block, this is a meta-block that runs arbitrary local or remote commands as a side effect of creating (or destroying) a resource i.e. this is Terraform's unconventional(not managed by state file) way of executing code in your local machine or in a remote machine. Lets take a closer look at the block:
 
-1. `set -e` - This ensures that if any command in this script exits with a non-zero status the **bash shell** should stop immediately and abort the rest of the scripts. Without this bash would continue on to the next line and so on. Eventually packaging an incomplete `.zip` dependency file which would lead to the lambda function crashing because of missing dependencies. Thus `set -e` converts a silent partial failure into a loud, immediate fail; the provisioner fails, `terraform apply` fails and we're notified before the zip gets uploaded as a lambda layer.
+1. `set -e` - This ensures that if any command in this script exits with a non-zero status the **bash shell** should stop immediately and abort the rest of the scripts. Without this bash would continue on to the next line and so on. Eventually packaging an incomplete `.zip` dependency file which would lead to the Lambda function crashing because of missing dependencies. Thus `set -e` converts a silent partial failure into a loud, immediate fail; the provisioner fails, `terraform apply` fails and we're notified before the zip gets uploaded as a Lambda layer.
 2. `rm -rf ${...}/...` - These remove previous builds so that we start fresh below.
-3. `${path.module}` - This is Terraforms path reference expression; it resolves to the filsystem directory containing the `.tf` file. Since this file sits in `modules/lambda/layers.tf`, then `${path.module}` resolves to absolute path of `modules/lambda/` on the machine running `terraform apply`.
-4. `mkdir -p ${path.module}/layers/python` - This recreates the directory that will house the dependency local installation, isolating it from the operating system
-5. `pip install pymysql -t ${path.module}/layers/python/ --no-cache-dir --upgrade` - This installs pymysql with the `-t`, targeted install, into the specified directory, it also bypasses local cache (`--no-cache-dir`) and forces the latest version, `--upgrade` rather than relying on what's cached locally.
-6. `cd ${path.module}/layers` - To zip the `python/` sub-directory we must be in its parent directory, so we cd into it.
-7. `zip -rqy db_driver.zip python/` - This zips the `python/` sub directory recursively `-r` into **db_driver.zip**. The `-q`, quiet mode, suppresses zip's normal file by file output. The `-y` preserves symbolic links as symbolic links instead of resolving them to the real path.
-8. `rm -rf python/` - This deletes the unzipped staging directory to free up the memory space (keeping things clean).
+3. `${path.module}` - This is Terraform's path reference expression; it resolves to the filesystem directory containing the `.tf` file. Since this file sits in `modules/Lambda/layers.tf`, then `${path.module}` resolves to absolute path of `modules/Lambda/` on the machine running `terraform apply`.
+4. `mkdir -p ${path.module}/layers/Python` - This recreates the directory that will house the dependency local installation, isolating it from the operating system
+5. `pip install pymysql -t ${path.module}/layers/Python/ --no-cache-dir --upgrade` - This installs pymysql with the `-t`, targeted install, into the specified directory, it also bypasses local cache (`--no-cache-dir`) and forces the latest version, `--upgrade` rather than relying on what's cached locally.
+6. `cd ${path.module}/layers` - To zip the `Python/` sub-directory we must be in its parent directory, so we cd into it.
+7. `zip -rqy db_driver.zip Python/` - This zips the `Python/` sub directory recursively `-r` into **db_driver.zip**. The `-q`, quiet mode, suppresses zip's normal file by file output. The `-y` preserves symbolic links as symbolic links instead of resolving them to the real path.
+8. `rm -rf Python/` - This deletes the unzipped staging directory to free up the memory space (keeping things clean).
 
 One thing to note, the installation above is not fixated on a version of pymysql. This creates a reproducibility gap:
-`pip install pymysql` with no version specified means pip resolves to the `latest` version at the time the command is runs. While the `--upgrade` flag explicitly tells pip to replace the cached/existing version with the newest available version. In this development environment, we'll maintain this flexible approach, however in production it would be best to fix the pymysql version to for example pymysql==1.1.1; that would change the command to:
+`pip install pymysql` with no version specified means pip resolves to the `latest` version at the time the command runs. While the `--upgrade` flag explicitly tells pip to replace the cached/existing version with the newest available version. In this development environment, we'll maintain this flexible approach, however in production it would be best to fix the pymysql version to for example pymysql==1.1.1; that would change the command to:
 
-`pip install pymysql==1.1.1 -t ${path.module}/layers/python/ --no-cache-dir`
+`pip install pymysql==1.1.1 -t ${path.module}/layers/Python/ --no-cache-dir`
 
 The above command can be substituted even in this development environment as you wish as it matches the dependency versioning `dependency_version = "pymysql-v1.1"`.
 
-**lambda layer versioning**
+**Lambda layer versioning**
 
 This is how the dependency above is registered/published with AWS Lambda as a reusable artifact that functions can attach to. In AWS this lands on the `PublishLayerVersion` API, this then labels the layer with an immutable layer version. Now each time the zip file contents change and we run `terraform apply`, AWS publishes a new version number and keeps the old versions, facilitating roll backs, until we delete them.
 
 ```hcl
-resource "aws_lambda_layer_version" "rr_db_layer" {
+resource "aws_Lambda_layer_version" "rr_db_layer" {
   depends_on = [null_resource.rr_build_and_clean_layer]
 
   filename            = "${path.module}/layers/db_driver.zip"
   layer_name          = "rr-${var.environment}-db-driver-layer"
-  compatible_runtimes = ["python3.9"]
+  compatible_runtimes = ["Python3.9"]
   description         = "RR: Database driver dependencies for secret rotation"
 
   source_code_hash = base64sha256(null_resource.rr_build_and_clean_layer.id)
 }
 ```
 
-Lets look at the above resource block in more details:
+Let's look at the above resource block in more details:
 
-1. `depends_on = [null_resource.rr_build_and_clean_layer]` - Since Terraform likes to do things in paralell, this just means that the **null_resource** above it has to run before hand.
+1. `depends_on = [null_resource.rr_build_and_clean_layer]` - Since Terraform likes to do things in parallel, this just means that the **null_resource** above it has to run beforehand.
 2. `filename` - This is the path to the layer zip file that Terraform uploads
-3. `layer_name` - This is the human readable name for this layer that will show in the lambda console or on the CLI.
-4. `compatible_runtimes` - This is a list, currently only one object, that determins which lambda runtime environments this layer is safe to attach to.
+3. `layer_name` - This is the human readable name for this layer that will show in the Lambda console or on the CLI.
+4. `compatible_runtimes` - This is a list, currently only one object, that determines which Lambda runtime environments this layer is safe to attach to.
 5. `description` - Self explanatory
-6. `source_code_hash` - This determins whether AWS should create a new layer version or not. AWS checks this hash against the value in the state, if it has changed then this means the underlying contents has changed, thus there is a valid reason for publishing a new layer version, else it skips publishing a new layer version. Thus locally, we can rebuild the layer as many times as we like, unless the contents of the built package changes, AWS will do nothing with what's pushed up.
+6. `source_code_hash` - This determines whether AWS should create a new layer version or not. AWS checks this hash against the value in the state, if it has changed then this means the underlying contents has changed, thus there is a valid reason for publishing a new layer version, else it skips publishing a new layer version. Thus locally, we can rebuild the layer as many times as we like, unless the contents of the built package changes, AWS will do nothing with what's pushed up.
 
 ### rotation.tf
 
-In this section we deploy the lambda function; we package `index.py` and send it to AWS lambda. Everything is contained in one file [rotation.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/02-aws-rds/modules/lambda/rotation.tf). The process is split into four components, each accomplishing a different task.
+In this section we deploy the Lambda function; we package `index.py` and send it to AWS Lambda. Everything is contained in one file [rotation.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/02-aws-rds/modules/Lambda/rotation.tf). The process is split into four components, each accomplishing a different task.
 
 **Archiving index.py**
 
@@ -660,32 +660,32 @@ When an IAM role is created via Terraform, AWS's API returns success, the role t
 resource "time_sleep" "wait_for_iam" {
   create_duration = "15s"
   triggers = {
-    role_arn = var.lambda_role_arn
+    role_arn = var.Lambda_role_arn
   }
 }
 ```
 
-This resource pauses for 15 seconds, buying enough time for the role ARN to to reach the lambda function. The `triggers = {}` is where the magic happens: it ties the pause to the actual lambda role ARN i.e. this trigger ensures when ever that role is being created/re-created then the 15 seconds delay is applied.
+This resource pauses for 15 seconds, buying enough time for the role ARN to reach the Lambda function. The `triggers = {}` is where the magic happens: it ties the pause to the actual Lambda role ARN i.e. this trigger ensures whenever that role is being created/re-created then the 15 seconds delay is applied.
 
-**AWS lambda function**
-This resource actually deploys the lambda function ensuring that all the requirements are met for a successful deployment:
+**AWS Lambda function**
+This resource actually deploys the Lambda function ensuring that all the requirements are met for a successful deployment:
 
 ```hcl
-resource "aws_lambda_function" "rr_secret_rotation_function" {
+resource "aws_Lambda_function" "rr_secret_rotation_function" {
   function_name = "rr-${var.environment}-secret-rotation-function"
-  handler       = "index.lambda_handler"
-  runtime       = "python3.9"
+  handler       = "index.Lambda_handler"
+  runtime       = "Python3.9"
 
   filename         = data.archive_file.rr_rotation_zip.output_path
   source_code_hash = data.archive_file.rr_rotation_zip.output_base64sha256
 
-  role = var.lambda_role_arn
+  role = var.Lambda_role_arn
 
-  layers = [aws_lambda_layer_version.rr_db_layer.arn]
+  layers = [aws_Lambda_layer_version.rr_db_layer.arn]
 
   vpc_config {
     subnet_ids         = var.database_subnet_ids
-    security_group_ids = [var.lambda_sg_id]
+    security_group_ids = [var.Lambda_sg_id]
   }
 
   memory_size = 128
@@ -697,27 +697,27 @@ resource "aws_lambda_function" "rr_secret_rotation_function" {
 
 ```
 
-Lets look at this resource in details:
+Let's look at this resource in details:
 
 1. `function_name` - this is self explanatory, the name of the function. Notice that it references the environment variable, in our case this will equate **dev**.
-2. `handler = "index.lambda_handler"` - This tells the lambda runtime which function to invoke, the entry point, on each execution. Note, this is the lambda_handler function within index.py i.e. the above syntax is in the form `module.function`.
-3. `runtime = "python3.9"` - This specifies the lambda execution environment.
+2. `handler = "index.Lambda_handler"` - This tells the Lambda runtime which function to invoke, the entry point, on each execution. Note, this is the Lambda_handler function within index.py i.e. the above syntax is in the form `module.function`.
+3. `runtime = "Python3.9"` - This specifies the Lambda execution environment.
 4. `filename = data.archive_file.rr_rotation_zip.output_path` - This references the output file from the data source above
-5. `source_code_hash = data.archive_file.rr_rotation_zip.output_base64sha256` - This hash is what detects changes in index.py so that Terraform can push a new deployment of the lambda function. If no change detected, then Terraform will do nothing when ever we run `tf apply`.
-6. `role = var.lambda_role_arn` - This is the ARN for IAM role the lambda function assumes at runtime; the same role whose propagation the `time_sleep` resource is tackling.
-7. `layers = [aws_lambda_layer_version.rr_db_layer.arn]` - This attaches the PyMySQL layer dependency for this lambda function. Now `import pymysql` will work.
-8. `vpc_config {}` - This places the lambda's execution environment inside our VPC, in the database subnets. This enables a direct private network path for the function to reach the MySQL database. It also attaches the necessary security group for the lambda function which allows the lambda ENIs to talk to the database
+5. `source_code_hash = data.archive_file.rr_rotation_zip.output_base64sha256` - This hash is what detects changes in index.py so that Terraform can push a new deployment of the Lambda function. If no change detected, then Terraform will do nothing whenever we run `tf apply`.
+6. `role = var.Lambda_role_arn` - This is the ARN for IAM role the Lambda function assumes at runtime; the same role whose propagation the `time_sleep` resource is tackling.
+7. `layers = [aws_Lambda_layer_version.rr_db_layer.arn]` - This attaches the PyMySQL layer dependency for this Lambda function. Now `import pymysql` will work.
+8. `vpc_config {}` - This places the Lambda's execution environment inside our VPC, in the database subnets. This enables a direct private network path for the function to reach the MySQL database. It also attaches the necessary security group for the Lambda function which allows the Lambda ENIs to talk to the database
 9. `memory_size = 128` - This is the minimum allowed value for memory. Since this is a basic function the allocated memory and corresponding CPU is adequate.
-10. `timeout = 30` - This sets the maximum time before lambda forcibly kills the invocation. This is plenty of time for the lambda function to complete the rotation of the secret.
+10. `timeout = 30` - This sets the maximum time before Lambda forcibly kills the invocation. This is plenty of time for the Lambda function to complete the rotation of the secret.
 11. `depends_on = [time_sleep.wait_for_iam]` - This references the `time_sleep` resource above, forcing Terraform to wait for the 15 seconds pause to finish IAM role propagation before attempting to create this function.
 
 ## 5. RDS module
 
-In this module we create the secret in Secrets manager and instantiate the database. The module structure follows the standard we've used all through out this project. Thus only **secrets.tf** and **rds.tf** are new and of real interest. Lets take a closer look inside:
+In this module we create the secret in Secrets Manager and instantiate the database. The module structure follows the standard we've used all through out this project. Thus only **secrets.tf** and **rds.tf** are new and of real interest. Lets take a closer look inside:
 
 ### secrets.tf
 
-[secrets.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/02-aws-rds/modules/rds/secrets.tf) is where we tackle the logical issue for creating the secret. There's a chicken and egg problem here: **the database needs the secret to start but the secret needs the database's host address to be complete**; the database host is not known until the database is live, a placeholder is used to bypass this so that the secret can be created; the host is needed because the lambda function needs to know which host to connect to, to update db credentials; for the database to boot it needs to retrieve the database credentials from the secret and this can only happen if the secret exists prior to the database. To resolve this, a multi-stage versioning approacch is adopted for creating the secret.
+[secrets.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/02-aws-rds/modules/rds/secrets.tf) is where we tackle the logical issue for creating the secret. There's a chicken and egg problem here: **the database needs the secret to start but the secret needs the database's host address to be complete**; the database host is not known until the database is live, a placeholder is used to bypass this so that the secret can be created; the host is needed because the Lambda function needs to know which host to connect to, to update db credentials; for the database to boot it needs to retrieve the database credentials from the secret and this can only happen if the secret exists prior to the database. To resolve this, a multi-stage versioning approach is adopted for creating the secret.
 
 **Creating the secret shell**
 
@@ -765,16 +765,16 @@ resource "aws_secretsmanager_secret_version" "rr_db_skeleton" {
 
 Above, this is the first secret version, named `rr_db_skeleton`, below we explain its attributes:
 
-1. `secret_id = aws_secretsmanager_secret.rr_db_secret.id` - this attachs the secret shell to this secret version, essentially loading the db credentials onto it.
-2. `secret_string = jsonencode({})` - this is the format of the secret i.e. all the values it will have. The **username & password** values will be passed through the cli into environment variables, see instructions below. Note the host has **"placeholder"** for value, thi is the reason we're using `aws_secretsmanager_secret_version`; when the database has booted, the host value will be extracted into the next version.
-3. `lifecycle {}` - Terraform ensures that the deployment is a reflection of the state file, expected deployment; thus when deployed resources deviate from the state file, Terraform will destroy or recreate resources to match the state file. `ignore_changes = [secret_string]` tells Terraform to relinquish control of this resource so that the lambda function can take control of rotating these values, else Terraform will reset the changed values to the infile values everytime we run `terraform apply`, which would lead to the secret being out of sync with the database, breaking the application in the process.
+1. `secret_id = aws_secretsmanager_secret.rr_db_secret.id` - this attaches the secret shell to this secret version, essentially loading the db credentials onto it.
+2. `secret_string = jsonencode({})` - this is the format of the secret i.e. all the values it will have. The **username & password** values will be passed through the cli into environment variables, see instructions below. Note the host has **"placeholder"** for value, this is the reason we're using `aws_secretsmanager_secret_version`; when the database has booted, the host value will be extracted into the next version.
+3. `lifecycle {}` - Terraform ensures that the deployment is a reflection of the state file, expected deployment; thus when deployed resources deviate from the state file, Terraform will destroy or recreate resources to match the state file. `ignore_changes = [secret_string]` tells Terraform to relinquish control of this resource so that the Lambda function can take control of rotating these values, else Terraform will reset the changed values to the infile values every time we run `terraform apply`, which would lead to the secret being out of sync with the database, breaking the application in the process.
 
 Now the database can boot up and publish a host.
 
 **Dynamic pointer to secrets credentials**
 
 To ensure that resources such as RDS, ECS and K8s don't pull stale credentials from the secret, at runtime, we need a way to track the latest live credentials:
-This data source tracks the `AWSCURRENT` label which holds the most upto date credentials, after the completion of the rotation, see lambda function section above.
+This data source tracks the `AWSCURRENT` label which holds the most up-to-date credentials, after the completion of the rotation, see Lambda function section above.
 
 ```hcl
 # Tracks the "AWSCURRENT" label so ECS, k8s and RDS always have the latest.
@@ -784,7 +784,7 @@ data "aws_secretsmanager_secret_version" "rr_latest_creds" {
 }
 ```
 
-Lets look at the attributes:
+Let's look at the attributes:
 
 1. `secret_id = aws_secretsmanager_secret.rr_db_secret.id` - This specifies which secret to track
 2. `depends_on = [aws_secretsmanager_secret_version.rr_db_skeleton]` - This ensures that the skeleton secret version exist before this data source is created, that way it doesn't throw an error when we run `terraform apply`.
@@ -820,16 +820,16 @@ Lets have a look at the attributes:
 2. `secret_string` - The secret's credentials and format
 3. `host = aws_db_instance.rr_database.address` - Here we're retrieving the value for host from the database and injecting it into the secret.
 4. `depends_on = [aws_db_instance.rr_database]` - This ensures that the database is created before this specific secret version, that way the host address exists.
-5. `lifecycle { ignore_changes = [secret_string] }` - This tells Terraform to relinquish control of this resource settings to allow the lambda function to update the values without Terraform reverting to initial infile values.
+5. `lifecycle { ignore_changes = [secret_string] }` - This tells Terraform to relinquish control of this resource settings to allow the Lambda function to update the values without Terraform reverting to initial infile values.
 
 **Invoking rotation**
 
-Now that the final secret version is created and the host address is updated, the lambda function can be invoked to rotate the credentials. That is exactly what the resource below, `aws_secretsmanager_secret_rotation` does:
+Now that the final secret version is created and the host address is updated, the Lambda function can be invoked to rotate the credentials. That is exactly what the resource below, `aws_secretsmanager_secret_rotation` does:
 
 ```hcl
 resource "aws_secretsmanager_secret_rotation" "rr_db_rotation" {
   secret_id           = aws_secretsmanager_secret.rr_db_secret.id
-  rotation_lambda_arn = var.rotation_lambda_arn
+  rotation_Lambda_arn = var.rotation_Lambda_arn
 
   rotation_rules {
     automatically_after_days = 7 # the standard rotation window is 30 days
@@ -843,19 +843,19 @@ resource "aws_secretsmanager_secret_rotation" "rr_db_rotation" {
 Lets have a look at the attributes:
 
 1. `secret_id` - This specifies the ID of our secret, locking down the rotation to `rr_db_secret` secret.
-2. `rotation_lambda_arn = var.rotation_lambda_arn` - This specifies our lambda function's ARN, now we know which function to call. Note, this value is passed in through the root module variable, from the lambda module.
-3. `rotation_rules {}` - This specifies the cycle period for rotating the secret, here its set to 7 days, `automatically_after_days = 7`, which narrows down the attack window should there be a breach in one of the containers. Note, the standard rotation window is 30 days.
+2. `rotation_Lambda_arn = var.rotation_Lambda_arn` - This specifies our Lambda function's ARN, now we know which function to call. Note, this value is passed in through the root module variable, from the Lambda module.
+3. `rotation_rules {}` - This specifies the cycle period for rotating the secret, here it's set to 7 days, `automatically_after_days = 7`, which narrows down the attack window should there be a breach in one of the containers. Note, the standard rotation window is 30 days.
 4. `depends_on = [aws_secretsmanager_secret_version.rr_db_host_update]` - This ensures that the rotation function is only invoked after the **rr_db_host_update** secret version has been created i.e. when the host name has been updated.
 
 **Lambda permissions for Secrets Manager**
 
-The IAM role controls what the lambda function is allowed to do but it doesn't control who's allowed to invoke the lambda function. As things are, if Secrets Manager attempts to invoke the rotation lambda function, it would get an **AccessDenied** error. That's because Secrets Manager itself needs explicit permissions to call the lambda function. `aws_lambda_permission` resource is a resource based policy attached directly to the lambda function itself. Note, this is different from an identity-based policy attached to a role/user. This is the mechanism AWS uses specifically for cross-service invocation grants.
+The IAM role controls what the Lambda function is allowed to do but it doesn't control who's allowed to invoke the Lambda function. As things are, if Secrets Manager attempts to invoke the rotation Lambda function, it would get an **AccessDenied** error. That's because Secrets Manager itself needs explicit permissions to call the Lambda function. `aws_Lambda_permission` resource is a resource based policy attached directly to the Lambda function itself. Note, this is different from an identity-based policy attached to a role/user. This is the mechanism AWS uses specifically for cross-service invocation grants.
 
 ```hcl
-resource "aws_lambda_permission" "allow_secretsmanager_to_call_lambda" {
+resource "aws_Lambda_permission" "allow_secretsmanager_to_call_Lambda" {
   statement_id  = "AllowExecutionFromSecretsManager"
-  action        = "lambda:InvokeFunction"
-  function_name = var.rotation_lambda_arn
+  action        = "Lambda:InvokeFunction"
+  function_name = var.rotation_Lambda_arn
   principal     = "secretsmanager.amazonaws.com"
   source_arn    = aws_secretsmanager_secret.rr_db_secret.arn
 }
@@ -863,12 +863,12 @@ resource "aws_lambda_permission" "allow_secretsmanager_to_call_lambda" {
 
 Lets take a closer look at this resource:
 
-1. `statement_id  = "AllowExecutionFromSecretsManager"` - This is the unique identifier, label, for this specific permission statement, within the lambda's resource policy. This is required by AWS; it's useful if you ever need to reference/remove a specific statement for example:
-   `aws lambda remove-permission --statement-id AllowExecutionFromSecretsManager`
-2. `action = "lambda:InvokeFunction"` - This is the specific permission being granted: The right to invoke this function. Note, this is the only action Secrets Manager needs. It doesn't need to read the function's code, update its configuration, or anything else.
-3. `function_name = var.rotation_lambda_arn` - This specifies the lambda function that the permission applies to. Note that referencing our lambda function here creates an implicit dependency reference i.e. the lambda function must be created first before this policy permission can be created.
-4. `principal = "secretsmanager.amazonaws.com"` - This names the entity being granted the invokation permission. Note, this is very open: it allows any secrets manager rotation schedule in the entire account, not just from a specific role, to trigger this lambda function when a rotation is due.
-5. `source_arn = aws_secretsmanager_secret.rr_db_secret.arn` - This restricts the invokation of our lambda function to this secret ARN i.e. only secrets rotation events from this secret, `rr_db_secret`, can invoke the function.
+1. `statement_id  = "AllowExecutionFromSecretsManager"` - This is the unique identifier, label, for this specific permission statement, within the Lambda's resource policy. This is required by AWS; it's useful if you ever need to reference/remove a specific statement for example:
+   `aws Lambda remove-permission --statement-id AllowExecutionFromSecretsManager`
+2. `action = "Lambda:InvokeFunction"` - This is the specific permission being granted: The right to invoke this function. Note, this is the only action Secrets Manager needs. It doesn't need to read the function's code, update its configuration, or anything else.
+3. `function_name = var.rotation_Lambda_arn` - This specifies the Lambda function that the permission applies to. Note that referencing our Lambda function here creates an implicit dependency reference i.e. the Lambda function must be created first before this policy permission can be created.
+4. `principal = "secretsmanager.amazonaws.com"` - This names the entity being granted the invocation permission. Note, this is very open: it allows any Secrets Manager rotation schedule in the entire account, not just from a specific role, to trigger this Lambda function when a rotation is due.
+5. `source_arn = aws_secretsmanager_secret.rr_db_secret.arn` - This restricts the invocation of our Lambda function to this secret ARN i.e. only secrets rotation events from this secret, `rr_db_secret`, can invoke the function.
 
 ### rds.tf
 
@@ -933,13 +933,13 @@ resource "aws_db_instance" "rr_database" {
 }
 ```
 
-Lets look into this a little deeper:
+Let's look into this a little deeper:
 
 1. `identifier = "rr-${var.environment}-db"` - This is the instance's name as it appears in the RDS console/API. Note, this is AWS's internal identifier, not the database schema name.
-2. `db_name = "ritual_roast"` - This is the actual database(schema) name, created inside the MySQL engine on first boot i.e. this is what our apps connects to, the dbname in our secret JSON.
+2. `db_name = "ritual_roast"` - This is the actual database(schema) name, created inside the MySQL engine on first boot i.e. this is what our apps connect to, the dbname in our secret JSON.
 3. `engine = "mysql"` - This is the selected database engine: The core data management software.
-4. `engine_version = "8.0"` - This is the major version, it determins the actual MySQL binary AWS provisions and manages.
-5. `instance_class = "db.t3.micro"` - This is the compute/memory tier, although t3.micro is small it has burstable-CPU which means it can handle small spikes in traffic, to an extent. Its not ideal for production but for dev/or low traffic, it's adequate.
+4. `engine_version = "8.0"` - This is the major version, it determines the actual MySQL binary AWS provisions and manages.
+5. `instance_class = "db.t3.micro"` - This is the compute/memory tier, although t3.micro is small it has burstable-CPU which means it can handle small spikes in traffic, to an extent. It's not ideal for production but for dev/or low traffic, it's adequate.
 6. `allocated_storage = 20` - This is the disk size in GB for the underlying storage volume i.e. the allocated storage size.
 7. `storage_type = "gp3"` - This is the Elastic Block Service (EBS) volume storage. Note **GP3** is the current-generation general-purpose SSD. It offers better baseline IOPS/throughput control than the older **GP2**. Consider this the physical disk the allocated 20GB actually lives on.
 8. ` multi_az = true` - This provisions a standby instance in another AZ for our primary instance to failover to i.e. if the primary instance goes down we switch to the standby. The replica, standby instance, is a copy of the primary so it has the same data copied synchronously.

@@ -1,6 +1,6 @@
 # Layer 4 - Serverless Elastic Container Service (ECS) with Fargate
 
-In this Layer we deploy the website using severless ECS with Fargate: We pull resources from the previous three Layers and add extra resources to ensure our network traffic is secure and cost effective.
+In this Layer we deploy the website using serverless ECS with Fargate: We pull resources from the previous three Layers and add extra resources to ensure our network traffic is secure and cost effective.
 
 <a href="documents/hld-architecture/layer4-hld.png">
   <img src="documents/hld-architecture/layer4-hld.png"
@@ -24,7 +24,7 @@ We have the usual structure but this time it is more populated, simply because w
 
 ## data.tf
 
-Lets have a look at some of these resources in [data.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/04-aws-ecs/environment/dev/data.tf).
+Let's have a look at some of these resources in [data.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/04-aws-ecs/environment/dev/data.tf).
 
 ```hcl
 data "aws_vpc" "rr_vpc" {
@@ -36,12 +36,12 @@ data "aws_vpc" "rr_vpc" {
 }
 ```
 
-Here we're retrieving the VPC. Lets have a look at the components:
+Here we're retrieving the VPC. Let's have a look at the components:
 
 1. `tags = local.common_tags_vpc` - This injects the common tags that were used in Layer 1, they have been recreated at the top of data.tf for this exact use. This allows us to find a VPC that has all of these tags
-2. `filter { }` This gives us a more granular search tool to narrow down our search results. Lets look at its components:
+2. `filter { }` This gives us a more granular search tool to narrow down our search results. Let's look at its components:
    a. `name = "tag:Name"` - This specifies what we're filtering by: we're filtering by `tag` and the tag is called `Name`
-   b. `values = ["rr-${var.environment}-*"]` - This specifies the value of the tag. It will return all VPCs names with `rr-` prefix followed by the environment `dev-`. The wild card operator `*` means any number of characters to follow.
+   b. `values = ["rr-${var.environment}-*"]` - This specifies the value of the tag. It will return all VPCs names with `rr-` prefix followed by the environment `dev-`. The wildcard operator `*` means any number of characters to follow.
    The filter alone is good enough to retrieve our VPC.
 
 Here's another example, this time we're retrieving the App subnets:
@@ -71,9 +71,9 @@ Have a look through the full file to view all the resources.
 
 **providers.tf** is identical to all the other Layers equivalent file. So there's nothing we haven't seen before.
 
-**main.tf** is structurally the same as all the other Layers' main.tf however its more congested. The file is ordered such that modules that don't rely on other modules outputs are placed at the top: **security_groups** and **iam** modules both have no local sub modules dependencies; they do require that the data sourced resources from previous Layers do exist before hand, an implicit dependency.
+**main.tf** is structurally the same as all the other Layers' main.tf however it's more congested. The file is ordered such that modules that don't rely on other modules outputs are placed at the top: **security_groups** and **iam** modules both have no local sub modules dependencies; they do require that the data sourced resources from previous Layers do exist beforehand, an implicit dependency.
 
-The rest of the modules have visible implicit dependencies on other local modules. They have been organised by the number of implicit dependencies. Note, this order is not important as Terraform does not read a file top to bottom, it builts a map instead.
+The rest of the modules have visible implicit dependencies on other local modules. They have been organised by the number of implicit dependencies. Note, this order is not important as Terraform does not read a file top to bottom, it builds a map instead.
 
 ## outputs.tf
 
@@ -87,11 +87,11 @@ output "ritual_roast_public_url" {
 
 ```
 
-Lets have a look at the components:
+Let's have a look at the components:
 
-1. `description = ...` - This describes what this resource returns 2.`value = "http://${data.aws_lb.gateway_alb.dns_name}"` - This returns the public LoadBalancer DNS name and wrapps it into a HTTP URL
+1. `description = ...` - This describes what this resource returns 2.`value = "http://${data.aws_lb.gateway_alb.dns_name}"` - This returns the public LoadBalancer DNS name and wraps it into a HTTP URL
 
-This output will be printed to the consol, copying and pasting it on the browser will load the website.
+This output will be printed to the console, copying and pasting it on the browser will load the website.
 
 # Modules
 
@@ -103,11 +103,11 @@ This Layer has 5 child modules besides the root module:
 4. **endpoint** - In this module we rewire the network traffic rerouting it through the AWS backbone between supported resources, end to end, to cut AWS costs and enhance security.
 5. **ecs** - In this module we create the ECS cluster and the supporting resources to bring up the website
 
-Lets take a look at each module in detail.
+Let's take a look at each module in detail.
 
 ## security_groups (SG)
 
-Although resources are injected into this module via root module data sources passed into variables, this module has it's own [data.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/04-aws-ecs/modules/security_groups/data.tf). It uses data source to retrieve other resources needed in this module. Note, this is just a preference, it's not mandatory i.e. we could have retrieved all the resources in the root module data.tf and passed them onwards.
+Although resources are injected into this module via root module data sources passed into variables, this module has its own [data.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/04-aws-ecs/modules/security_groups/data.tf). It uses data source to retrieve other resources needed in this module. Note, this is just a preference, it's not mandatory i.e. we could have retrieved all the resources in the root module data.tf and passed them onwards.
 
 ### aws_prefix_list for S3
 
@@ -129,7 +129,7 @@ S3 was built as a public, internet facing distributed storage system. It lives i
 **Why are the IPs constantly changing**
 S3 is not a single giant server; it is a continuously shifting fleet of millions of servers spread across multiple data centers. Thus the pool changes because of **scale, high availability, and load balancing**. Below are the factors that lead to the IP cycles:
 
-1. **Elasticity & Hardware Lifecycle** - AWS is constantly racking new servers to increase capacity and decommissioning old or broken servers. Everytime hardware cycles/replaced, IPs are reallocated.
+1. **Elasticity & Hardware Lifecycle** - AWS is constantly racking new servers to increase capacity and decommissioning old or broken servers. Every time hardware cycles/replaced, IPs are reallocated.
 2. **Traffic Rebalancing** - If a specific S3 node or AZ is getting hammered with traffic, AWS dynamically shifts traffic to other nodes, which introduces new IP ranges into the active pool.
 3. **DDoS Protection** - By rapidly shifting the IP ranges that handle traffic, AWS can mitigate massive Distributed Denial of Service (DDoS) attacks.
 
@@ -146,7 +146,7 @@ We will use `prefix_list_ids` in the security group rule(s) that enables our res
 
 ### Visualizing traffic flow
 
-Before getting into the actions lets visualize the traffic flow from the internet through our VPC to aid our understanding of building a security fortress:
+Before getting into the actions let's visualize the traffic flow from the internet through our VPC to aid our understanding of building a security fortress:
 
 ```
 1. Internet
@@ -174,7 +174,7 @@ Before getting into the actions lets visualize the traffic flow from the interne
 
 ```
 
-Lets elaborate on the above:
+Let's elaborate on the above:
 
 1. **Internet request to public ALB** - A user sends HTTP request from the internet to Layer 1's shared public ALB on port 80
 2. **Public ALB path evaluation & target forwarding** - The public ALB evaluates its listener rules. Rule priority 100 matches the path `/*` and forwards the traffic to the Frontend target group on port 3000
@@ -191,7 +191,7 @@ This approach is essential for dynamic container environments like ECS Fargate. 
 
 With Security Group Chaining, network security is completely decoupled from IP addresses. Any new container task launched with the approved source Security Group automatically gains network access to the destination, regardless of its IP. This enforces the Principle of Least Privilege without requiring manual firewall updates as infrastructure scales.
 
-In this module we setup security groups for several resources to facilitate communication to and fro. The security groups are separated into files, one per security group. Lets look at each of these in detail.
+In this module we set up security groups for several resources to facilitate communication to and fro. The security groups are separated into files, one per security group. Let's look at each of these in detail.
 
 ### [sg-web-tier.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/04-aws-ecs/modules/security_groups/sg-web-tier.tf)
 
@@ -209,16 +209,16 @@ resource "aws_security_group" "rr_frontend" {
 }
 ```
 
-Above, this is how we create a security group in this case Frontend security group, `rr_frontend`. This is just the shell of the security group: There are no rules attached. Lets look at the components:
+Above, this is how we create a security group in this case Frontend security group, `rr_frontend`. This is just the shell of the security group: There are no rules attached. Let's look at the components:
 
 1. `name = "rr-${var.environment}-frontend-sg"` - This is the name of our security group
 2. `description = "Frontend containers (Web Tier)"` - This tells us what the security group is for
 3. `vpc_id = var.vpc_id` - This creates the security group in our VPC
 4. `tags = ...` - This merges the common tags with the `Name` tag
 
-Now that the empty shell of our security group is created lets see how we attach security group rules, chaining `rr_frontend` to other security groups. But first, lets clear up a source of confusion. In Terraform's `aws_security_group_rule` resource:
+Now that the empty shell of our security group is created let's see how we attach security group rules, chaining `rr_frontend` to other security groups. But first, let's clear up a source of confusion. In Terraform's `aws_security_group_rule` resource:
 
-1. `security_group_id` - This alwasys means **"The security group I am attaching this specific rule to."**
+1. `security_group_id` - This always means **"The security group I am attaching this specific rule to."**
 2. `source_security_group_id` - This means **"The OTHER security group this rule interacts with."**
 
 Therefore:
@@ -226,7 +226,7 @@ Therefore:
 1. In an `ingress` (inbound) rule, `source_security_group_id` **acts as the Origin i.e. Allow traffic from this SG**
 2. In an `egress` (outbound) rule, `source_security_group_id` **acts as the Destination i.e. Allow traffic to this SG**
 
-Now that we've cleared up the confusion, lets look at these two types of rules:
+Now that we've cleared up the confusion, let's look at these two types of rules:
 
 1. **Ingress rule**
    An ingress rule accepts incoming traffic from a specified source.
@@ -242,10 +242,10 @@ resource "aws_security_group_rule" "rr_frontend_from_public_alb" {
 }
 ```
 
-Above we have an ingress rule that accepts traffic from `public_alb_sg` into `rr_frontend` on port 3000. Note this is HTTP traffic. Lets look at the components:
+Above we have an ingress rule that accepts traffic from `public_alb_sg` into `rr_frontend` on port 3000. Note this is HTTP traffic. Let's look at the components:
 
 1. `type = "ingress"` - This specifies the direction of the traffic, in this case incoming traffic.
-2. `from_port = 3000` - This specifies the source port i.e. the port the packets where sent through
+2. `from_port = 3000` - This specifies the source port i.e. the port the packets were sent through
 3. `to_port = 3000` - This specifies the target port i.e. the receiving port.
 4. `protocol = "tcp"` - This specifies the rule as to how data will be transmitted. **Transmission Control Protocol (TCP)** requires a three way handshake which ensures a connection is established first, end to end, before data transfer.
 5. `security_group_id = aws_security_group.rr_frontend.id` - In an ingress rule, this specifies the target security group i.e. the one receiving traffic.
@@ -256,7 +256,7 @@ The public ALB is the frontdoor of our application, it's the bridge between cust
 Thus the ALB receives traffic from the internet on port 80, it forwards that traffic to the Frontend application on port 3000. `rr_frontend` security group verifies the source of the traffic and sees that its the public loadbalancer and allows it to pass.
 
 **Why port 3000**
-We are using port 3000 because our next.js server listens on port 3000.
+We are using port 3000 because our Next.js server listens on port 3000.
 
 2. **Egress rule**
 
@@ -272,19 +272,19 @@ resource "aws_security_group_rule" "rr_frontend_to_internal_alb" {
 
 ```
 
-Above we have an egress rule that sends outbound traffic from `rr_frontend` SG to `rr_internal_alb` on port 80. Lets look at the components, we'll skip what hasn't changed from the ingress rule
+Above we have an egress rule that sends outbound traffic from `rr_frontend` SG to `rr_internal_alb` on port 80. Let's look at the components, we'll skip what hasn't changed from the ingress rule
 
 1. `type = "egress"` - This specifies the direction of the traffic, in this case outbound traffic
 2. `from_port` and `to_port` - These are now port 80
 3. `security_group_id = aws_security_group.rr_frontend.id` - This now specifies the source/originator security group i.e. allow outbound traffic from `rr_frontend` to the other security group
-4. `source_security_group_id = aws_security_group.rr_internal_alb.id` - This now specifies the target/destination security group. Npte for this traffic to be accepted we need an ingress rule for `rr_internal_alb`.
+4. `source_security_group_id = aws_security_group.rr_internal_alb.id` - This now specifies the target/destination security group. Note for this traffic to be accepted we need an ingress rule for `rr_internal_alb`.
 
 **Why is this important**
 Between the frontend and the backend there is an internal ALB that ensures that the frontend doesn't communicate directly to the backend. This adds an extra layer of security i.e. the backend containers service and or IP address is not known by the frontend containers. Thus for the frontend to communicate with the backend it sends traffic to the internal ALB.
 
 **Why port 80 instead of 5000**
 
-An ALB acts as a standard web proxy. Best practice dictates that infrastructure components, like the ALB, offer standard HTTP(80) or HTTPS (443) interfaces to their clients. The frontend shouldn't need to care what obscure port the backend application use. It just calls `http://internal-alb:80`. The ALB handles the translation, taking the request on port 80 and routing it to the Flask app on port 5000.
+An ALB acts as a standard web proxy. Best practice dictates that infrastructure components, like the ALB, offer standard HTTP(80) or HTTPS (443) interfaces to their clients. The frontend shouldn't need to care what obscure port the backend application uses. It just calls `http://internal-alb:80`. The ALB handles the translation, taking the request on port 80 and routing it to the Flask app on port 5000.
 
 ### The remaining rules
 
@@ -297,21 +297,21 @@ Covering these will give us the broader picture of our security posture.
 
 1. **Egress:Frontend -> Interface Endpoints `rr_frontend_egress_to_endpoints`**
    **Why is this important**
-   Fargate containers run in private subnets with no internet access. When a frontend container boots up, it needs to talk to the AWS API to download its Docker imagefrom ECR and stream its logs to CloudWatch. VPC Endpoints allow this private communication. Thos rule lets the container reach those Endpoints.
+   Fargate containers run in private subnets with no internet access. When a frontend container boots up, it needs to talk to the AWS API to download its Docker image from ECR and stream its logs to CloudWatch. VPC Endpoints allow this private communication. This rule let's the container reach those Endpoints.
    **Why port 443**
-   All communication with AWS APIs, like ECR and CloudWatch, happens over standard, encrypted HTTPS, which stricly uses port 443
+   All communication with AWS APIs, like ECR and CloudWatch, happens over standard, encrypted HTTPS, which strictly uses port 443
 
 2. **Egress: Frontend -> S3 Gateway `rr_frontend_egress_to_s3`**
    **Why is this important**
-   ECR stores the actual filesystem layers of our Docker images in AWS S3. Since there's no NAT Gateway in this layer to reach S3 we need an alternative route. To sucessfully pull an image, Fargate must reach S3. The S3 Gateway Endpoint relies on **AWS Prefix Lists rather than Security groups**. This rule allows outbound traffic to the massive list of S3 IP addresses in our specified region.
+   ECR stores the actual filesystem layers of our Docker images in AWS S3. Since there's no NAT Gateway in this layer to reach S3 we need an alternative route. To successfully pull an image, Fargate must reach S3. The S3 Gateway Endpoint relies on **AWS Prefix Lists rather than Security groups**. This rule allows outbound traffic to the massive list of S3 IP addresses in our specified region.
    **Why port 443**
    Pulling data from AWS S3 is an API call that occurs over encrypted HTTPS (port 443).
 
 3. **Injected Egress: Public ALB > Frontend `alb_allow_outbound_to_frontend`**
    **Why is this important**
-   Although Security Groups are stateful intelligent devices i.e. any allowed inbound traffic does not require an outbound rule for the response, the return is automatic because the Security Group catches this as the response to the inbound traffic. However, if a separate outbound traffic heading for the same external source is initiated, it would be unassociated with the current inbound traffic and will be blocked. Thus to allow this we need an egress rule: Just because the Frontend has an `inbound` rule allowing traffic from the ALB doesn't mean the ALB has an outbound rule allowing it to initiate traffic headed for the Frontend. This rule modifies the Public ALB's Security Group from Layer 1, giving it the outbound permission to physically rach the Frontend containers.
+   Although Security Groups are stateful intelligent devices i.e. any allowed inbound traffic does not require an outbound rule for the response, the return is automatic because the Security Group catches this as the response to the inbound traffic. However, if a separate outbound traffic heading for the same external source is initiated, it would be unassociated with the current inbound traffic and will be blocked. Thus to allow this we need an egress rule: Just because the Frontend has an `inbound` rule allowing traffic from the ALB doesn't mean the ALB has an outbound rule allowing it to initiate traffic headed for the Frontend. This rule modifies the Public ALB's Security Group from Layer 1, giving it the outbound permission to physically reach the Frontend containers.
    **Why Port 3000**
-   The ALB is sending traffic to the Next.js container which is listeningon port 3000
+   The ALB is sending traffic to the Next.js container which is listening on port 3000
 
 ### [sg-internal-alb.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/04-aws-ecs/modules/security_groups/sg-internal-alb.tf)
 
@@ -328,13 +328,13 @@ resource "aws_security_group" "rr_internal_alb" {
 }
 ```
 
-Above is the SG skeleton, lets look at the SG rules:
+Above is the SG skeleton, let's look at the SG rules:
 
 1. **Ingress: Frontend -> Internal ALB `rr_int_alb_from_frontend`**
    **Why is this important**
    Earlier we saw an egress to internal ALB rule in sg-web-tier, `rr_frontend_to_internal_alb`, which allows outbound Frontend traffic to the ALB. When that traffic reaches the internal ALB it requires an ingress rule to accept that traffic. Thus, this rule is the counter party to the egress rule that completes path so that traffic can flow into the internal ALB.
    **Why port 80**
-   Notice that this is HTTP not HTTPS traffic. Setting up Transport Layer Security (TLS) certificates is a complicated matter, it is common practice for TLS certificates to terminate at an ALB i.e. HTTPS from the internet would terminate at a Loadbalancer and continue as HTTP. However, for maximum security especially in prod environments end to end TLS might be required which would mean configuring SECURE SOCKET Layer(SSL) on the backend application i.e. ensuring that the public encryption certificate/key is baked into the container images, at runtime. But for this dev environment HTTP is addequate, we can avoid various costs: purchasing a domain and an ACM certificate from AWS Certificate Manager.
+   Notice that this is HTTP not HTTPS traffic. Setting up Transport Layer Security (TLS) certificates is a complicated matter, it is common practice for TLS certificates to terminate at an ALB i.e. HTTPS from the internet would terminate at a LoadBalancer and continue as HTTP. However, for maximum security especially in prod environments end to end TLS might be required which would mean configuring TLS on the backend application i.e. ensuring that the public encryption certificate/key is baked into the container images, at runtime. But for this dev environment HTTP is adequate, we can avoid various costs: purchasing a domain and an ACM certificate from AWS Certificate Manager.
 2. **Egress: internal ALB -> Backend `int_alb_to_backend`**
    **Why is this important**
    Now that the communication between the Frontend and the internal ALB is configured, the ALB needs to forward that traffic onto the Backend. This rule enables the ALB to forward the Frontend traffic to the Backend containers. Note, there will also have to be an ingress rule on the Backend SG to accept this traffic.
@@ -343,7 +343,7 @@ Above is the SG skeleton, lets look at the SG rules:
 
 ### [sg-app-tier.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/04-aws-ecs/modules/security_groups/sg-app-tier.tf)
 
-Now that the Frontend security group is completed, lets turn our attention to the backend, `App-tier`.
+Now that the Frontend security group is completed, let's turn our attention to the backend, `App-tier`.
 
 ```hcl
 resource "aws_security_group" "rr_backend" {
@@ -358,7 +358,7 @@ resource "aws_security_group" "rr_backend" {
 
 ```
 
-Above is the skeleton Backend security group, `rr_backend`. Lets look at the associated Security Group Rules:
+Above is the skeleton Backend security group, `rr_backend`. Let's look at the associated Security Group Rules:
 
 1. **Ingress: Internal ALB -> Backend `backend_from_internal_alb`**
    **Why is this important**
@@ -370,7 +370,7 @@ Above is the skeleton Backend security group, `rr_backend`. Lets look at the ass
    **Why is this important**
    To authenticate users, fetch records, or save data, the Flask application needs to communicate with the RDS database. This rule gives the Backend containers the network permissions to send outbound traffic to the database.
    **Why port 3306**
-   Port 3306 is the universally recognized default port for MySQL database
+   Port 3306 is the default port for MySQL database
 3. **Injected Ingress: Backend -> Database `db_ingress_from_backend`**
    **Why is this important**
    The database Security Group was created in Layer 2, it has no knowledge of our Backend. There's no database Security Group rules that accepts incoming traffic from the Backend. Security Groups require a two-way handshake of permissions: Just because the backend is allowed to send traffic, rule 2 above, doesn't mean the database is allowed to accept it. This rule bridges the gap by injecting an inbound rule into the database's Security Group, `database_sg`, to accept incoming traffic from the Backend.
@@ -390,7 +390,7 @@ Above is the skeleton Backend security group, `rr_backend`. Lets look at the ass
 
 ### [sg-endpoints.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/04-aws-ecs/modules/security_groups/sg-endpoints.tf)
 
-All the interface type endpoints are using this single Security Group, `rr_endpoints_sg`. Thus whether we're connecting to ECR, Secrets Manager, CloudWatch logs, the gate keeper is the same. Note, this Security Group resides in Layer 1, making it accessible in all other Layers.
+All the interface type endpoints are using this single Security Group, `rr_endpoints_sg`. Thus whether we're connecting to ECR, Secrets Manager, CloudWatch logs, the gatekeeper is the same. Note, this Security Group resides in Layer 1, making it accessible in all other Layers.
 
 ```hcl
 resource "aws_security_group" "rr_endpoints_sg" {
@@ -408,16 +408,16 @@ resource "aws_security_group" "rr_endpoints_sg" {
 }
 ```
 
-Lets have a look at the rules we're attaching for this Layer.
+Let's have a look at the rules we're attaching for this Layer.
 
 1. **Ingress: Frontend -> Interface Endpoints `rr_endpoints_ingress_from_frontend`**
    **Why is this important**
-   The frontend needs to reach ECR to pull images and CloudWatch logs to write logs. We have a Frontend egress rule that allows that. This is it's complementary ingress rule that accepts traffic at the endpoints.
+   The frontend needs to reach ECR to pull images and CloudWatch logs to write logs. We have a Frontend egress rule that allows that. This is its complementary ingress rule that accepts traffic at the endpoints.
    **Why port 443**
    It is standard practice that all traffic on the AWS backbone is encrypted hence HTTPS managed by AWS.
 2. **Ingress: Backend -> Interface Endpoints `rr_endpoints_ingress_from_frontend`**
    **Why is this important**
-   The Backend needs to communicate with ECR, CloudWatch logs, and Secrets Manager. The egress outbound rule already exists, above in sg-app-tier section. This is the receiving end of that, inbound ingress, at the endpoints door step.
+   The Backend needs to communicate with ECR, CloudWatch logs, and Secrets Manager. The egress outbound rule already exists, above in sg-app-tier section. This is the receiving end of that, inbound ingress, at the endpoints doorstep.
    **Why port 443**
    The AWS backbone standard uses HTTPS. It's the fastest and relatively cheaper way to go from our VPC to AWS managed resources, without leaving the AWS system.
 
@@ -427,11 +427,11 @@ Three security groups are created in this sub module and we output them making t
 
 ## iam
 
-While the Security Groups guard the gate and only allow traffic with the right credentials to pass through, the IAM role gives an entitity the permissions to perform specified tasks against AWS resources i.e. after authentication what privileges are granted to the entity to accomplish the necessary tasks. The focus in this module is to create the ECS roles and attach to them the required privileges.
+While the Security Groups guard the gate and only allow traffic with the right credentials to pass through, the IAM role gives an entity the permissions to perform specified tasks against AWS resources i.e. after authentication what privileges are granted to the entity to accomplish the necessary tasks. The focus in this module is to create the ECS roles and attach to them the required privileges.
 
 The main file in this module is [ecs-roles.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/04-aws-ecs/modules/iam/ecs-roles.tf), it houses all the roles.
 
-Lets look at the roles:
+Let's look at the roles:
 
 ### 1. Ritual Roast - ECS Execution Role `rr_ecs_execution_role`
 
@@ -499,7 +499,7 @@ resource "aws_iam_role" "rr_ecs_backend_task_role" {
 
 As usual, nothing new to see here, the `assume_role_policy` object specifies the action `"sts:AssumeRole"` and the entity that can assume it, `Principal = { Service = "ecs-tasks.amazonaws.com" }`.
 
-Lets look at the policy that will be attached to it.
+Let's look at the policy that will be attached to it.
 **User defined policy for Secrets Manager `rr_backend_task_policy`**
 
 ```hcl
@@ -523,12 +523,12 @@ resource "aws_iam_policy" "rr_backend_task_policy" {
 }
 ```
 
-Lets have a look at the actions:
+Let's have a look at the actions:
 
-1. `"secretsmanager:GetSecretValue"` - Permission read the actual password i.e. retrieve the password value.
-2. `"secretsmanager:DescribeSecret"` - Permission to reads metadata about the secret, not the value itself: which version is currently staged as AWSCURRENT/AWSPENDING/AWSPREVIOUS etc.
+1. `"secretsmanager:GetSecretValue"` - Permission to read the actual password i.e. retrieve the password value.
+2. `"secretsmanager:DescribeSecret"` - Permission to read metadata about the secret, not the value itself: which version is currently staged as AWSCURRENT/AWSPENDING/AWSPREVIOUS etc.
 
-As they are, the permissions will read secrets value and retrieve the secret's metadata on all secrets. To ensure least privileges, we need to lock this down to this database secret(s). This is achieved by resource section: 3. `Resource = ["arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:rr-${var.environment}-db-secret-*"]` - This specifies the exact resource that the above privileges applies to: any secret that has the following prefix `rr-${var.environment}-db-secret-*`. Note the use of the wildcard operator `*` here means any number of characters. Thus as long as the secret name matches upto the prefix, this policy will allow our Backend ECS Task to read it. Now our policy is locked down, ready to be attached.
+As they are, the permissions will read secrets value and retrieve the secret's metadata on all secrets. To ensure least privileges, we need to lock this down to this database secret(s). This is achieved by resource section: 3. `Resource = ["arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:rr-${var.environment}-db-secret-*"]` - This specifies the exact resource that the above privileges apply to: any secret that has the following prefix `rr-${var.environment}-db-secret-*`. Note the use of the wildcard operator `*` here means any number of characters. Thus as long as the secret name matches up to the prefix, this policy will allow our Backend ECS Task to read it. Now our policy is locked down, ready to be attached.
 
 **Attaching the policy to the role `rr_backend_task_role_attachment`**
 
@@ -568,7 +568,7 @@ This is just an empty skeleton. It is an example of excellent security architect
 
 1. **No AWS API Calls needed** - The Next.js Frontend is designed to handle web traffic and make standard HTTP API calls to the Internal ALB, which routes to our Flask Backend. **Frontend has no requirement to talk to AWS Secrets Manager nor our database. Thus, it needs no AWS permissions.**
 2. **The Ultimate Least Privilege** - The best way to enforce least privilege is to grant nothing at all.
-3. **Future-Proofing (Why we create the skeleton anyway)** - If we decide later that the Frontend needs to upload files directly to S3 or to enabe AWS X-Ray tracing for performance monitoring, we simply attach a policy to this existing role. At that point, if we didn't have this skeleton role attached to this ECS Task definition, adding permissions later would require modifying the Task definition and Terraform would tear down the running containers and redeploy with the updates. Thus by providing the skeleton now, we decouple the infrastructure deployment from future IAM policy updates.
+3. **Future-Proofing (Why we create the skeleton anyway)** - If we decide later that the Frontend needs to upload files directly to S3 or to enable AWS X-Ray tracing for performance monitoring, we simply attach a policy to this existing role. At that point, if we didn't have this skeleton role attached to this ECS Task definition, adding permissions later would require modifying the Task definition and Terraform would tear down the running containers and redeploy with the updates. Thus by providing the skeleton now, we decouple the infrastructure deployment from future IAM policy updates.
 
 ### outputs.tf
 
@@ -576,7 +576,7 @@ The roles previewed above are needed in the `ecs` module, so we output all three
 
 ## load-balancers
 
-In this module we wire up the Public ALB to forward traffic to our ECS tasks/containers and setup the internal ALB.
+In this module we wire up the Public ALB to forward traffic to our ECS tasks/containers and set up the internal ALB.
 
 ### Wiring the Public ALB for ECS
 
@@ -607,7 +607,7 @@ resource "aws_lb_target_group" "rr_frontend" {
 }
 ```
 
-Lets understand the components one by one:
+Let's understand the components one by one:
 
 1. `name = "rr-${var.environment}-ecs-frontend-tg"` - This is the unique name given to this target group inside AWS
 2. `port = 3000` - This is the network port on which the Next.js application container is listening on
@@ -621,10 +621,10 @@ A health check is an automated mechanism where the ALB periodically sends a back
 **Why is this important**
 ECS Fargate containers are dynamic and ephemeral, they spin up, scale out, or get replaced when unhealthy. The ALB must constantly verify that a container is actually booted up and ready to serve requests before sending real user traffic to it. If a container crashes, the health check fails, and the ALB immediately stops routing traffic to that broken task while ECS spins up a replacement.
 **Shallow checks vs Deep checks**
-**Shallow health checks** only checks if the immediate web process, our Next.js app server, is alive and responding. It does not test downstream dependencies like connections or secondary APIs.
-**Deep health checks** tests the entire stack, checking if the web server is alive, plus verifying that the backend database and third-party APIs are all reachable
+**Shallow health checks** only check if the immediate web process, our Next.js app server, is alive and responding. It does not test downstream dependencies like connections or secondary APIs.
+**Deep health checks** test the entire stack, checking if the web server is alive, plus verifying that the backend database and third-party APIs are all reachable
 **Why shallow checks are used here instead of deep checks**
-To avoid ALB container assasination, cascading failures: If our frontend health check were "deep" and checked if the backend API or RDS MySQL database was reachable, the following would happen:
+To avoid ALB container assassination, cascading failures: If our frontend health check were "deep" and checked if the backend API or RDS MySQL database was reachable, the following would happen:
 
 1. A temporary database blip would cause the Frontend health check `/api/health` to fail, despite there being nothing wrong with the Frontend containers.
 2. The ALB would assume the Frontend containers were broken and terminate all of them.
@@ -634,7 +634,7 @@ To avoid ALB container assasination, cascading failures: If our frontend health 
 
 1. `enabled = true` - Explicitly enables the health check mechanism for this target group.
 2. `path = "/api/health"` - This is the specific URL endpoint inside the Next.js app that the ALB pings to check status
-3. `port = "3000"` - This is the port the ALB ping for health checks, it has to match the app's listening port
+3. `port = "3000"` - This is the port the ALB pings for health checks, it has to match the app's listening port
 4. `interval = 30` - This is the frequency, how often, the ALB sends a health check request, in seconds
 5. `timeout = 5` - This is the maximum time, in seconds, the ALB will wait for a response before counting that ping as a failure.
 6. `healthy_threshold = 2` - This is the number of consecutive successful pings required before a newly created or recovered container is marked **"Healthy"** and allowed to receive live traffic.
@@ -666,7 +666,7 @@ A process running on the ALB that actively listens for incoming client connectio
 **Why is this important**
 The Public ALB was created in Layer 1, but Layer 4 is where our ECS applications are deployed. Instead of recreating the ALB in Layer 4, a **Listener rule** allows Layer 4 to attach routing logic to Layer 1's existing Listener; that's what we have in the code directly above.
 
-Lets look at the components one by one:
+Let's look at the components one by one:
 
 1. `listener_arn = var.gateway_listener_arn` - This associates this listener rule to the Layer 1's Public ALB port 80 Listener, via its ARN. Essentially this instructs it to evaluate this rule for incoming web traffic.
 2. `priority = 100` - This is the evaluation order of the rule: Listeners evaluate rules in numerical order, the lower the number, the higher the priority. Thus Priority 100 ensures this rule is checked early in the chain, provided no other rules exist with priority less than 100.
@@ -702,7 +702,7 @@ This module outputs three things in [outputs.tf](https://github.com/ManunEbo/Ter
 1. `internal_alb_dns_name` - The internal ALB DNS name
 2. `frontend_tg_arn` - The Frontend target group ARN
 3. `backend_tg_arn` - The Backend target group ARN
-   This makes them available to the root module which in turns passes them into the `ecs` module.
+   This makes them available to the root module which in turn passes them into the `ecs` module.
 
 ## endpoints
 
@@ -710,23 +710,23 @@ VPC endpoints are fundamentally about keeping AWS traffic on the private AWS net
 
 ### The two types of Endpoints
 
-AWS provides two distinct types of VPC Endpoints: **Interface Endpoints** and **Gateway Endpoints**. Both are provided and managed by AWS, but they operate at different layers of your network. Gateway Endpoints were introduced first, specifically for S3 and DynamoDB, as a free routing feature. However, modifying route tables doesn't easily extend to thousands of different AWS and third-party services, nor does it allow on-premises resources, via **VPN/Direct Connect** to use them.
+AWS provides two distinct types of VPC Endpoints: **Interface Endpoints** and **Gateway Endpoints**. Both are provided and managed by AWS, but they operate at different layers of the network. Gateway Endpoints were introduced first, specifically for S3 and DynamoDB, as a free routing feature. However, modifying route tables doesn't easily extend to thousands of different AWS and third-party services, nor does it allow on-premises resources, via **VPN/Direct Connect** to use them.
 
 To solve this AWS introduced AWS PrivateLink and Interface Endpoints. These act like physical network cards plugged directly into our subnets, making them accessible to any resource in our VPC or on-premises networks.
 
 #### How they work
 
-1. **Interface Endpoints, Powered by AWS PrivareLink**
+1. **Interface Endpoints, Powered by AWS PrivateLink**
 1. AWS injects an Elastic Network Interface (ENI) with a private IP address directly into our specified subnets
 1. When the application makes a DNS request for an AWS service, e.g. `ecr.eu-west-2.amazonaws.com`, AWS intercepts it and resolves it to the local private IP of that ENI. The traffic never leaves the VPC, it goes straight to the ENI, which acts as a portal to the AWS service.
 1. Because it uses an ENI, we can secure access using a firewall, Security Groups.
 
 1. **Gateway Endpoints**
 1. AWS adds a specific route to our VPC's route tables. There are no ENIs or private IP addresses created.
-1. When your application trie to reach S3's public IP addresses, the route table intercepts that traffic based on a prefix list, e.g. `pl-123456`, and funnels it securely through the Gateway Endpoint over the AWS backbone.
+1. When our application tries to reach S3's public IP addresses, the route table intercepts that traffic based on a prefix list, e.g. `pl-123456`, and funnels it securely through the Gateway Endpoint over the AWS backbone.
 1. Because there is no ENI, we cannot use Security Groups. Instead, we make use of VPC Endpoint policies, **IAM JSON documents**, attached directly to the endpoint.
 
-Now lets look at individual Endpoints, one by one:
+Now let's look at individual Endpoints, one by one:
 
 ### ECR API `ecr_api`
 
@@ -747,7 +747,7 @@ resource "aws_vpc_endpoint" "ecr_api" {
 }
 ```
 
-Lets look at the components:
+Let's look at the components:
 
 1. `vpc_id = var.vpc_id` - This specifies the VPC that the Endpoints will be placed in, our VPC
 2. `service_name = "com.amazonaws.${var.aws_region}.ecr.api"` - This is the exact AWS service we're creating a bridge for.
@@ -786,10 +786,10 @@ resource "aws_vpc_endpoint" "s3" {
 }
 ```
 
-Lets have a look at the components that are different:
+Let's have a look at the components that are different:
 
 1. `vpc_endpoint_type = "Gateway"` - This specifies that this is a routing-based endpoint, meaning no ENIs and no hourly charges.
-2. `route_table_ids = var.route_table_ids` - Instead of providing `subnet_ids` like an interface endpoint, we specify route tables. AWS will automatically inject a custome route into these tables, e.g. `"Destination:S3 -> Target:vpce-xxx"`, for our private subnets.
+2. `route_table_ids = var.route_table_ids` - Instead of providing `subnet_ids` like an interface endpoint, we specify route tables. AWS will automatically inject a custom route into these tables, e.g. `"Destination:S3 -> Target:vpce-xxx"`, for our private subnets.
 3. `policy = data.aws_iam_policy_document.s3_gateway.json` - Here we specify an IAM policy document to enforce a Zero-Trust security posture, ensuring this tunnel only permits the ECS execution role to pull image layers, blocking any accidental or malicious S3 access by attaching an IAM policy directly to the network tunnel.
 
 ### outputs.tf
@@ -811,7 +811,7 @@ output "endpoint_ids" {
 
 ## ecs
 
-Elastic Container Services (ECS) consists of three broad components: Cluster, Tasks and Services. Lets build an analogy to aid our understanding of ECS. We can think of ECS as a company with the following departments:
+Elastic Container Service (ECS) consists of three broad components: Cluster, Tasks and Services. Let's build an analogy to aid our understanding of ECS. We can think of ECS as a company with the following departments:
 
 1. `Cluster` - This is the office building that houses the work to be done
 2. `Tasks` - This is the employee actually doing the work
@@ -819,13 +819,13 @@ Elastic Container Services (ECS) consists of three broad components: Cluster, Ta
 
 ### ECS [cluster](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/04-aws-ecs/modules/ecs/cluster.tf)
 
-An ECS cluster is a logical grouping, a perimeter, of our ECS resources. We can consider it a namespacce for our applications.
+An ECS cluster is a logical grouping, a perimeter, of our ECS resources. We can consider it a namespace for our applications.
 **What it does**
-The cluster acts as the overaching environment that holds our underlying infrastruture, either Fargate capacity or EC2 instances, and the applications running on them. It doesn't actually run any code. It provides isolation such as `production-cluster` and `dev-cluster` to ensure workloads in either space never mix.
+The cluster acts as the overarching environment that holds our underlying infrastructure, either Fargate capacity or EC2 instances, and the applications running on them. It doesn't actually run any code. It provides isolation such as `production-cluster` and `dev-cluster` to ensure workloads in either space never mix.
 **How it does it in the ECS family**
 
 1. `Infrastructure management` - When we instruct ECS to run a container, we must also specify which cluster to use. When using EC2 instances, the cluster tracks the total available CPU and memory and allocates the containers to available resources.
-2. `State tracking` - The cluster acts as the central brain for state. It constantly monitors how many resoures are available, which instanes are connected, and which applications are running where.
+2. `State tracking` - The cluster acts as the central brain for state. It constantly monitors how many resources are available, which instances are connected, and which applications are running where.
 
 ### ECS Tasks
 
@@ -846,35 +846,35 @@ An ECS Service is a long-running manager and scheduler for Tasks.
 Because Tasks die when they crash and don't auto restart, we don't run tasks manually. Instead we create a Service. The Service's job is to ensure that a specified number of Tasks, **Desired count**, are constantly running and healthy.
 **How they do it in ECS family**
 
-1. `Auto-healing` - The Service continouusly loops, comparing the **"Desired count"** of Tasks with the **"Running count"**. If the app crashes and a Task dies, the running count drops. The Service immediately notices this and commands the CLuster to spin up a new Task to replace it.
+1. `Auto-healing` - The Service continuously loops, comparing the **"Desired count"** of Tasks with the **"Running count"**. If the app crashes and a Task dies, the running count drops. The Service immediately notices this and commands the Cluster to spin up a new Task to replace it.
 2. `Loadbalancing` - The Service acts as a bridge between Tasks and the ALB: When the Service spins up a new Task, it takes that Task's private IP address and automatically registers it with the ALB. When a Task is being shut down, the Service deregisters it so users don't get routed to a dead container.
 3. `Deployments` - When we want to release a new version of our code, we update the Service. The service handles the deployment strategy, like a Rolling update: It will spin up Tasks with the new version of our code, wait for them to become healthy, and then slowly kill off the old Tasks, ensuring zero downtime.
 
 ### EC2 vs Fargate
 
-Here in Layer 4 we're deploying ECS with Fargate but lets compare the two methods of deploying ECS.
+Here in Layer 4 we're deploying ECS with Fargate but let's compare the two methods of deploying ECS.
 The core difference between EC2 and Fargate comes down to **who manages the underlying servers**. This choice in ECS is known as the "Launch Type" or "Capacity Provider".
 
 **ECS on EC2 (The "DIY" Approach)**
-With the EC3 launch type , we rent and manage the actual EC2 instances that will run our containers.
+With the EC2 launch type , we rent and manage the actual EC2 instances that will run our containers.
 
 1. `Management` - We're responsible for the infrastructure: We patch the OS, we manage security updates, and handle cluster scaling via ASGs.
 2. `Cost model` - **We pay for the entire EC2 instance while it is running, regardless of consumption patterns e.g. CPU utilization**
 3. `Customization` - We have complete control: We can attach GPUs, use specific CPU architectures, access the host operating system, and run custom host-level agents
 
 **ECS on Fargate (The "Serverless" Approach)**
-Fargate is a severless compute engine for containers whereby AWS takes responsibility of managing the underlying infrastructure leaving us accountable only for the application to be deployed on that infrastructure. Thus:
+Fargate is a serverless compute engine for containers whereby AWS takes responsibility of managing the underlying infrastructure leaving us accountable only for the application to be deployed on that infrastructure. Thus:
 
 1. `Management` - There are no servers to manage, patch, or secure. We simply tell AWS how much CPU and memory our tasks require and AWS finds the capacity and runs it automatically.
 2. `Cost model` - We pay precisely for the CPU and memory our Task requests, billed per second.
 3. `Customization` - Since we cannot access the host operating system, attach GPUs, or cache Docker images locally on the host, we are simply trading control for simplicity.
 
-So now that we've looked at the difference between ECS on EC2 vs Fargate, lets look at the setup for our project using Fargate.
+So now that we've looked at the difference between ECS on EC2 vs Fargate, let's look at the setup for our project using Fargate.
 
 ### Ritual Roast ECS Cluster
 
 **What it is**
-The Ritual Roast ECS cluster, `rr_ecs_cluster` is our projects locgical boundary and administrative grouping within AWS ECS where we will deploy and manage our containerized Next.js Frontend and Flask Backend Tasks.
+The Ritual Roast ECS cluster, `rr_ecs_cluster` is our project's logical boundary and administrative grouping within AWS ECS where we will deploy and manage our containerized Next.js Frontend and Flask Backend Tasks.
 
 ```hcl
 resource "aws_ecs_cluster" "rr_ecs_cluster" {
@@ -895,13 +895,13 @@ This acts as the control center i.e. the control plane for our ECS deployment. I
 **Why we need it**
 AWS ECS cannot run our Ritual Roast Tasks, Services in a vacuum. The cluster serves as the starting point for our deployment.
 
-Lets take a closer look at the components we haven't seen before:
+Let's take a closer look at the components we haven't seen before:
 
 1. `setting { name = "containerInsights", value = "enabled" }` - This enables AWS CloudWatch container insights. It automatically collects, aggregates, and summarizes metrics such as; CPU utilization, memory usage, disk read/writes, and network traffic. It does this both at the cluster and individual container/Task level. Note, without this we get very basic metrics.
 
 ### Ritual Roast Cluster capacity providers `rr_ecs_cp`
 
-A configuration resource that attaches compute capacity strategies, in this case severless AWS Fargate, directly to the ECS cluster
+A configuration resource that attaches compute capacity strategies, in this case serverless AWS Fargate, directly to the ECS cluster
 
 ```hcl
 resource "aws_ecs_cluster_capacity_providers" "rr_ecs_cp" {
@@ -922,12 +922,12 @@ It defines where and how AWS provisions underlying compute infrastructure when l
 **Why we need it**
 It establishes default scaling and cost-allocation strategies for the cluster. It allows us to mix standard guaranteed serverless compute with discounted capacity options without having to manage servers or underlying virtual machines.
 
-Lets take a look at the components:
+Let's take a look at the components:
 
 1. `cluster_name = aws_ecs_cluster.rr_ecs_cluster.name` - This explicitly links this capacity provider configuration to our ECS cluster.
 2. `capacity_providers = ["FARGATE", "FARGATE_SPOT"]` - This registers two available serverless compute options for the cluster:
    **FARGATE** - Standard, high-availability serverless compute with guaranteed resources.
-   **FARGATE_SPOT** - Leverages spare AWS capacity at up to 70% discount, however AWS can reclaim that capacity with a 2 minute warning if that capacity is needed else where.
+   **FARGATE_SPOT** - Leverages spare AWS capacity at up to 70% discount, however AWS can reclaim that capacity with a 2 minute warning if that capacity is needed elsewhere.
 3. `default_capacity_provider_strategy {}` - This defines the default rule that ECS will use whenever a service or task is launched without explicitly specifying its own compute strategy
    **`base = 1`** - Guarantees that atleast one Task will always run on the specified provider, **Standard FARGATE**, to maintain a minimum baseline of guaranteed reliability
    **`weight = 100`** - Sets the relative ratio for Task allocation after the `base` requirement is met. Because `FARGATE` is assigned a weight of `100` in this strategy, 100% of additional Tasks launched under the default rule will go to standard `FARGATE`.
@@ -935,7 +935,7 @@ Lets take a look at the components:
 
 ### CloudWatch [log groups](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/04-aws-ecs/modules/ecs/log-groups.tf)
 
-In this file we create two distinct AWS CloudWatch Log groups: one for the Frontend, `rr_frontend_logs`, and another for the Backend, `rr_backend_logs`. Log groups are essentially base directories in the AWS cloud that organizes and stores text-based console output.
+In this file we create two distinct AWS CloudWatch Log groups: one for the Frontend, `rr_frontend_logs`, and another for the Backend, `rr_backend_logs`. Log groups are essentially base directories in the AWS cloud that organise and stores text-based console output.
 
 ```hcl
 resource "aws_cloudwatch_log_group" "rr_frontend_logs" {
@@ -950,9 +950,9 @@ resource "aws_cloudwatch_log_group" "rr_frontend_logs" {
 **What they do**
 They act as a centralized, highly available storage destination for our application logs. When our ECS Fargate containers are running, the built-in AWS log driver (`awslogs`) captures everything our application prints to the console, **standard output & standard error**, and instantly streams it into these groups.
 **Why we need it**
-Because Fargate containers are ephemeral, we need to transfer the logs to a persistent storage e.g. if our Flask backend hits a fatal error and the container crashes, AWS immediately destroys the container and spins up a new one. If we stored logs locally inside the container hard drive, those logs would vanish into thin air, leaving us completely blind as to why the crash happened. By streaming the output directly to CloudWatch Log Groups, our log are safely preserved outside of the container. If a crash occurs, we can log into the AWS console, open these log groups and read the exact error trace that caused the failure.
+Because Fargate containers are ephemeral, we need to transfer the logs to a persistent storage e.g. if our Flask backend hits a fatal error and the container crashes, AWS immediately destroys the container and spins up a new one. If we stored logs locally inside the container hard drive, those logs would vanish into thin air, leaving us completely blind as to why the crash happened. By streaming the output directly to CloudWatch Log Groups, our logs are safely preserved outside of the container. If a crash occurs, we can log into the AWS console, open these log groups and read the exact error trace that caused the failure.
 
-Lets take a look at the components one by one:
+Let's take a look at the components one by one:
 
 1. `name = "/ecs/rr-${var.environment}-frontend"` - This is the actual name of the log group as it will appear in the AWS CloudWatch UI.
    **`/ecs/`** - It is an AWS best practice to use folder-like paths to categorize logs. This instantly tells anyone looking at our logs that they belong to ECS.
@@ -980,26 +980,26 @@ They instruct AWS Fargate on how to run our applications. They specify:
 **Why we need it**
 Containers cannot run in ECS without instructions. Fargate doesn't manage servers, it needs a declarative manifest detailing every operational parameter before it spins up a Task. ECS Service will use these Task Definitions as the exact template to instantiate healthy, running containers.
 
-Lets now turn our attention to the individual Task manifest
+Let's now turn our attention to the individual Task manifest
 
 #### Frontend Task `rr_frontend_task`
 
 To save space we'll jump right into the components but for the full resource please click the file link for **Tasks** above.
 
-1. `family = "rr-${var.environment}-frontend-task"` - This is the name/namespace for this task definition series. Note, everytime we update this Terraform code, ECS increments the revision number.
+1. `family = "rr-${var.environment}-frontend-task"` - This is the name/namespace for this task definition series. Note, every time we update this Terraform code, ECS increments the revision number.
 2. `network_mode = "awsvpc"` - This is required for Fargate. It gives every running Task its own ENI and private IP allowing us to attach security groups to them.
 3. `requires_compatibilities = ["FARGATE"]` - This tells ECS to run this on serverless compute rather than on EC2 instances.
 4. `cpu = 512` - This is the Virtual Central Processing Units (vCPU) capacity limits for the Frontend Task i.e. 1024 units equals 1 vCPU, half of that **0.5 vCPU** is 512
 5. `memory = 1024` - This sets a hard limit of 1GB RAM (1024 MiB) for the Task. Unlike CPU (which throttles), exceeding RAM triggers an Out-Of-Memory (OOM) kill.
 6. `execution_role_arn = var.ecs_execution_role_arn` - This is the infrastructure role used by the ECS agent to pull the Docker image from ECR and send log streams to CloudWatch.
 7. `task_role_arn = var.ecs_frontend_task_role_arn` - This is the application role used by the code running inside the Frontend container, it has no access to anything e.g. RDS or Secrets Manager.
-8. `volume { name = "nextjs-cache" }` - This is a writable cache mount. It defines a temporary block of Fargate's local space named `nextjs-cache`. This volume will be mounted at `/app/.next/cache` inside our container with `readOnly = false`. Lets elaborate on this:
+8. `volume { name = "nextjs-cache" }` - This is a writable cache mount. It defines a temporary block of Fargate's local space named `nextjs-cache`. This volume will be mounted at `/app/.next/cache` inside our container with `readOnly = false`. Let's elaborate on this:
 
 - Setting `readonlyRootFilesystem = true` locks down the entire container OS by default
 - `mountPoints` with `readOnly = false` explicitly carves out targeted, writable exceptions where the application needs to store temporary runtime data
   Essentially, this is a way around the readOnly root filesystem to provide a temporary writable location without the OS throwing an error.
 
-9. `container_definitions = jsonencode()` - This block defines the individual Docker container settings. Lets expand on its components:
+9. `container_definitions = jsonencode()` - This block defines the individual Docker container settings. Let's expand on its components:
 
 - `name = "rr-frontend-container-01"` - This is the container's name inside ECS
 
@@ -1009,7 +1009,7 @@ To save space we'll jump right into the components but for the full resource ple
 
 - `readonlyRootFilesystem = true` - This makes the container OS read-only. Thus if an attacker manages to exploit an application vulnerability, they cannot modify system files, write malware, or download malicious scripts to disk.
 
-- **`mountPoints = [...]`** - This attaches a Task level storage volume directly into a specified folder inside oru running Docker container. It concists of an array of configuration objects that maps defined storage volumes to paths inside the container. Thus it enables mounting multiple volumes to different directories within a single container. Lets look into its constituents
+- **`mountPoints = [...]`** - This attaches a Task level storage volume directly into a specified folder inside our running Docker container. It consists of an array of configuration objects that maps defined storage volumes to paths inside the container. Thus it enables mounting multiple volumes to different directories within a single container. Let's look into its constituents
 
 - `sourceVolume  = "nextjs-cache"` - This is the exact name of the storage volume declared above, `volume { name = "nextjs-cache" }`, it identifies which underlying Fargate ephemeral storage block to attach.
 
@@ -1021,7 +1021,7 @@ To save space we'll jump right into the components but for the full resource ple
 
 - `containerPort = 3000` - This is the specific port inside the container that our application listens for incoming traffic on.
 
-- `hostPort = 3000` - The port reserved on the underlying network interface to receive incoming traffic from external resources. Note, because Fargate tasks run in `awsvpc` network mode, where every Task gets its own dedicated ENI and IP, AWS requires `hostPort` t either match `containerPort` exactly or be ommitted entirely
+- `hostPort = 3000` - The port reserved on the underlying network interface to receive incoming traffic from external resources. Note, because Fargate tasks run in `awsvpc` network mode, where every Task gets its own dedicated ENI and IP, AWS requires `hostPort` to either match `containerPort` exactly or be omitted entirely
 
 - `protocol = "tcp"` - Web applications using HTTP/HTTPS require TCP to guarantee reliable, ordered packet delivery.
 
@@ -1033,7 +1033,7 @@ To save space we'll jump right into the components but for the full resource ple
 
 - `logConfiguration = {}` - This configures how ECS captures standard output, `stdout` and standard error, `stderr`, streams from the container and routes them to CloudWatch.
 
-- `logDriver = "awslogs"` - This specifies the log driver mechanism. The `awslog` driver uses the native AWS log driver to stream console output directly from the container to CloudWatch logs
+- `logDriver = "awslogs"` - This specifies the log driver mechanism. The `awslogs` driver uses the native AWS log driver to stream console output directly from the container to CloudWatch logs
 
 - `options = {...}` - These are key-value pairs supplying required parameters specific to the `awslogs` driver.
 
@@ -1062,13 +1062,13 @@ environment = [
 ]
 ```
 
-Here we're injecting the ARN pointing to the database secret stored in AWS Secrets Manager into an environment variable, note its retrieved dynamically using data source at runtime. We also retrieve the AWS region to correctly map to the region in which our database secret is kept, since Secrets Manager Secrets are region specific i.e. the AWS SDK uses this variable to direct its API call to the correct regional Secrets Manager endpoint.
+Here we're injecting the ARN pointing to the database secret stored in AWS Secrets Manager into an environment variable, note it's retrieved dynamically using data source at runtime. We also retrieve the AWS region to correctly map to the region in which our database secret is kept, since Secrets Manager Secrets are region specific i.e. the AWS SDK uses this variable to direct its API call to the correct regional Secrets Manager endpoint.
 
 ## Instructions
 
 0. Ensure that the images have been pushed to ECR.
 1. On the terminal change directory to the project root, `cd ~/terraform/v2-ritual-roast/`
-2. Push the whole project to github, `git push origin main`. Note you must have setup origin prior to running this
+2. Push the whole project to GitHub, `git push origin main`. Note you must have set up origin prior to running this
 3. Copy the name of the S3 bucket used in Layer 1
 4. Open `04-aws-ecs/environments/dev/providers.tf` and replace the bucket name from `"rr-capstone-5b160b287a99a6d9"` with the value.
 5. If you're using a different region, change the provider region from `"eu-west-2"` to your desired region.

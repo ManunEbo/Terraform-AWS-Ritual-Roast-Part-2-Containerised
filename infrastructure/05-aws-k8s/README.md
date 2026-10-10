@@ -1,6 +1,6 @@
 # Layer 5 - K8s on EC2 with GitOps
 
-This Layer is by far the most jampacked Layer in the whole project. With ECS in Layer 4 we took the serverless route with Fargate where we entrusted the responsibility of managing the servers our ECS Task containers were running on to AWS. In this Layer we take back that control building and operating an entire **Kubernetes cluster from scratch**; the control plane, the pod network, the service mesh, and the **Continuous Deployment (CD) pipeline** that keeps it in sync with Git. We do this on plain EC2 instances, with nothing managed by AWS Serveless. We host a live comparison between the original app ("V1") and a rewritten challenger ("V2"), shifting traffic between them using every major progressive-delivery strategy: Canary, blue-green, and shadow deployment.
+This Layer is by far the most jam-packed Layer in the whole project. With ECS in Layer 4 we took the serverless route with Fargate where we entrusted the responsibility of managing the servers our ECS Task containers were running on to AWS. In this Layer we take back that control building and operating an entire **Kubernetes cluster from scratch**; the control plane, the pod network, the service mesh, and the **Continuous Deployment (CD) pipeline** that keeps it in sync with Git. We do this on plain EC2 instances, with nothing managed by AWS Serverless. We host a live comparison between the original app ("V1") and a rewritten challenger ("V2"), shifting traffic between them using every major progressive-delivery strategy: Canary, blue-green, and shadow deployment.
 
 <a href="documents/hld-architecture/layer5-hld.png">
   <img src="documents/hld-architecture/layer5-hld.png"
@@ -8,7 +8,7 @@ This Layer is by far the most jampacked Layer in the whole project. With ECS in 
        width="100%">
 </a>
 
-This illistrates a highly available, self-managed **K3s Kubernetes cluster** integrated with **Istio Service Mesh** and **ArgoCD** to enable GitOps-driven application delivery, progressive canary rollouts, and comprehensive cluster observability.
+This illustrates a highly available, self-managed **K3s Kubernetes cluster** integrated with **Istio Service Mesh** and **ArgoCD** to enable GitOps-driven application delivery, progressive canary rollouts, and comprehensive cluster observability.
 
 **Key Highlights** Below are the main highlights based on the HLD above:
 
@@ -26,15 +26,15 @@ In summary, we're going to accomplish the following:
 
 1. Spin up EC2 instances and prepare them to house Kubernetes controlplane and worker nodes
 2. Setup the networking and security to facilitate smooth traffic flow
-3. Deploy our application using a light weight production version of Kubernetes, K3S, with GitOPs
+3. Deploy our application using a lightweight production version of Kubernetes, K3S, with GitOps
 4. Test various deployment strategies with Istio
 5. Setup observability with Kiali and Grafana Cloud Dashboards
 
 ## Costs Summary
 
-Note, this is the most expensive of the Layers in this project. The following are some of the highest contributers to costs:
+Note, this is the most expensive of the Layers in this project. The following are some of the highest contributors to costs:
 
-1. **EC2 Costs** - The choice of **instance type** is **t3.medium** and for control plane we have 3 of those and 2 for worker nodes. It is possible to run this with **t3.small** but the preference was for plenty of room in terms of capacity. Feel free to drop these to `t3.small` but if you get **Out Of Memory KIlls (`OOMKILL`)** then you know why.
+1. **EC2 Costs** - The choice of **instance type** is **t3.medium** and for control plane we have 3 of those and 2 for worker nodes. It is possible to run this with **t3.small** but the preference was for plenty of room in terms of capacity. Feel free to drop these to `t3.small` but if you get **Out Of Memory Kills (`OOMKILL`)** then you know why.
 2. **Additional credentials in Secrets Manager** - To securely pass the GitHub PAT to Argo CD and the Grafana credentials to Grafana Alloy (or Prometheus), it is safer to store them in AWS Secrets Manager and have the External Secrets Operator (ESO) retrieve them at runtime to synchronize them as Kubernetes Secrets.b and Grafana Cloud.
 
 # Dev environment
@@ -64,7 +64,7 @@ Marking them as sensitive means that they will not be printed directly in the te
 
 # Modules
 
-Lets take a detailed look at the modules that this project is comprise of. Once we have a good grasp of the contents then we'll turn our attention to the **Kubernetes manifest directory `k8s_manifests`** where we'll play with the deployment strategies and more.
+Let's take a detailed look at the modules that this project is comprised of. Once we have a good grasp of the contents then we'll turn our attention to the **Kubernetes manifest directory `k8s_manifests`** where we'll play with the deployment strategies and more.
 
 ## Security Groups (`security_k8s`)
 
@@ -78,7 +78,7 @@ Lets review them one by one.
 
 ### [nlb-sg](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/modules/security_k8s/nlb-sg.tf)
 
-This security group is for the internal Network Loadbalancer, for **High Availability (HA) controlplane**. Note the NLB itself is created in the **compute_k8s** module along side the controlplane launch template. This loadbalancer exists to facilitate communication between the worker nodes and the controlplane nodes. Worker nodes do not connect directly to a single controlplane instance's IP address. Instead they connect to this internal NLB, which evenly distributes API traffic across all three controlplane instances. Thus this security group ensures that only authorized worker nodes can communicate with the NLB, and that the NLB can only forward that traffic to the controlplane.
+This security group is for the internal Network Loadbalancer, for **High Availability (HA) controlplane**. Note the NLB itself is created in the **compute_k8s** module alongside the controlplane launch template. This loadbalancer exists to facilitate communication between the worker nodes and the controlplane nodes. Worker nodes do not connect directly to a single controlplane instance's IP address. Instead they connect to this internal NLB, which evenly distributes API traffic across all three controlplane instances. Thus this security group ensures that only authorized worker nodes can communicate with the NLB, and that the NLB can only forward that traffic to the controlplane.
 
 ```hcl
 resource "aws_security_group" "rr_k8s_nlb_sg" {
@@ -121,7 +121,7 @@ resource "aws_security_group" "rr_k8s_worker_backend_sg" {
 }
 ```
 
-Lets now turn our attention to the Security Group rules:
+Let's now turn our attention to the Security Group rules:
 
 #### Ingress rules
 
@@ -130,14 +130,14 @@ Lets now turn our attention to the Security Group rules:
     **Protocol `-1`** - `-1` means **"ALL protocols"** in AWS Security Groups (TCP,UDP,ICMP,etc). We're using it here because overlay traffic encapsulated by Calico carries diverse internal protocol types between application containers i.e. in using `-1` we leave the Security Group open ended, from the Frontend, so that we don't have to specify a rule for each port that might be required by Kubernetes, Calico, Istio, CoreDNS and telemetry agents such as Grafana.
 2.  `rr_backend_ingress_from_cp` - This allows the K3s controlplane to talk to the Kubelet daemon running on Backend worker nodes. This is required for administrative commands like streaming container logs, `kubectl logs`, executing commands inside backend pods, `kubectl exec`, and monitoring pod lifecycle states.
     **Ports `from_port = 10250, to_port = 10250`** - Port 10250 is the standard hard coded HTTPS API port where the Kubernetes `Kubelet` agent listens for commands coming from the API server
-    **Protocol `tcp`** - This is used because Kubelet communications relies on stateful, TLS encrypted HTTP/2 streams over TCP to guaramtee data delivery and session security.
+    **Protocol `tcp`** - This is used because Kubelet communications relies on stateful, TLS encrypted HTTP/2 streams over TCP to guarantee data delivery and session security.
 3.  `rr_backend_ingress_istio_webhook` - This allows the controlplane API server to communicate with the Istio sidecar injector mutating webhook running on worker nodes. When a new Backend pod deployment is created, the Kubernetes API server calls this webhook to automatically inject the Envoy sidecar container into the pod spec before scheduling.
     **Ports `from_port = 15017`, `to_port = 15017`** - This is the default port used by Istio's `istiod` controlplane for webhook admission reviews.
     **Protocol `tcp`** - `tcp` is required because admission webhooks exchange JSON payloads via TLS-encrypted HTTPS requests, demanding guaranteed packet delivery.
 4.  `rr_backend_ingress_calico_bgp_cp` - This allows **Border Gateway Protocol (BGP)** routing traffic between controlplane nodes and Backend worker nodes. Calico uses BGP to broadcast pod IP routing tables across all cluster nodes so every node knows which EC2 instance hosts which pod IP.
     **Ports `from_port = 179`, `to_port = 179`** - This is the standard **IANA-registered** port for BGP communication.
     **Protocol `tcp`** - `tcp` is the underlying transport protocol for BGP, ensuring that routing table updates are delivered reliably and in order across cluster nodes.
-5.  `rr_backend_ingress_calico_vxlan_cp` - This allows VXLAN-encapsulated pod traffic to flow between controlplane nodes and Backend worker nodes. It prevents AWS ENI source/destinatin checks from silently dropping cross-node pod traffic.
+5.  `rr_backend_ingress_calico_vxlan_cp` - This allows VXLAN-encapsulated pod traffic to flow between controlplane nodes and Backend worker nodes. It prevents AWS ENI source/destination checks from silently dropping cross-node pod traffic.
     **The problem VXLAN solves in Kubernetes on AWS** - In a Kubernetes cluster, every pod receives its own internal IP address e.g. `192.168.x.x`, this IP is not part of the VPC CIDR block. AWS VPC networking only recognizes the primary IP addresses assigned to EC2 ENIs i.e. the VPC CIDR range IPs. If **node 1 `10.0.1.50`** attempts to send a raw packet from a Frontend pod `192.168.1.10` to a Backend pod `192.168.2.20` on **Node 2 `10.0.2.60`**, AWS networking **drops** the packet because AWS does not recognize `192.168.2.20` on that subnetwork interface.
     **How VXLAN encapsulation works step by step**
     - **Inner Packet Creation** - Pod A `192.168.1.10` sends an API request targeted to Pod B `192.168.2.20`.
@@ -164,12 +164,12 @@ Lets now turn our attention to the Security Group rules:
 9.  `rr_backend_ingress_typha_cp` - This allows controlplane nodes to connect to **Calico Typha** instances running on Backend worker nodes. Typha caches and fans out Kubernetes datastore state updates to Calico agents, preventing hundreds of pods from overwhelming the API server with direct watches
     **The problem Typha solves: The "Thundering Herd" Effect**
     In a standard Calico setup without Typha, every single worker node runs a `calico-node` pod. Each `calico-node` pod must constantly watch the Kubernetes API server and underlying `etcd` data store for changes to: **Pod IP assignment**, **Network policies**, **Service endpoints**, **Node status changes**.
-    **Whithout Typha (Direct Watches)**
+    **Without Typha (Direct Watches)**
     If we have **50 worker nodes**, we have 50 `calico-node` instances independently opening persistent watch connections to the API server. Every time a single pod is created, deleted, or assigned an IP, `etcd` and the API server must calculate and broadcast that update 50 separate times across 50 TCP streams.
     **With Typha (Fan-Out Cache)**
     Typha acts as an intermediary caching proxy. Typha opens one single watch connection to the K3s API server. When network states change, the API server updates Typha once. Typha then fans out (distributes) those updates to all `calico-node` agents over port 5473. This reduces the load on `etcd` and the API server by up to 95%, drastically cutting down CPU and memory overhead on the controlplane.
     **Ports `from_port = 5473`, `to_port = 5473`** - Port 5473 is the default port assigned to Calico Typha for serving state synchronization clients.
-    **Protocol `tcp`** - this is require to maintain persistent, ordered state streams between TYpha servers and Calico node daemons.
+    **Protocol `tcp`** - this is required to maintain persistent, ordered state streams between Typha servers and Calico node daemons.
 10. `rr_backend_ingress_ipip_cp` - This allows **IP-in-IP (IPIP)** encapsulated packets from controlplane nodes to enter Backend worker nodes. This serves as a zero-trust fallback overlay mechanism if Calico transitions or falls back from VXLAN to IPIP encapsulation.
     **The problem IPIP solves**
     In Kubernetes, **every pod in a cluster must be able to communicate with every other pod on any node directly by its IP address, without using Network Address Translation, NAT**. This conflicts with cloud network; with respect to our security groups, pods are on a different CIDR block to our VPC CIDR. As a result the security groups drop pod to pod packets between pods in different nodes.
@@ -180,7 +180,7 @@ Lets now turn our attention to the Security Group rules:
     **Ports `from_port = 0`, `to_port = 0`** - This is set to `0` because **IP-in-IP** operates directly at Layer 3, Network Layer, of the OSI model and does not use Layer 4 transport ports like TCP or UDP.
     **Protocol `4`** - `4` is the official IP protocol number for **IPv4-inIPv4** encapsulation (IPIP). We must specify `4` instead of `tcp` or `udp` because raw IPIP packet headers bypass standard transport protocols.
 11. `rr_backend_ingress_metrics_cp` - This allows the controlplane to scrape node and pod resource usage metrics from the **Metrics Server** running on Backend worker nodes. This data powers CPU/Memory metrics shown in `kubectl top` and enables **Horizontal Pod Autoscalers (HPA)** to scale pods.
-    **Ports `from_port = 4443`, `to_port = 4443`** - This is the default secure port served by the Kubernete Metrics Server extension API.
+    **Ports `from_port = 4443`, `to_port = 4443`** - This is the default secure port served by the Kubernetes Metrics Server extension API.
     **Protocol `tcp`** - This is used to ensure reliable scraping of HTTPS metrics endpoints by the controlplane.
 
 #### Egress rules
@@ -225,7 +225,7 @@ The associated security group rules are identical reverses to the Backend securi
 
 ### [controlplane-sg](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/modules/security_k8s/controlplane-sg.tf)
 
-This security group is for the controlplane group of nodes. It provides protection from unwanted access while facilitating required access for Frontend and Backend group of nodes as well as the internal NLB. Once again, since security groups require an egress in one end and an ingress in the other to accept the traffic much of the rules in this section are the counter parties to the rules both the worker security groups. We will skip those rules and focus on what's different. Lets have a look at the rules:
+This security group is for the controlplane group of nodes. It provides protection from unwanted access while facilitating required access for Frontend and Backend group of nodes as well as the internal NLB. Once again, since security groups require an egress in one end and an ingress in the other to accept the traffic much of the rules in this section are the counter parties to the rules both the worker security groups. We will skip those rules and focus on what's different. Let's have a look at the rules:
 
 1. **Kubernetes API Server Access `rr_cp_ingress_api_from_frontend`, `rr_cp_ingress_api_from_backend`, `rr_cp_ingress_api_from_nlb`** - These rules allow worker nodes (Kubelet, Kube-Proxy, CNI daemons) and the internal NLB to communicate with the K3s controlplane. The API server is the central orchestration brain of the cluster: worker nodes need to reach it to report health, pull pod specs, and fetch secrets. The NLB uses this to route `kubectl` commands from administrators/CI-CD pipelines and perform controlplane health checks. More on the role of the NLB in the compute section.
    **Ports `from_port = 6443`, `to_port = 6443`** - This is the standard default port reserved by Kubernetes and K3s for secure API server communication.
@@ -241,7 +241,7 @@ This security group is for the controlplane group of nodes. It provides protecti
    A High-Availability (HA) Kubernetes controlplane runs multiple nodes that must constantly sync cluster state in real time:
    - **`etcd` Consensus & Leader election** - Embedded `etcd` nodes use the Raft consensus algorithm, ports `2379` and `2380`, to replicate every single cluster change, hold leader elections, and maintain heartbeat signals.
 
-   - **Controlplane Mesh & Health checks** - K3s components; controller-manager, scheduler, API servers; and CNI pods running accross the CP nodes require uninterrupted communication.
+   - **Controlplane Mesh & Health checks** - K3s components; controller-manager, scheduler, API servers; and CNI pods running across the CP nodes require uninterrupted communication.
      If a single packet or port gets blocked between controlplane nodes during an `etcd` leader election or state sync, `etcd` can lose quorum, putting the entire Kubernetes API into a read-only or frozen state.
 
    **Ports & Protocol** - Setting both ports to `0` acts as a complete wildcard meaning all ports `0-65535`. Note, in AWS Security Group API, whenever Protocol is set to `-1`, **All Protocols**, AWS strictly requires `from_port` and `to_port` to be set to `0`. This is because non-Layer 4 OSI protocols such as ICMP or raw IP protocol 4, don't have the concept of TCP/UDP port numbers.
@@ -259,35 +259,35 @@ This security group is for the controlplane group of nodes. It provides protecti
 
 ### [nlb-sg](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/modules/security_k8s/nlb-sg.tf)
 
-This security group controls network traffic for the private AWS Network Loadbalancer (NLB) that sits in front of the K3S controlplane API servers. It establishes an internal, high-availability proxy layer, ensuring only authorized cluster worker nodes can route requests through the NLB to reach the Kubernetes API, `kube-apiserver`. Lets look at the security group rules attached:
+This security group controls network traffic for the private AWS Network Loadbalancer (NLB) that sits in front of the K3S controlplane API servers. It establishes an internal, high-availability proxy layer, ensuring only authorized cluster worker nodes can route requests through the NLB to reach the Kubernetes API, `kube-apiserver`. Let's look at the security group rules attached:
 
 1. **Worker Node ingress `rr_nlb_ingress_from_frontend` & `rr_nlb_ingress_from_backend`** - These rules allow the respective worker nodes in both the Frontend and Backend security groups to send inbound traffic to the NLB endpoint. Daemons running on worker nodes such as; `kubelet`, `kube-proxy`, and Calico agents; communicate with the Kubernetes API server via the NLB rather than targeting a single controlplane IP, maintaining uptime if an individual controlplane instance fails.
    **Ports `from_port = 6443`, `to_port = 6443`** - This is the default port reserved for encrypted Kubernetes API server communications.
-   **Protocol `tcp`** - Kubernete API calls are standard HTTPS/TLS REST requests and gRPC streams. TCP is required to guarantee packet delivery, ordering, and session persistence across the network.
+   **Protocol `tcp`** - Kubernetes API calls are standard HTTPS/TLS REST requests and gRPC streams. TCP is required to guarantee packet delivery, ordering, and session persistence across the network.
 2. **Controlplane Egress `rr_nlb_egress_to_cp`** - This permits the NLB to forward accepted worker node traffic and send health check probes out to the controlplane EC2 instances. This complements the ingress rule above i.e. it completes the path through the Loadbalancer: traffic enter the NLB via the ingress rules above and exits through this egress rule towards the backend targets.
    **Ports `from_port = 6443`, `to_port = 6443`** - This matches target port `6443` where the K3s API server processes incoming controlplane requests.
    **Protocol `tcp`** - This ensures reliable, end-to-end TCP TLS-encrypted API traffic and health check connections between the Loadbalancer and the controlplane target instances.
 
-That concludes the Security Groups aspect of this module. Lets now turn our attention to other files in this module
+That concludes the Security Groups aspect of this module. Let's now turn our attention to other files in this module
 
 ### [cluster_join_token_secret](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/modules/security_k8s/cluster_join_token_secret.tf)
 
 This group of resources automatically generates a secure, random cluster join token and stores it in AWS Secrets Manager. When new EC2 instances boot up, their startup scripts, userdata, retrieves this token from Secrets Manager. Once retrieved, the token is used to authenticate/join the K3s cluster. This avoids hardcoding secrets in code/userdata or manually copying tokens across nodes.
 
-1. **`random_password.k3s_join_token`** - Thisis a Terraform provider resource that creates a cryptographically strong random string in memory during `terraform apply`. K3S require a shared secret, **`K3S_TOKEN`** for any server or worker node to join an existing cluster. Generating it dynamically guarantees unique, non-predictable credentials across environments
+1. **`random_password.k3s_join_token`** - This is a Terraform provider resource that creates a cryptographically strong random string in memory during `terraform apply`. K3S require a shared secret, **`K3S_TOKEN`** for any server or worker node to join an existing cluster. Generating it dynamically guarantees unique, non-predictable credentials across environments
    **`length = 32`** - Generates a 32-character string, providing high cryptographic entropy to prevent brute-force attacks
    **`special = false`** - Excludes special characters e.g.`!@#$%`. This prevents syntax or escape errors when bash scripts inject the token into environment variables or terminal flags on the EC2 instances.
 2. **`aws_secretsmanager_secret.rr_k3s_join_token`** - This creates the AWS Secrets Manager container metadata object in our AWS account. It provides an encrypted AWS endpoint where nodes can retrieve the secret dynamically, by assuming their IAM role/IAM instance profile.
    **`recovery_window_in_days = 0`** - This overrides AWS's default 7-to-30 soft delete grace period, forcing the secret to be destroyed immediately after running `terraform destroy`.
 3. **`aws_secretsmanager_secret_version.rr_k3s_join_token_val`** - This holds and manages the actual sensitive value, **the join token**, inside the secret's container, `rr_k3s_join_token` i.e. AWS decouples secret metadata management from the secret data payload/value. This resource populates the container created, above, with the string produced by the random generator.
-   **`secret_id = aws_secretsmanager_secret.rr_k3s_join_token.id`** - Links this secret versio to the parent Secrets Manager resource created in step 2.
+   **`secret_id = aws_secretsmanager_secret.rr_k3s_join_token.id`** - Links this secret version to the parent Secrets Manager resource created in step 2.
    **`secret_string = random_password.k3s_join_token.result`** - Extracts the generated 32-character string from `random_password` and writes it into the secret body.
 
 ### [github_pat_secret](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/modules/security_k8s/github_pat_secret.tf)
 
 Here we create an AWS Secrets Manager secret to store the GitHub Personal Access Token (PAT) which was passed dynamically into Terraform via the terminal environment variable, `TF_VAR_github_pat`. This will then be retrieved by Kubernetes via ArgoCD to authenticate against `ghcr.io` to pull private container images and or check for updates. This is necessary to avoid hardcoding raw credentials into source control.
 
-Much of the setup we've already seen previously, so lets skip repetition:
+Much of the setup we've already seen previously, so let's skip repetition:
 
 1. **`resource "aws_secretsmanager_secret" "rr_github_pat" {}`** - This resource creates the secret shell in AWS Secrets Manager.
 2. **`resource "aws_secretsmanager_secret_version" "rr_github_pat_val" {}`** - This resource injects the actual value into the secret shell above:
@@ -305,13 +305,13 @@ Since we've already seen how to create the secret in Secrets Manager and how to 
 
 ## IAM (`iam_k8s`)
 
-In this section we review the IAM roles and attached policies that enable our various groups of EC2 instances; Frontend workers, Backend workers, and controlplane; to perform required tasks within our VPC and to communicate with external resources. Since we've covered IAM roles adequately in other modules, we'll skip the technical explaination and focus on what the resources facilitate.
+In this section we review the IAM roles and attached policies that enable our various groups of EC2 instances; Frontend workers, Backend workers, and controlplane; to perform required tasks within our VPC and to communicate with external resources. Since we've covered IAM roles adequately in other modules, we'll skip the technical explanation and focus on what the resources facilitate.
 
 ### [worker-frontend](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/modules/iam_k8s/worker-frontend.tf)
 
 Here we create the IAM role for the Frontend worker nodes, `rr_k3s_worker_frontend_role`. It defines the AWS identity and baseline permissions for the Frontend K3S worker EC2 instances. It establishes a trusted relationship with the AWS EC2 service, `ec2.amazonaws.com`, allowing instances to acquire short-term AWS credentials dynamically without storing hardcoded access keys on disk.
 **Custom policy `rr_worker_frontend_custom_policy`** - This enforces strict least-privilege access for frontend worker nodes. It grants permission to read only the K3s cluster join token secret, `rr-${var.environment}-k3s-join-token-*`, from AWS Secrets Manager. Note that the Frontend workers are explicitly restricted from reading sensitive Backend secrets, such as GitHub Pat, Grafana Cloud telemetry tokens, and RDS database credentials. That's because we're operating a zero trust least privilege security posture and the Frontend has no requirement for more credentials than what it's assigned.
-**Policy attachments** - Lets take a look at what the policies we're attaching do:
+**Policy attachments** - Let's take a look at what the policies we're attaching do:
 
 - `AmazonSSMManagedInstanceCore` - This enables AWS Systems Manager (SSM) agent functionality. It lets administrators securely connect via **SSM Session Manager** for shell access without opening inbound SSH port `22` in security groups, while enabling automated OS patching and inventory tracking.
 
@@ -356,19 +356,19 @@ In this module we configure the Layer 1 public ALB to forward 100% of the traffi
 
 The resources in this file update the public ALB from Layer 1 to redirect all the traffic to our K3s cluster. The following will be accomplished herein: Create a target group pointing to the frontend worker nodes, **NodePort `30080`**; link the target group to the **frontend ASG**; add a high priority ALB listener rule to ensure 100% of the traffic is routed to Layer 5 K8s instead of Layer 4 ECS.
 
-Lets look at each resource and its components, one by one:
+Let's look at each resource and its components, one by one:
 
 #### Target Group `aws_lb_target_group.rr_k8s_frontend_tg`
 
 This is a logical container that groups together backend destinations such as EC2 instances, IP addresses, containers, or Lambda functions, that receive traffic routed by an ALB. It serves as the bridge between public-facing ALB listener rules and the actual backend workload nodes. It specifies the health checks criteria and the pool of resources that this will be applied to. Note instead of specifying the destination in this resource, we link it to the frontend ASG via `aws_autoscaling_attachment` below.
 
-**Lets look at interesting components**
+**Let's look at interesting components**
 
 1. `port = 30080` - This specifies the target port on worker instances where the Istio ingress gateway service is listening via Kubernetes `NodePort`.
 2. `protocol = "HTTP"` - Traffic between the ALB and Istio proxy runs over unencrypted HTTP, the ALB handles SSL/TLS termination at the edge.
 3. `vpc_id = var.vpc_id` - This links the target group to the cluster's VPC network i.e. it puts the target group in our VPC.
 4. `target_type = "instance"` - This registers targets by EC2 instance ID rather than pod IP addresses.
-5. `health_check {}` block - The target group continuously executes health probes against registered targets. The ALB routes traffic only to health targets i.e. targets that are currently passing these health checks. Lets examin its components:
+5. `health_check {}` block - The target group continuously executes health probes against registered targets. The ALB routes traffic only to health targets i.e. targets that are currently passing these health checks. Let's examine its components:
    - `enabled = true` - Activates automated health probes from the ALB to the targets.
 
    - `path = "/"` & `port = "30080"` - This sends HTTP GET requests to `/` on port `30080` to verify Istio's availability.
@@ -394,13 +394,13 @@ This binds the Frontend worker ECS ASG directly to the target group above. As wo
 
 #### Listener Rule `aws_lb_listener_rule.rr_k8s_absolute_cutover`
 
-While the listener process continuesly listens for incoming client connection requests on a specific protocol and port, a **Listener Rule** is a routing statement attached to a listener that inspects incoming requests and determines how to route them i.e. the listener acts as the entry point, **front door**, while the the listener rule serves as the traffic controller, **"traffic cop"**. Thus the rule defines granular criteria to evaluate incoming HTTP/HTTPS request headers and route traffic dynamically.
+While the listener process continuously listens for incoming client connection requests on a specific protocol and port, a **Listener Rule** is a routing statement attached to a listener that inspects incoming requests and determines how to route them i.e. the listener acts as the entry point, **front door**, while the listener rule serves as the traffic controller, **"traffic cop"**. Thus the rule defines granular criteria to evaluate incoming HTTP/HTTPS request headers and route traffic dynamically.
 
 **Components**
 
 1. `listener_arn = var.gateway_listener_arn` - This references the ARN of the public HTTP/HTTPS ALB listener created in Layer 1 i.e. this rule is to be appended to the specified listener.
 2. `priority = 10` - This sets a high evaluation priority, **lower numbers execute first**. This ensures this rule matches incoming traffic before the default or lower-priority catch-all rules.
-3. `action {}` block - This specifies what to do with the traffic. Lets look at its components:
+3. `action {}` block - This specifies what to do with the traffic. Let's look at its components:
    a. `type = "forward"` - This instructs the ALB to redirect/forward the matching HTTP requests.
    b. `target_group_arn = aws_lb_target_group.rr_k8s_frontend_tg.arn` - This specifies the target group ARN as the destination to forward to.
 4. `condition {path_pattern { values = ["/*"] }}` - This intercepts all incoming URL paths `/*`, creating a 100% cutover of web traffic straight into the K3s Istio Ingress Gateway.
@@ -409,11 +409,11 @@ While the listener process continuesly listens for incoming client connection re
 
 In this Layer our resources reside in private subnets with no internet access. However, our EC2 instances need access to the internet to download updates, to fetch images and code from GitHub, to push metrics to Grafana Cloud. Herein we enable outbound only internet access via the NAT gateway i.e. our instances will be able to reach the internet but nothing in the internet can initiate a connection to our EC2 instances, they remain hidden in private subnets.
 
-Lets take a look at how we achieve this:
+Let's take a look at how we achieve this:
 
 ### [nat-gateway](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/modules/network_k8s/nat-gateway.tf)
 
-This file comprises three resources which combine to provide a secure route out to the public internet while remaining hidden behind private subnets in a private VPC. Lets dive into the resources one by one:
+This file comprises three resources which combine to provide a secure route out to the public internet while remaining hidden behind private subnets in a private VPC. Let's dive into the resources one by one:
 
 #### Elastic IP `aws_eip.rr_k8s_nat_eip`
 
@@ -464,7 +464,7 @@ When running containers, like Docker containers, in production, the following qu
 
 Kubernetes resolves all of the above, so you don't have to script it manually.
 
-Lets take a closer look at the constituent files:
+Let's take a closer look at the constituent files:
 
 ### [data](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/modules/compute_k8s/data.tf)
 
@@ -493,7 +493,7 @@ This script is the automated "ignition sequence" for the Kubernetes controlplane
 
 3. **The GitOps Handoff** - It installs ArgoCD, connects it to the private GitHub repository, and deploys a "Root Application". At this point, the script successfully finishes its job and hands all future cluster management over to GitOps.
 
-The file is broken down into 6 sections. Lets dive into the details of each section:
+The file is broken down into 6 sections. Let's dive into the details of each section:
 
 #### Section 1: System Updates & Prerequisites
 
@@ -519,7 +519,7 @@ NLB_DNS="${nlb_dns_name}"
 
 2. **Safety Exit `set -e`** - By default, if a line in a bash script fails, Linux ignores the error and keeps running the next lines. `set -e` forces the script to abort instantly if any single command returns an error. This prevents a broken installation step from snowballing into a larger failure.
 
-3. **System Update `dnf update -y`** - `dnf` is the package manager for Amazon Linux 2023, **Red Hat Linux (RHEL)**, its like an app store for Linux. This updates all installed system software to the latest security patches. The `-y` flag automatically answers **"Yes"** to confirmation prompts so the server doesn't wait for human input.
+3. **System Update `dnf update -y`** - `dnf` is the package manager for Amazon Linux 2023, **Red Hat Linux (RHEL)**, it's like an app store for Linux. This updates all installed system software to the latest security patches. The `-y` flag automatically answers **"Yes"** to confirmation prompts so the server doesn't wait for human input.
 
 4. **Installations `dnf install -y jq tar openssl`** - This installs three foundational command line utilities:
    - `jq` - This is a tool for extracting data from raw JSON strings; it is used to read AWS API responses
@@ -555,7 +555,7 @@ K3S_TOKEN=$(aws secretsmanager get-secret-value --region $REGION --secret-id $TO
 
 1. `TOKEN_SECRET_ID="rr-$ENVIRONMENT-k3s-join-token"` - This constructs the unique identifier string for the secret stored in AWS Secrets Manager.
 
-2. `K3S_TOKEN=$()` - The `$()` syntax executes the command inside the parantheses and saves its text output into the `$K3S_TOKEN` variable:
+2. `K3S_TOKEN=$()` - The `$()` syntax executes the command inside the parentheses and saves its text output into the `$K3S_TOKEN` variable:
    - `aws secretsmanager get-secret-value` - This calls the Secrets Manager API to retrieve a stored secret.
 
    - `--region $REGION` - This specifies the geographical region to send the request to.
@@ -568,7 +568,7 @@ K3S_TOKEN=$(aws secretsmanager get-secret-value --region $REGION --secret-id $TO
 
 #### Section 3: High-Availability Leader Election
 
-This is the first major logic block a `while` loop. This pauses the script execution until AWS confirms that exactly 3 controlplane instances are officially in the "running" state. This prevents a fata; "split-brain" scenario. If `Server A` boots faster than `Server B and C`, `Server A` might look look around, see no one, and declare itself the leader. If B and C do the same seconds later, we end up with 3 separate clusters instead of 1 shared cluster. Waiting forces them to acknowledge each other.
+This is the first major logic block a `while` loop. This pauses the script execution until AWS confirms that exactly 3 controlplane instances are officially in the "running" state. This prevents a fatal "split-brain" scenario. If `Server A` boots faster than `Server B and C`, `Server A` might look around, see no one, and declare itself the leader. If B and C do the same seconds later, we end up with 3 separate clusters instead of 1 shared cluster. Waiting forces them to acknowledge each other.
 
 ```bash
 echo "Waiting for all 3 control-plane instances to reach running state..."
@@ -606,7 +606,7 @@ echo "All 3 CP instances running. Proceeding with leader election."
 
 **Electing the Leader**
 
-Lets look at the next snippet of code:
+Let's look at the next snippet of code:
 This performs a deterministic leader election and a self-identity check: It queries AWS to find the private IP addresses of all running controlplane nodes, picks the lowest IP address to serve as the cluster leader, and then asks the local AWS hardware for its own IP address so it can determine if it is the chosen leader.
 
 ```bash
@@ -654,7 +654,7 @@ MY_IP=$(curl -sH "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/
    Every controlplane server running this script independently arrive at the exact same IP address `10.0.1.12` as the leader without needing an external consensus manager.
 
    **Self-discovery via IMDSv2 `MY_IP`**
-   1. **Request Session Token `IMDS_TOKEN`** - Sends an HTTP `PUT` reques to **AWS Instance Metadata Service Version 2 `IMDSv2`** at the internal IP `169.254.169.254`. This requests a secure access token valid for 6 hours, `21600` seconds.
+   1. **Request Session Token `IMDS_TOKEN`** - Sends an HTTP `PUT` request to **AWS Instance Metadata Service Version 2 `IMDSv2`** at the internal IP `169.254.169.254`. This requests a secure access token valid for 6 hours, `21600` seconds.
 
    2. **Fetch local IP `MY_IP`** - Passes that security token in an HTTP header to query the virtual hardware for this specific EC2 instance's own private IP address, `local-ipv4`.
 
@@ -667,14 +667,14 @@ MY_IP=$(curl -sH "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/
 
 #### Section 4: Cluster Initialization vs. Join Orchestration
 
-Here we hit our main conditional branching logic. It compares the server's own IP `MY_IP` to the universally agreed up on leader IP `EXISTING_IP`. If they match, this server is the leader. If they don't match, this server is a follower.
+Here we hit our main conditional branching logic. It compares the server's own IP `MY_IP` to the universally agreed upon leader IP `EXISTING_IP`. If they match, this server is the leader. If they don't match, this server is a follower.
 
 **Why we need it**
 In a High Availability setup, exactly one node must initialize the core database `etcd` and plant the "flag". The other nodes must use the join token to attach to the leader's database.
 
 **Components**
 
-1. `if [ -z "$EXISTING_CP" ] \vert{}\vert{} [ "$EXISTING_CP" == "$MY_IP" ]; then` - Checks if the variable `EXISTING_CP` is empty `-z`, OR `||` if the designated leader IP matches this machine's own IP `MY_IP`. Note, the `-z` means "is **zero-length (empty)**. Thus the whole thing translates as "**If the leader IP is EMPTY, OR if the leader IP is MINE.**". Because it is an `OR` statement, if the first condition is `false`, it must check the second condition. Lets examine how this plays out in reality.
+1. `if [ -z "$EXISTING_CP" ] \vert{}\vert{} [ "$EXISTING_CP" == "$MY_IP" ]; then` - Checks if the variable `EXISTING_CP` is empty `-z`, OR `||` if the designated leader IP matches this machine's own IP `MY_IP`. Note, the `-z` means "is **zero-length (empty)**. Thus the whole thing translates as "**If the leader IP is EMPTY, OR if the leader IP is MINE.**". Because it is an `OR` statement, if the first condition is `false`, it must check the second condition. Let's examine how this plays out in reality.
 2. **Scenario 1: The leader node**
    - AWS successfully returns an IP e.g. `10.0.1.12`
 
@@ -725,8 +725,8 @@ In a High Availability setup, exactly one node must initialize the core database
      Instead of manually installing the dozens of individual networking components required to make Calico work, we are installing an "**Operator**". In Kubernetes, an operator is essentially a software robot whose only job is to manage other software. Once we install the Tigera Operator, it runs in the background, waiting for us to give it a simple plan so it can build the network for us
 
      **The hidden trap `--server-side`**
-     This is the most critical part of this command. To understand why we need it lets consider how Kubernetes tracks changes:
-     - Normally, when we run `kubectl apply`, our local computer (the client) takes the entire YAML file we're applying, squashe it into a text string, and saves it as a sticky note (an annotation) on the object inside the Kubernete database, `etcd`. This is how Kubernete remembers what we applied last time
+     This is the most critical part of this command. To understand why we need it let's consider how Kubernetes tracks changes:
+     - Normally, when we run `kubectl apply`, our local computer (the client) takes the entire YAML file we're applying, squashes it into a text string, and saves it as a sticky note (an annotation) on the object inside the Kubernetes database, `etcd`. This is how Kubernetes remembers what we applied last time
      - However, kubernetes has strict size limit for these sticky notes: **256 KB**.
      - The Tigera operator YAML file is enormous (~600KB) because it teaches Kubernetes hundreds of new, complex networking rules.
      - If we run this command without `--server-side`, the sticky note is too big. Kubernetes will silently truncate the file or reject it. The operator will appear to install, but its internal rules will be missing, causing it to crash in an endless loop.
@@ -741,7 +741,7 @@ In a High Availability setup, exactly one node must initialize the core database
 
 ##### Heredoc & Calico network configuration
 
-Althought this is not a Kubernetes centered project, Kubernetes is what this Layer is about, below we'll summarise the YAML file for completeness. Lets start with what a heredoc is:
+Although this is not a Kubernetes centered project, Kubernetes is what this Layer is about, below we'll summarise the YAML file for completeness. Let's start with what a heredoc is:
 
 ```bash
 cat <<EOF | kubectl apply -f -
@@ -751,7 +751,7 @@ EOF
 
 **Components**
 
-1. `<<EOF` - Starts a **heredoc**: everything upto a line containing exactly `EOF` becomes the standard input of `cat`.
+1. `<<EOF` - Starts a **heredoc**: everything up to a line containing exactly `EOF` becomes the standard input of `cat`.
 
 2. `cat` - With no filename argument just echoes its stdin to stdout.
 
@@ -760,18 +760,18 @@ EOF
 
    In this particular heredoc, we're creating two separate objects/resources. Both are custom resources owned by the **Tigera operator**, `operator.tigera.io/v1`, which is the standard way to install Calico on a cluster as discussed previously: Essentially once Tigera is installed we can pass to it high-level `Installation` and `APIServer` objects such as both the resources in this yaml. The operator watches for these and generates/manage all the underlying Calico components; DaemonSets, ConfigMaps, CRDs, etc.
 
-   Of the two objects in the heredoc, the first is the main configuration object, **Calico network installation** named `default`. Note, the operator will look for a Calico Network installation named `default`. It specifies a number of configuration parameters for Calico pod networking data plane. Lets have a look at the `spec` section:
+   Of the two objects in the heredoc, the first is the main configuration object, **Calico network installation** named `default`. Note, the operator will look for a Calico Network installation named `default`. It specifies a number of configuration parameters for Calico pod networking data plane. Let's have a look at the `spec` section:
    1. `calicoNetwork` - the parent object, this configures Calico's pod networking data plane using the configuration below it.
    2. `ipPools` - Defines the IP address space Calico will carve up and hand out to pods
    3. `blockSize: 26` - This sets how large a chunk of IP addresses Calico carves off the available pool for each node to hand out to its own pods. Each node claims one or more of these blocks and assigns pod IPs from it locally, without needing to ask the cluster-wide allocator for an IP for every single pod. Block size of `/26` implies 64 addresses (`$2^{32 - 26} = 2^6 = 64$`), 62 usable, 2 addresses are reserved, the first for network address `.0` and the last for broadcast address `.63`.
-   4. `cidr: 192.168.0.0/16` - The overall pool of pod IPs Calico can allocate from, this applies to the whole cluster i.e. this is the pod network, distinct from the node/host network and distinct from Kubernetes Service IPs (A virtual IP assigned to a `Service` object; it doesn't correspond to a real network interface anywhere. `kube-proxy` intercepts traffic to that IP and load-balances it accross the actual pod IPs backing that `Service`).
-   5. `encapsulation: VXLAN` - This wraps/envelopes pod-network packets inside **UDP** packets masking the origin and destination IP addresses under hosts IP addresses to get pass security groups which don't recognise pod IP addresses.
-   6. `natOutgoing: Enabled` - This rewrites the source IP itself, the original pod IP is replaced by the host IP, for statefull NATing so that return traffic can be returned to the right pod, i.e. this gets a packet leaving the cluster to a destination that doesn't know pod IPs exists and returns the traffic. Thus this only fires when the traffic leaves the pool `192.168.0.0/16` meaning the destination is outside that CIDR entirely e.g. the public internet and or a different network.
+   4. `cidr: 192.168.0.0/16` - The overall pool of pod IPs Calico can allocate from, this applies to the whole cluster i.e. this is the pod network, distinct from the node/host network and distinct from Kubernetes Service IPs (A virtual IP assigned to a `Service` object; it doesn't correspond to a real network interface anywhere. `kube-proxy` intercepts traffic to that IP and load-balances it across the actual pod IPs backing that `Service`).
+   5. `encapsulation: VXLAN` - This wraps/envelopes pod-network packets inside **UDP** packets masking the origin and destination IP addresses under hosts IP addresses to get past security groups which don't recognise pod IP addresses.
+   6. `natOutgoing: Enabled` - This rewrites the source IP itself, the original pod IP is replaced by the host IP, for stateful NATing so that return traffic can be returned to the right pod, i.e. this gets a packet leaving the cluster to a destination that doesn't know pod IPs exists and returns the traffic. Thus this only fires when the traffic leaves the pool `192.168.0.0/16` meaning the destination is outside that CIDR entirely e.g. the public internet and or a different network.
    7. `nodeSelector: all()` - This means the above pool applies to every node in the cluster, `all()`, no restriction.
 
 **APIServer**
 
-Lets take a look at the second resource in the heredoc:
+Let's take a look at the second resource in the heredoc:
 
 ```yaml
 apiVersion: operator.tigera.io/v1
@@ -789,17 +789,17 @@ This tells the operator to deploy the Calico API server, a separate, optional co
 
 #### Section 5: BOOTSTRAP ARGOCD VIA HELM
 
-At this piont in the script, the Kubernetes cluster is running and its network is established: This section installs **ArgoCD (a continuous delivery tool)** and passes it the keys to our GitHub repository, **GitHub PAT**. From this moment on, the bash script stops trying to manage applications, and **ArgoCD** takes over to automatically pull and deploy the app from Git.
+At this point in the script, the Kubernetes cluster is running and its network is established: This section installs **ArgoCD (a continuous delivery tool)** and passes it the keys to our GitHub repository, **GitHub PAT**. From this moment on, the bash script stops trying to manage applications, and **ArgoCD** takes over to automatically pull and deploy the app from Git.
 
 **Components**
 
-1. `kubectl create namespace argocd || true` - Creates a dedicated Kubernetes namespace named `argocd`. The `|| true` ensures the script continues even if the namespace already exists. It isolates ArgoCD's controlplane resources into its owm logical boundary, keeping it separated from application workloads.
-2. `helm repo add argo https://argoproj.github.io/argo-helm` - Adds the official Argo project Helm repository to Helms's local registry under the alias `argo`. This registers the remote location where the ArgoCD package manifests live so Helm can download them.
+1. `kubectl create namespace argocd || true` - Creates a dedicated Kubernetes namespace named `argocd`. The `|| true` ensures the script continues even if the namespace already exists. It isolates ArgoCD's controlplane resources into its own logical boundary, keeping it separated from application workloads.
+2. `helm repo add argo https://argoproj.github.io/argo-helm` - Adds the official Argo project Helm repository to Helm's local registry under the alias `argo`. This registers the remote location where the ArgoCD package manifests live so Helm can download them.
 3. `helm repo update` - Refreshes the local cache of available Helm charts from all registered repositories. This ensures that Helm installs the exact specified chart version using the latest index metadata.
 4. `helm upgrade --install argocd argo/argo-cd -n argocd --version 7.3.11 --set server.service.type=ClusterIP` - Idempotently installs or updates ArgoCD _version 7.3.11_ into the `argocd` namespace, explicitly setting the UI/API service type to `ClusterIP`. This deploys the ArgoCD management engine into the cluster. Restricting the service to `ClusterIP` keeps the administrative server internal and unexposed to the public internet.
 5. `GITHUB_SECRET_ID="rr-$ENVIRONMENT-argocd-github-token"` - Constructs a string variable representing the AWS Secrets Manager secret identifier. Dynamically formats the resource name using the current environment variable e.g. `dev` or `prod`.
 6. `GITHUB_PAT=$(aws secretsmanager get-secret-value --region $REGION --secret-id $GITHUB_SECRET_ID --query SecretString --output text)` - Calls the AWS API to extract the raw plaintext value of the GitHub PAT from AWS Secrets Manager and assigns it to `GITHUB_PAT`. It securely fetches sensitive authentication credentials at runtime without storing passwords in plain text inside source code or scripts.
-7. **Manifest 1: ArgoCD Git Repository Secret YAML** - Creates a Kubernete `Secret` containing Git credentials and attaches a specific ArgoCD label so the ArgoCD controller automatically registers the private GitHub repository as an application source.
+7. **Manifest 1: ArgoCD Git Repository Secret YAML** - Creates a Kubernetes `Secret` containing Git credentials and attaches a specific ArgoCD label so the ArgoCD controller automatically registers the private GitHub repository as an application source.
    - `labels:`
      `argocd.argoproj.io/secret-type: repository` - In Kubernetes, `labels` are purely organizational key-value pairs attached to objects like Secrets, Pods, or namespaces. They act like metadata tags that allow other internal tools, scripts, or operators to easily search, filter, and group resources across the cluster. In this case we're taking a generic Kubernetes Secret and tagging it with a very specific, proprietary key-value pair: `argocd.argoproj.io/secret-type: repository`. However, ArgoCD's background controller constantly monitors the cluster for configuration changes, but for security and performance reasons, it completely ignores standard kubernetes secrets. This label acts as a beacon. When the ArgoCD controller scans the `argocd` namespace and spots this exact label, it says _"Ah, this secret is meant for me, and it contains Git repository credentials."_ . Without this label, the secret would just sit there silently. ArgoCD would ignore it, fail to authenticate with the private GitHub repository, and never deploy the application. The label is what transforms a generic Secret into a functional ArgoCD configuration object.
    - `type: opaque` - Specifies the default Kubernetes Secret type used for arbitrary user defined key-value data. This tells Kubernetes to store these fields as generic key-value pairs without imposing specialized schema validation.
@@ -810,7 +810,7 @@ At this piont in the script, the Kubernetes cluster is running and its network i
 8. `kubectl create namespace dev || true` - Creates the `dev` namespace where the core application microservices will run. It establishes a clean, isolated environment for application workloads, distinct from system components.
 9. `kubectl label namespace dev istio-injection=enabled --overwrite || true` - Applies the label **`istio-injection=enabled`** to the `dev` namespace. Triggers Istio's admission controller to automatically inject an envoy proxy sidecar container into every pod created inside the `dev` namespace, enabling service mesh features like mTLS.
 10. `kubectl create secret docker-registry ghcr-login-secret ...` - Creates a Kubernetes image pull secret named `ghcr-login-secret` in the `dev` namespace containing `ghcr.io` credentials. It allows Kubernetes worker nodes to authenticate against `ghcr.io` when pulling application container images.
-11. **Manifest 2: Infrastructure handoff ConfigMap** - A `ConfigMap` is a Kubernetes object used to store non-sensitive configuration data such as environment variables, URLs, or configuration files, in key-value pairs. It enables decoupling of environment-specific settings from the application code meaning the same container image can be used in `dev` and `prod` environments simply by swapping out the COnfigMap.
+11. **Manifest 2: Infrastructure handoff ConfigMap** - A `ConfigMap` is a Kubernetes object used to store non-sensitive configuration data such as environment variables, URLs, or configuration files, in key-value pairs. It enables decoupling of environment-specific settings from the application code meaning the same container image can be used in `dev` and `prod` environments simply by swapping out the ConfigMap.
     This YAML creates a Kubernetes `ConfigMap` in the `dev` namespace that stores AWS environment details generated during Terraform provisioning, bridging the gap between infrastructure state and application runtime configuration.
     - `data:` - Defines the map of key-value pairs stored in plaintext inside the ConfigMap. It holds non-sensitive configuration data that can be injected directly into application container environment variables.
     - `SECRET_ARN: "${DB_SECRET_ARN}"` - Injects the full ARN of the database credentials secret created by Terraform. It informs the backend microservice where to look in AWS Secrets Manager to retrieve its database credentials at runtime.
@@ -819,7 +819,7 @@ At this piont in the script, the Kubernetes cluster is running and its network i
 #### Section 6: Bootstrap observability credentials
 
 **What is Grafana Alloy**
-Lets briefly introduce **Grafana Allow** known simply as Alloy. This is a **lightweight** telemetry collector, a background software agent that acts as a middleman between our Kubernetes cluster and our monitoring tool, Grafana Cloud.
+Lets briefly introduce **Grafana Alloy** known simply as Alloy. This is a **lightweight** telemetry collector, a background software agent that acts as a middleman between our Kubernetes cluster and our monitoring tool, Grafana Cloud.
 
 Instead of forcing our applications/microservices to send their monitoring data directly to the cloud themselves, Alloy sits inside our cluster, gathers all that data in one place, cleans it up, and forwards it where it needs to go. This is split into 3 distinct tasks:
 
@@ -827,7 +827,7 @@ Instead of forcing our applications/microservices to send their monitoring data 
 2. **Process & Filter (The bouncer)** - Raw monitoring data is massive and noisy. Alloy formats the data, attaches helpful labels, and throws away irrelevant metrics so we don't pay extra for cloud storage.
 3. **Delivery (The shipper)** - Alloy securely packs up the remaining clean data and ships it over the internet to our monitoring dashboard in Grafana Cloud.
 
-Here we bridge AWS secrets management with cluster telemetry by retrieving Grafana Cloud access credentials from AWS Secrets Manager and storing themin a dedicated Kubernetes Secret within an `observability` namespace. This enables in-cluster monitoring agents such as Prometheus, Grafana Alloy, or Vector, to authenticate and stream metrics/logs to Grafana Cloud without hardcoding keys in deployment manifests.
+Here we bridge AWS secrets management with cluster telemetry by retrieving Grafana Cloud access credentials from AWS Secrets Manager and storing them in a dedicated Kubernetes Secret within an `observability` namespace. This enables in-cluster monitoring agents such as Prometheus, Grafana Alloy, or Vector, to authenticate and stream metrics/logs to Grafana Cloud without hardcoding keys in deployment manifests.
 
 **Components**
 
@@ -837,14 +837,14 @@ Here we bridge AWS secrets management with cluster telemetry by retrieving Grafa
 4. `kubectl create namespace observability || true` - Creates a dedicated Kubernetes namespace named `observability`. The `|| true` fallback prevents the script from failing if the namespace already exists. Establishes an isolated logical boundary for monitoring components;, metrics collectors, log forwarder, agents; separating them from system services; `kube-system`, `argocd`; and business workloads, `dev`.
 5. **Secrets injection `kubectl create secret generic grafana-auth ...`** - Creates a generic Kubernetes Secret named `grafana-auth` inside the `observability` namespace using `--from-literal` flags to populate key-value pairs directly from the bash variables. It makes the Grafana Cloud connection details available natively inside Kubernetes. When ArgoCD later deploys the monitoring agent, Grafana Alloy, that agent can mount this `grafana-auth` secret as environment variables or volume mounts to push cluster metrics out to Grafana Cloud securely.
 
-#### Section 7: Ignite GitOPs handover
+#### Section 7: Ignite GitOps handover
 
-This section completes the controlplane bootstrap by splitting execution based on node identify: the **Cluster Leader** initializes the GitOps control loop, while **Follower Control Plane nodes** join the existing HA cluster.
+This section completes the controlplane bootstrap by splitting execution based on node identity: the **Cluster Leader** initializes the GitOps control loop, while **Follower Control Plane nodes** join the existing HA cluster.
 
 **Components**
 
 1. **CRD Stabilization Wait Loop `until kubectl get crd applications.argoproj.io >/dev/null 2>&1; do ...`** - This polls the Kubernetes API server every 5 seconds until the **Custom Resource Definition (CRD)** `applications.argoproj.io` is registered and queryable. All output and errors are silenced (`>/dev/null 2>&1`). This prevents a critical race condition: Section 5 installed ArgoCD via Helm, but the Kubernetes API server registers CRDs asynchronously. If the script immediately attempts to create an `Application` resource before the API server recognizes the CRD type, the command will instantly fail.
-2. **Root Application Manifest `root-observability`** - This YAML creates an ArgoCD `Application` custom resource that registers the GitHUb repository's observability directly with ArgoCD, establishing continuous automated deployment for cluster telemetry components.
+2. **Root Application Manifest `root-observability`** - This YAML creates an ArgoCD `Application` custom resource that registers the GitHub repository's observability directly with ArgoCD, establishing continuous automated deployment for cluster telemetry components.
    - `namespace: argocd` - This ensures that the resource is created in the `argocd` namespace, where it is needed.
 
    - `spec:` - Defines the operational specification for how ArgoCD tracks and syncs the workload. This is the top level(parent) configuration key required by the ArgoCD Application schema.
@@ -854,11 +854,11 @@ This section completes the controlplane bootstrap by splitting execution based o
    **Access controls for the sandbox**
    Without projects, anyone with access to ArgoCD could modify or delete any application. Tying an application to a project, hooks into **ArgoCD's Role-Based Access Control (RBAC)** e.g. We might have a `Frontend` project and a `Backend` project. Assigning the app to the `Frontend` project ensures only the UI developers have the permissions to sync or delete it.
 
-   **Allowed source repositorie**
+   **Allowed source repositories**
    This is a major security feature: A project dictates exactly which Git repositories are allowed to be deployed. We want to avoid developers pointing an ArgoCD application to a random, unverified personal GitHub repository. The project boundary ensures this application can only pull Kubernetes manifests from specified trusted/approved Git repositories.
 
    **Destination clusters**
-   JUst like restricting the source, a project restricts the destination, preventing applications from being deployed into the wrong environment e.g. if the application is in development, the project ensures it can only be deployed to the `dev-cluster`. Thus it acts as a guardrail so that no one accidentally syncs a buggy test app straight into the production environment.
+   Just like restricting the source, a project restricts the destination, preventing applications from being deployed into the wrong environment e.g. if the application is in development, the project ensures it can only be deployed to the `dev-cluster`. Thus it acts as a guardrail so that no one accidentally syncs a buggy test app straight into the production environment.
 
    **The open door problem**
    Out of the box, ArgoCD comes with this "default" project pre-installed. By default, it is configured to be completely wide open, it allows any source repository, any destination cluster, and all kinds of Kubernetes resources. Although in this development environment we're using the "default" project, in a production environment we would use custom locked down projects e.g. `project: rr-prod`.
@@ -880,7 +880,7 @@ This section completes the controlplane bootstrap by splitting execution based o
 
    - `automated:` - Enables automatic synchronization when changes are detected in Git, eliminating manual intervention; pushing code to `main` updates the cluster. Note ArgoCD checks the repo every 3 minutes
 
-   - `prune: true` - Instructs ArgoCD to delete resources from Kubernetes if they are removed from the Git repository. This prevent **"ghost"** or oprhaned resources from lingering in the cluster when manifests are deleted from Git.
+   - `prune: true` - Instructs ArgoCD to delete resources from Kubernetes if they are removed from the Git repository. This prevent **"ghost"** or orphaned resources from lingering in the cluster when manifests are deleted from Git.
 
    - `selfHeal: true` - Instructs ArgoCD to automatically overwrite manual changes made directly to the cluster e.g. via `kubectl edit` guaranteeing that Git remains the absolute single source of truth and prevents configuration drift.
 
@@ -953,7 +953,7 @@ Here the AWS NLB infrastructure is provisioned and configured to listen for inco
 
 This is the cornerstone of a HA Kubernetes cluster: Without this, the worker nodes and developer using `kubectl` would have to point their configurations to the IP address of a single controlplane node. If that node crashes or undergoes maintenance, the cluster API goes completely offline. The NLB provides a single, highly available, static DNS endpoint that masks the underlying nodes, seamlessly routing around hardware failures.
 
-Lets have a look at the resources:
+Let's have a look at the resources:
 
 1. **The Loadbalancer `aws_lb.rr_k3s_cp_nlb`** - Creates the actual NLB inside the AWS account and by specifying subnets the VPC is implied. The NLB acts as the resilient "front door" to the cluster, capable of handling massive amounts of traffic while spanning multiple physical AZs.
 
@@ -976,7 +976,7 @@ Lets have a look at the resources:
 
      - **Graceful termination, connection draining** - When an ASG decides to terminate a node due to scaling down or the node becomes unhealthy, it uses the instance ID to coordinate with the loadbalancer. It tells the NLB: _"I am about to kill `i-0abcd1234...`. Stop sending it new requests, and give it 60 seconds to finish answering its current requests."_ This is called the connection draining. If mapped by IP, this native handshake breaks, leading to abruptly dropped connections for the users or cluster components.
 
-     - **Automatic network interface resolution** - An EC2 instance can have multiple ENIs thus multiple IP addresses attached to it. When registering by `instance`, AWS automatically knows to route the traffic to the primary private IP of the primary network interface. There' no need for manual/programatical figuring out which IP to use.
+     - **Automatic network interface resolution** - An EC2 instance can have multiple ENIs thus multiple IP addresses attached to it. When registering by `instance`, AWS automatically knows to route the traffic to the primary private IP of the primary network interface. There's no need for manual/programmatic figuring out which IP to use.
 
      Thus using IDs is a superior approach
 
@@ -993,12 +993,12 @@ Lets have a look at the resources:
 
 This section provisions the actual VMs for the Kubernetes controlplane. It creates a standardized template for the servers, establishes an automated fleet manager to ensure exactly three servers are running covering 3 AZs at all times, and seamlessly connects those servers to the NLB. This guarantees a self-healing, HA "brain" for the Kubernetes cluster. If a server physically dies, the architecture automatically detects the loss, provisions a replacement from the exact same template, runs the initialization script, `user_data_cp.sh`, and wires it back into the NLB, all without human intervention.
 
-Lets have a look at the resources:
+Let's have a look at the resources:
 
 1. **AWS launch template `aws_launch_template.rr_k3s_cp`** - Creates a reusable configuration template defining exactly how a controlplane server should be built. ASGs require a launch template so they know exactly what to build when a new server is needed. This brings together all the VM settings that we've previously prepared; OS images, CPU size, IAM permissions, Network firewalls, and boot scripts (user_data_cp.sh); to construct this vital resource.
 
    **Components**
-   - `name_prefix = "rr-${var.environment}-k3s-cp-"` - This naming convention is very important so lets look into it with a little more detail: This consists of two actions, one by Terraform and the other by AWS:
+   - `name_prefix = "rr-${var.environment}-k3s-cp-"` - This naming convention is very important so let's look into it with a little more detail: This consists of two actions, one by Terraform and the other by AWS:
      - **Terraform interpolation** - The string evaluates to a base prefix e.g. `rr-dev-k3s-cp-`.
 
      - **AWS/Terraform suffix generation** - Instead of sending `rr-dev-k3s-cp-` directly as the full resource name, Terraform requests AWS to append **a unique 26 character alphanumeric timestamp/hash suffix** at creation time e.g. `rr-dev-k3s-cp-20260903151800123400000001`.
@@ -1009,7 +1009,7 @@ Lets have a look at the resources:
 
      To prevent service downtime during resource replacements, Terraform often utilizes a **Create-Before-Destroy** lifecycle execution order.
      - Provision the new resource
-     - Update downstream dependencies such as ASG to poiint to the new resource.
+     - Update downstream dependencies such as ASG to point to the new resource.
      - Destroy the old resource.
 
      **Failure scenario: Using static `name`**
@@ -1026,14 +1026,14 @@ Lets have a look at the resources:
      - Step 2 (Update dependencies): Terraform updates the ASG's `launch_template` parameter to point to the new ID (`rr-dev-k3s-cp-20260903151800123400000001`).
      - Step 3 (Destroy old): Terraform safely deletes `rr-dev-k3s-cp-20260101000000000000000001`.
 
-   - `image_id = data.aws_ami.rr_al2023.id` - Specifies the AMI e.g. Amazon Linux 2023. This determins the base OS and software environment for the node.
+   - `image_id = data.aws_ami.rr_al2023.id` - Specifies the AMI e.g. Amazon Linux 2023. This determines the base OS and software environment for the node.
    - `instance_type = var.control_plane_type` - Defines the physical compute power e.g. `t3.medium`. This dictates the **CPU & RAM** capacity available to handle Kubernetes API requests and the `etcd` database.
    - `iam_instance_profile { name = var.iam_profile_control_plane }` - Indirectly attaches a specific IAM role to the EC2 instance: Grants the server permission to call AWS APIs securely. This is strictly required so the bash script can fetch the `K3S_TOKEN` and `GRAFANA_TOKEN` from AWS Secrets Manager.
    - `network_interfaces { security_groups = [var.control_plane_sg_id] }` - Attaches the controlplane's firewall rules to the instance's network card. This secures the node by explicitly blocking all traffic except what is required such as TCP 6443 from the NLB and SSH from a Bastion host.
    - `metadata_options { http_tokens = "required" ... }` - Enforces the use of **Instance Metadata Service Version 2 (IMDSv2)**. This is a critical security control: It prevents **Server-Side Request Forgery (SSRF)** attacks from easily stealing the IAM credentials attached to the instance.
 
      **Components**
-     - `http_endpoint = "enabled"` - This is the master on/off switch for the **AWS Instance Metadata Service (IMDS)**. It turns on a hidden, internal web server that lives at a special, non-routablle IP address, `169.254.169.254`. Only the EC2 instance itself can access this address. When the instance visits this address, AWS replies with a massive dictionary of facts about the server e.g. _"You're in the `eu-west-1` region"_, _"Your instance ID is `i-1234"_, _"Here are your IAM credentials"_.
+     - `http_endpoint = "enabled"` - This is the master on/off switch for the **AWS Instance Metadata Service (IMDS)**. It turns on a hidden, internal web server that lives at a special, non-routable IP address, `169.254.169.254`. Only the EC2 instance itself can access this address. When the instance visits this address, AWS replies with a massive dictionary of facts about the server e.g. _"You're in the `eu-west-1` region"_, _"Your instance ID is `i-1234"_, _"Here are your IAM credentials"_.
        Without this endpoint enabled, the server is completely blind to its AWS environment. In the architecture, the `user_data_cp.sh` script relies on IAM credentials to securely fetch the `K3S_TOKEN` from AWS Secrets Manager. If the endpoint is disabled, the script cannot retrieve those credentials, and the node will fail to join the cluster
      - `http_tokens = "required"` - This is a strict security enforcer that disables the older, insecure version of the metadata service (IMDSv1) and forces the server to use the modern, highly secure version (IMDSv2). It changes how applications on the server are allowed to ask for information.
        - **Without it (IMDSv1)** - Any software could just shout a simple request at the metadata IP address and immediately get the server's IAM passwords.
@@ -1052,9 +1052,9 @@ Lets have a look at the resources:
 
 2. **AWS ASG `aws_autoscaling_group.rr_k3s_cp_asg`** - Creates an automated fleet manager that spans multiple private subnets and maintains a strict count of running EC2 instances. This provides fault tolerance: by spreading three nodes across different AWS AZs, the controlplane survives even if an entire AWS data center goes offline.
    **Components**
-   Lets take a look at the interesting parameters in this resource:
+   Let's take a look at the interesting parameters in this resource:
    - `vpc_zone_identifier = var.k8s_private_subnets` - Instructs the ASG to launch instances only within this specific list of private subnets ensuring the nodes are isolated from the public internet and distributed across multiple AZ for HA.
-   - `desired_capacity, max_size, and min_size = 3` - Hardcodes the fleet size to exactly three nodes. This is because for HA using the embedded `etcd` database, Kubernetes requires an odd number of nodes for consensus quorum. This is an important concept so lets look into this with a little detail:
+   - `desired_capacity, max_size, and min_size = 3` - Hardcodes the fleet size to exactly three nodes. This is because for HA using the embedded `etcd` database, Kubernetes requires an odd number of nodes for consensus quorum. This is an important concept so let's look into this with a little detail:
 
    **Quorum**
 
@@ -1086,7 +1086,7 @@ Lets have a look at the resources:
    - The followers simply listen to the leader and copy its actions.
 
    - If the leader crashes, the followers realise the boss is gone and immediately hold an election to choose a new leader from among themselves.
-     When we have data spread across multiple machines, it is veryeasy for them to get out of sync e.g. one server might think a password was updated, while another server missed the memo. Raft guarantees that every single server in in the cluster records the exact same data in the exact same data in the exact same order, no matter what crashes.
+     When we have data spread across multiple machines, it is very easy for them to get out of sync e.g. one server might think a password was updated, while another server missed the memo. Raft guarantees that every single server in the cluster records the exact same data in the exact same data in the exact same order, no matter what crashes.
 
    **Node active voting**
    Active voting is the automated way nodes make decisions together without human intervention. They use voting primarily for one major task: electing a new leader when the old one dies.
@@ -1107,7 +1107,7 @@ Lets have a look at the resources:
 
    - Once the leader receives _"Got it"_ from a quorum, a majority, of the nodes, it permanently saves the data and tells you the operation was successful.
      **Why we need it**
-     This process guarantees data safety. If the leader saved the data only to its own hard drive and immediatly caught on fire, the data would be gone forever. By forcing the leader to wait for the followers to copy the data first, ensures the information is safely stored on multiple machines before we consider the job finished.
+     This process guarantees data safety. If the leader saved the data only to its own hard drive and immediately caught on fire, the data would be gone forever. By forcing the leader to wait for the followers to copy the data first, ensures the information is safely stored on multiple machines before we consider the job finished.
 
    Three is the minimum. Pinning all values to 3 prevents the ASG from scaling up or down, prioritizing strict database stability over cost savings. 3. `launch_template { id = ..., version = "$Latest" }` - Links the ASG to the template we created earlier, always pointing to the newest version. This ensures that if the launch template is updated e.g. to use a new AMI, any newly replaced servers will automatically use the updated template.
 
@@ -1125,7 +1125,7 @@ It achieves this by declaring two core AWS resources:
 
 1. **Launch template `aws_launch_template.rr_k3s_worker_frontend`** - This acts as the immutable template for all frontend nodes. It defines the base operating system, instance size, network security group rules, and IAM permissions (least privilege). It injects dynamically generated `user_data` script that automatically installs the K3S agent, configures the node with `frontend` Kubernetes taints & labels, then authenticates it with the controlplane NLB.
    **Components of interest**
-   - `Userdata` - This is the bridge between Terraform, which povisions the bare metal infrastructure, and the node's operating system. It takes a raw bash script, injects live information from our AWS environment into it, and hands it to the EC2 instance to execute as the `root` user exactly once during its very first boot sequence. Without this Terraform would build an empty Amazone Linux server that does nothing. This block is what magically transforms a blank VM into a fully configured Kubernetes worker node that instantly joins the cluster.
+   - `Userdata` - This is the bridge between Terraform, which provisions the bare metal infrastructure, and the node's operating system. It takes a raw bash script, injects live information from our AWS environment into it, and hands it to the EC2 instance to execute as the `root` user exactly once during its very first boot sequence. Without this Terraform would build an empty Amazon Linux server that does nothing. This block is what magically transforms a blank VM into a fully configured Kubernetes worker node that instantly joins the cluster.
    - `base64encode(templatefile("${path.module}/user_data_worker_frontend.sh"` - This combines two distinct Terraform functions:
      - `templatefile(...)` - This opens the `user_data_worker_frontend.sh` file, looks for variable placeholders, like `${node_role}`, and swaps them out for the real values provided in the block below it. This is necessary because hardcoding URLs and environment names directly into a bash script destroys code reusability. We want Terraform to dynamically calculate things such as the NLB URL and inject them at the exact moment the server is built.
 
@@ -1135,11 +1135,11 @@ It achieves this by declaring two core AWS resources:
 
      - `node_role = "frontend"` - This passes a static string defining the workload tier of the node. This string is injected directly into the final K3s installation command to set the Kubernetes Taint, `dedicated=frontend`, and Labels , `tier=frontend`. It is the singular configuration that tells Kubernetes this node is meant for web traffic, ensuring pods are scheduled correctly.
 
-2. **ASG `aws_autoscaling_group.rr_k3s_worker_frontend_asg`** - This is the automated fleet manager. It makes use of the launch template above to deploy frontend instances across multiple private subnets for HA. Unlike the static controlplane, this ASG is configured for elasticity; scaling between 1 and 4 instances, allowing the infrastruture to automatically expand during traffic spikes and contract during quiet periods to optimize compute costs.
+2. **ASG `aws_autoscaling_group.rr_k3s_worker_frontend_asg`** - This is the automated fleet manager. It makes use of the launch template above to deploy frontend instances across multiple private subnets for HA. Unlike the static controlplane, this ASG is configured for elasticity; scaling between 1 and 4 instances, allowing the infrastructure to automatically expand during traffic spikes and contract during quiet periods to optimize compute costs.
 
 ### [worker-backend](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/modules/compute_k8s/worker-backend.tf)
 
-This file follows the exact same pattern as the frontend counterpart we looked at previously. There's not much we haven't seen befor with the exeption in the ASG. In the ASG we have the **automated rolling updates** via the `instance_refresh` configuration block:
+This file follows the exact same pattern as the frontend counterpart we looked at previously. There's not much we haven't seen before with the exception in the ASG. In the ASG we have the **automated rolling updates** via the `instance_refresh` configuration block:
 
 ```hcl
 instance_refresh {
@@ -1150,13 +1150,13 @@ instance_refresh {
 }
 ```
 
-Lets breakdown the above to make sense of what's going on:
+Let's breakdown the above to make sense of what's going on:
 
 1. **`instance_refresh` Block & `strategy = "Rolling"`** - This is an AWS auto scaling feature integrated into Terraform that automates the replacement of running EC2 instances whenever a new launch template version is deployed.When launch template parameters are updated in Terraform e.g. changing the base AMI ID, altering the security group, or updating the `user_data` script, AWS does not automatically restart existing EC2 instances by default. With `strategy = "Rolling"`, AWS automatically initiates a controlled deployment pipeline that gracefully terminates old instances and launches new ones using the updated `$Latest` launch template.
 
 With this block, updating Terraform code creates a configuration drift: The launch template in AWS will be updated, but the actual running EC2 instances will continue to run the old code until they crash or are manually terminated by an engineer. `instance_refresh` guarantees that changes in our **Infrastructure-as-Code (IaC)** are immediately and automatically deployed to live infrastructure without manual intervention.
 
-2. `min_healthy_percentage = 50` - This is a safety threshold parameter nested inside the `instance_refresh` block that dictates the minimum compute capacity that must remain operational during a rolling update. It enforces a capacity guardrail during updates. A value of 50 tells the ASG: _"At any given point during this replacement process, at least 50% of the total desired instances must remain active, healthy, and serving traffic"_. Lets look at the process for 2 desired instance:
+2. `min_healthy_percentage = 50` - This is a safety threshold parameter nested inside the `instance_refresh` block that dictates the minimum compute capacity that must remain operational during a rolling update. It enforces a capacity guardrail during updates. A value of 50 tells the ASG: _"At any given point during this replacement process, at least 50% of the total desired instances must remain active, healthy, and serving traffic"_. Let's look at the process for 2 desired instance:
    - If the ASG has **Desired instances = 2**, it will terminate 1 instance, leaving 50% healthy = 1 instance online.
    - It launches a new instance running the updated launch template.
    - It waits for the new instance to boot and pass all health checks.
@@ -1172,7 +1172,7 @@ In this section we examine the files that make up the service mesh.
 
 Istio is an incredibly powerful tool, it represents a paradigm shift in how Kubernetes handles traffic: instead of replacing applications to deploy new code, it deploys multiple versions simultaneously and uses a network proxy, `Istio` to intelligently route traffic between them.
 
-Its an open-source service mesh that manages network communication between microservices running inside a Kubernetes cluster. Acting as an intelligent infrastructure layer that intercepts, controls, and observes all pod-to-pod and external network traffic without requiring code modification. Its an enterprise-grade service mesh that injects high-performance proxy sidecars, **Envoy**, alongside application containers. These proxies handle all networking responsibilities; routing, security, and telemetry; on behalf of the services.
+It's an open-source service mesh that manages network communication between microservices running inside a Kubernetes cluster. Acting as an intelligent infrastructure layer that intercepts, controls, and observes all pod-to-pod and external network traffic without requiring code modification. It's an enterprise-grade service mesh that injects high-performance proxy sidecars, **Envoy**, alongside application containers. These proxies handle all networking responsibilities; routing, security, and telemetry; on behalf of the services.
 
 **What it does**
 
@@ -1189,7 +1189,7 @@ In this infrastructure, Istio powers our deployment pipeline and cluster visibil
 2. **Ingress routing** - Manages external entry points using an Istio `Gateway`, cleanly separating public-facing traffic rules from underlying cluster services.
 3. **Visual Mesh Telemetry** - Emits real-time network telemetry to **Prometheus and Grafana**, while powering **Kiali** for visual service topology mapping and real-time traffic flow verification.
 
-Lets take a look at the directory structure logically.
+Let's take a look at the directory structure logically.
 
 # 1. [Dev-apps](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/k8s-manifests/dev-apps)
 
@@ -1209,13 +1209,13 @@ This file is the "Master traffic controller" for the `dev` environment. It conta
 
 It opens a front door for external internet traffic, takes an inventory of all running application pods, grouping them into `v1` and `v2` buckets, and applies a strict, top-down logical rulebook. This rule book decides whether a user request should be sent to the old version of the app, the new version, or the observability dashboard.
 
-Without this file, Kubernetes would just blindly round-robin traffic across every pod it can find. Making safe canary testing impossible. Further more, this file specifically solves the **Sticky session** problem: It ensures that one a user lands on a specific version of the frontend app, like the **v1 Next.js app**, they stay pinned to that version, preventing their browser from breaking by suddenly receiving v2 Vite code mid-session.
+Without this file, Kubernetes would just blindly round-robin traffic across every pod it can find. Making safe canary testing impossible. Furthermore, this file specifically solves the **Sticky session** problem: It ensures that one a user lands on a specific version of the frontend app, like the **v1 Next.js app**, they stay pinned to that version, preventing their browser from breaking by suddenly receiving v2 Vite code mid-session.
 
-Lets look at the resources of this file:
+Let's look at the resources of this file:
 
 #### 1. Istio Gateway `ritual-roast-gateway`
 
-An Istio gateway is the **"front door guard"** for the cluster. It is a configuration file that programs an edge proxy, an **Envoy proxy** running at the boundary of the cluster, to open network ports and allow outside traffic in. This is needed because Kubernetes pods live on a private internal network that cannot be reached directly from the public internet. The gateway defines the rules for crossing that boundary, specifying which ports e.g. port 80 and protocols e.g. HTTP are exposed to the outside world. Note, unlike a traditional Kubernetes ingresss, an Istio gateway only opens the door; it does not decide which pod gets the traffic. It simply hands the incoming request off to a `VirtualService` to make the actual routing decisions.
+An Istio gateway is the **"front door guard"** for the cluster. It is a configuration file that programs an edge proxy, an **Envoy proxy** running at the boundary of the cluster, to open network ports and allow outside traffic in. This is needed because Kubernetes pods live on a private internal network that cannot be reached directly from the public internet. The gateway defines the rules for crossing that boundary, specifying which ports e.g. port 80 and protocols e.g. HTTP are exposed to the outside world. Note, unlike a traditional Kubernetes ingress, an Istio gateway only opens the door; it does not decide which pod gets the traffic. It simply hands the incoming request off to a `VirtualService` to make the actual routing decisions.
 
 **Components**
 
@@ -1228,11 +1228,11 @@ An Istio gateway is the **"front door guard"** for the cluster. It is a configur
 
 #### 2. **DestinationRules `frontend-destination-rule` & `backend-destination-rule`**
 
-An Istio `DestinationRule` acts as an inventory manager for the application traffic. While a `VirtualService` decides where to send a user, the `DestinationRule` defines what those destinations actually look like. In these specific files, they act as a categorization tool that slices the server pool into distinct versions. We're using this because by default, standard Kubernetes networking is blind to versions. If we deploy `v1` and `v2` pods at the same time, standard Kubernetes lumps them all into one big bucket and randomly sends traffic to both. We need the `DestinationRule` to cleanly separate that single bucket into two distinct sub-buckets `v1` and `v2`. Without this file, he `VirtualService` would have no way to say **"send 90% of traffic to v2"** because it wouldn't know what `"v2"` actually means.
+An Istio `DestinationRule` acts as an inventory manager for the application traffic. While a `VirtualService` decides where to send a user, the `DestinationRule` defines what those destinations actually look like. In these specific files, they act as a categorization tool that slices the server pool into distinct versions. We're using this because by default, standard Kubernetes networking is blind to versions. If we deploy `v1` and `v2` pods at the same time, standard Kubernetes lumps them all into one big bucket and randomly sends traffic to both. We need the `DestinationRule` to cleanly separate that single bucket into two distinct sub-buckets `v1` and `v2`. Without this file, the `VirtualService` would have no way to say **"send 90% of traffic to v2"** because it wouldn't know what `"v2"` actually means.
 
 **Components**
 
-Lets focus on components we haven't seen yet:
+Let's focus on components we haven't seen yet:
 
 - **spec.host `host: rr-frontend-svc`** - This is the target Kubernetes Service. It points to the existing, standard Kubernetes service that normally handles traffic for the application. This is needed for Istio to know which pool of pods it's supposed to divide up. This tells Istio, **"Whenever someone tries to talk to the `rr-frontend-svc` service, step in and apply the rules below"**.
 - **`spec.subsets`** - This is the grouping mechanism. It divides the physical pods sitting behind the `host` Service into separate, named categories. This is the core enabler of Canary and Blue/Green deployments. These distinct subsets must be defined so that traffic can be mathematically split between them later.
@@ -1241,13 +1241,13 @@ Lets focus on components we haven't seen yet:
 
 #### 3. **VirtualService `frontend-route` & `backend-route`**
 
-A `VirtualService` is the "traffic cop" or the brain of Istio's routing system. It contains the actual logic and rules that dictate exactly where a network request should go after it enters the cluster or leaves a pod. This is needed beccause standard Kubernetes networking is very basic, it just randomly distributes traffic across all available pods. We need `VirtualServices` to execute intelligent routing. This includes; path based routing, sending `/kiali` to a dashboard; session affinity, reading cookies to keep users on the same app version; and weighted percentage splits, the core mechanism for our canary releases.
+A `VirtualService` is the "traffic cop" or the brain of Istio's routing system. It contains the actual logic and rules that dictate exactly where a network request should go after it enters the cluster or leaves a pod. This is needed because standard Kubernetes networking is very basic, it just randomly distributes traffic across all available pods. We need `VirtualServices` to execute intelligent routing. This includes; path based routing, sending `/kiali` to a dashboard; session affinity, reading cookies to keep users on the same app version; and weighted percentage splits, the core mechanism for our canary releases.
 
 **Components**
 
 Note, because both the frontend and backend files use similar components, they are combined below. We'll highlight the differences where applicable. As usual, we'll focus on components that we haven't seen yet.
 
-- `spec.hosts` - This is the target address the client is asking for. It tells Istio when to trigger these rules. For the frontend, `"*"` means **"apply these rules to any external traffic coming from the internet"**. For the backend service we have, `- rituaal-roast-backend` meaning **"apply these rules only when a pod inside the cluster specifically asks for the backend service"**. This is needed because Istio intercepts all traffic in the cluster. It needs to know which specific requests shoud be evaluated against this specific rulebook.
+- `spec.hosts` - This is the target address the client is asking for. It tells Istio when to trigger these rules. For the frontend, `"*"` means **"apply these rules to any external traffic coming from the internet"**. For the backend service we have, `- ritual-roast-backend` meaning **"apply these rules only when a pod inside the cluster specifically asks for the backend service"**. This is needed because Istio intercepts all traffic in the cluster. It needs to know which specific requests should be evaluated against this specific rulebook.
 - **`spec.gateway` (frontend only)** - This is the entry point binding. It attaches this specific `VirtualService` to the `ritual-roast-gateway` defined in a previous file. Note, the gateway opens the door to the internet, but it doesn't know where to send people. This line connects the open door, gateway, to the hallway map, `VirtualService`. However, the backend `VirtualService` omits this because it only handles internal pod-to-pod traffic, which never touches the external gateway.
 - **Traffic rules `spec.http`** - This is the ordered list of traffic rules. It evaluates incoming HTTP requests from top to bottom. The first rule that matches wins. Once a match is found, Istio stops reading the rest of the list. This allows us to create complex, prioritized logic. For example, we must handle special paths and existing user cookies before we apply our randomized mathematical canary split.
 - **Rule 0 `match.uri.prefix: /kiali`** - This is a path-based routing condition. This checks if the URL the user typed ends with `/kiali` e.g. `[www.myapp.com/kiali](https://www.myapp.com/kiali)`. If it does, it routes them to port `20001` on the Kiali observability pod. Note, if this rule wasn't at the very top, **a user with an active app cookie would have their `/kiali` request sent to the frontend Next.js/Vite app instead**, resulting in a 404 Error. Thus, this rule ensures administration tools are accessible regardless of application state.
@@ -1263,16 +1263,16 @@ In Kubernetes, a **Deployment** is a controller that manages a set of identical 
 - **Rollback** - Revert to a previous version if something breaks.
 - **Declarative updates** - We specify the desired state; the deployment controller reconciles to it i.e. provisions the resources.
 
-This file is a Kubernetes `Deployment` manifest that managers the Version 1 Next.js frontend application workload. It maintains two identical pod replicas of the Next.js app in the `dev` namespace, configures their health checks, sets compute resource limits, and explicitly schedules them onto the frontend worker nodes. It provides self-healing lifecycle management for the application compute. Rather than manually managing raw pods, this deployment automatically keeps the frontend running, handles rollouts, and attaches the critical `version: v1` label that Istio ses to group these pods into traffic routing subsets.
+This file is a Kubernetes `Deployment` manifest that manages the Version 1 Next.js frontend application workload. It maintains two identical pod replicas of the Next.js app in the `dev` namespace, configures their health checks, sets compute resource limits, and explicitly schedules them onto the frontend worker nodes. It provides self-healing lifecycle management for the application compute. Rather than manually managing raw pods, this deployment automatically keeps the frontend running, handles rollouts, and attaches the critical `version: v1` label that Istio uses to group these pods into traffic routing subsets.
 
 **Components**
 
-1.  **Administrative envelope `apiVersion`, `kind`, `metadata`** - This makes up the top level resource metadata. It names the deployment `v1-frontend-nextjs`, assigns it to namespace `dev`, and attache administrative tags, `app: rr-frontend`, `version: v1`. This gives Kubernetes the identity, namespace isolation, and organizational metadata to manage this workload controller.
+1.  **Administrative envelope `apiVersion`, `kind`, `metadata`** - This makes up the top level resource metadata. It names the deployment `v1-frontend-nextjs`, assigns it to namespace `dev`, and attaches administrative tags, `app: rr-frontend`, `version: v1`. This gives Kubernetes the identity, namespace isolation, and organizational metadata to manage this workload controller.
 2.  **Replica & Selector control `spec.replicas`, `spec.selector`** - This is the pod population manager and the match criteria. `replicas: 2` is the specification to run two identical instances. The `matchLabels` block instructs the controller to manage pods tagged with `app: rr-frontend` and `version: v1`. Running 2 replicas provides high availability so traffic continues flowing even if one pod crashes. Note, this is also a development decision i.e. it's not necessary to have higher pod counts. The selector binds this deployment controller to the specific pods created by its template.
 3.  **The pod schematics `spec.template`** - Within a deployment's `spec`, `template` defines the schematic for the pods the deployment creates. It's a full pod spec nested inside the deployment spec i.e. it has its own `metadata` + `spec`. The deployment stamps out `replicas` copies of whatever this template describes. Note, `template.metadata.labels` must match `spec.selector.matchLabels`, or the deployment can't find/manage its own pods. Changing the template e.g. new image, triggers a rolling update; a new **ReplicaSet** is created from the updated template and new pods are instantiated while bringing down the old ones.
-4.  **Pod template Labels `spec.template.metadata.labels`** - This is the label generator for running pods. It stiches `app: rr-frontend` and `version: v1` directly onto every pod instance spawned by this file. This is the exact link to Istio. The `DestinationRule` we looked at earlier, searches specifically for `version: v1` to route frontend traffic to these pods.
+4.  **Pod template Labels `spec.template.metadata.labels`** - This is the label generator for running pods. It stitches `app: rr-frontend` and `version: v1` directly onto every pod instance spawned by this file. This is the exact link to Istio. The `DestinationRule` we looked at earlier, searches specifically for `version: v1` to route frontend traffic to these pods.
 5.  **Istio proxy sidecar tuning `annotations`** - Annotations in Kubernetes are key-value metadata fields attached to objects to pass configuration instructions, operational hints, or state information to external tools, automated controllers, and system components. Unlike labels, which are used by Kubernetes to query, group, and select objects e.g. Istio finding pods with `version: v1`, **annotations are not used to identify or select pods**. Instead, they act as a side-channel message board: They pass metadata to third party controllers and plugins like; Istio, Prometheus, or AWS ingress controllers; that need to customize how they treat an object without altering the core Kubernetes API spec. Because the Istio Envoy proxy container `istio-proxy` is injected into the pod dynamically at runtime, its container definition does not exist directly inside the deployment file. These annotations tell the **Istio Mutating Webhook Injector** how to configure the compute resources for that injected sidecar container:
-    - `sidecar.istio.io/procuCPU: "10m"` - Sets the **CPU Request** for the envoy sidecar container to 10 millicores (0.01 CPU core). This is the minimum CPU guaranteed to the proxy.
+    - `sidecar.istio.io/proxyCPU: "10m"` - Sets the **CPU Request** for the envoy sidecar container to 10 millicores (0.01 CPU core). This is the minimum CPU guaranteed to the proxy.
     - `sidecar.istio.io/proxyMemory: "40Mi"` - Sets the **Memory Request** for the envoy sidecar to 40 Megabytes.
     - `sidecar.istio.io/proxyCPULimit: "200m"` - Sets the **CPU Limit** for the envoy sidecar to 200 millicores (0.2 CPU cores). If the proxy bursts above this, Kubernetes throttles its CPU usage.
     - `sidecar.istio.io/proxyMemoryLimit: "128Mi"` - Sets the **Memory Limit** for the envoy sidecar to 128 Megabytes. If the proxy exceeds **128MI RAM**, Kubernetes terminates it with an **Out-Of-Memory kill (OOMKILL)**, the reported status.
@@ -1282,11 +1282,11 @@ This file is a Kubernetes `Deployment` manifest that managers the Version 1 Next
     There is also the **Blast radius control & stability**: If an envoy proxy experiences a memory leak or an unthrottled traffic surge, these limits prevent the proxy from stealing memory and CPU from the primary Next.js application container running inside the same pod.
 
 6.  **Image registry credentials `spec.template.spec.imagePullSecrets`** - This is a private container registry authentication reference. It instructs Kubernetes to use the `ghcr-login-secret` secret to pull images from GitHub Container Registry (GHCR.io). We need this to enable worker nodes to authenticate and pull private application container images securely without embedding credentials in the manifest.
-7.  **Node placement controls `tolerations` & `nodeSelector`** - Taints and tolerations form Kubernetes' repulsion mechanism, allowing nodes to reject unwanted workloads. While `nodeSelector` attracts a pod to a node, taints and tolerations ensure that unauthorized pods are kept off that node. Lets summarise what **Taints** and **Tolerations** are:
+7.  **Node placement controls `tolerations` & `nodeSelector`** - Taints and tolerations form Kubernetes' repulsion mechanism, allowing nodes to reject unwanted workloads. While `nodeSelector` attracts a pod to a node, taints and tolerations ensure that unauthorized pods are kept off that node. Let's summarise what **Taints** and **Tolerations** are:
     - **Taint** - A key-value property set on a **node** with an enforcement effect. It acts like a "keep out" sign or lock on a node.
     - **Toleration** - A matching key-value configuration set on a pod. It acts like a pass or key that permits the pod to ignore the node's taint.
 
-    They grant nodes the authority to choose which pods are allowed to be scheduled on the node. Without taints, the Kubernetes scheduler places pods on any node with available CPU and memory. **Taints allows us to reserve specific compute nodes for specific workloads**, preventing general purpose or untrusted pods from landing on isolated hardware tiers. To achieve true tier isolation, Kubernetes uses a **two-way handshake** combining attraction `nodeSelector` and repulsion `taints` & `tolerations`. Lets take a look at this process:
+    They grant nodes the authority to choose which pods are allowed to be scheduled on the node. Without taints, the Kubernetes scheduler places pods on any node with available CPU and memory. **Taints allows us to reserve specific compute nodes for specific workloads**, preventing general purpose or untrusted pods from landing on isolated hardware tiers. To achieve true tier isolation, Kubernetes uses a **two-way handshake** combining attraction `nodeSelector` and repulsion `taints` & `tolerations`. Let's take a look at this process:
     - **The repulsion gate `Taints` & `Tolerations`** - On the EC2 worker nodes provisioned via Terraform, the frontend node receives a taint, `dedicated=frontend:NoSchedule`. When the Kubernetes scheduler evaluates where to place a pod, it checks all node taints: - If a node has a taint, the pod must have a matching toleration block. If it lacks a matching toleration, the scheduler ignores that node completely. - `key: "dedicated"` - This is the exact attribute name set on the node's taint. - `operator: "Equal"` - Requires an exact string match for both the `key` and `value`. - `value: "frontend"` - The target value that completes the match. - `effect: "NoSchedule"` - Dictates the enforcement action. If a pod lacks this toleration, the scheduler refuses to place it on the node. Existing running pods remain untouched. Note, other effects include `NoExecute`, which evicts non-tolerating pods immediately, and `PreferNoSchedule`, a soft warning.
     - **The attraction gate `nodeSelector`** - A toleration does not force a pod to go to a tainted node; it merely allows it to go there. Without `nodeSelector`, a frontend pod with a toleration could still land on an untainted backend node. Combining both fields establishes exclusivity: - `nodeSelector` - forces the pod to search only for nodes labeled `tier: frontend`. - `toleration` - unlocks those nodes so the pod can actually be scheduled onto them.
 
@@ -1297,24 +1297,24 @@ This file is a Kubernetes `Deployment` manifest that managers the Version 1 Next
           However, Kubernetes is completely blind to AWS subnets and security groups. Without taints, Kubernetes would treat all worker nodes as one giant pool and could schedule the Next.js web app onto a backend EC2 instance or the internal/backend Go/Flask API onto a public frontend instance. **Taints enforce the AWS architecture boundaries inside Kubernetes**, guaranteeing that workloads land on the exact EC2 tier designed for them and no where else.
 
       - **Containing security breaches, Blast-Radius Control** - The `v1-frontend-nextjs` deployment handles raw, untrusted user request coming through the Istio gateway. Public facing web apps face the highest risk of attack e.g. node module vulnerabilities or Remote Code Execution.
-        - **With taints** - If an attacker breache the Next.js container, they are trapped on a `worker-frontend` EC2 instance. They cannot read host memory, capture internal API credentials, or pivot directly to the `worker-backend` instances, because the backend pods run on physically separate EC2 hardware.
+        - **With taints** - If an attacker breaches the Next.js container, they are trapped on a `worker-frontend` EC2 instance. They cannot read host memory, capture internal API credentials, or pivot directly to the `worker-backend` instances, because the backend pods run on physically separate EC2 hardware.
         - **Without Taints** - The frontend pod could be co-located on the same EC2 node as the backend API. A breach of the web container could compromise the entire physical node and all adjacent backend pods sharing that host's kernel and RAM.
 
       - **Enforcing AWS Security group boundaries (Network layer)** - AWS security groups attach at the EC2 node's ENI level. As pod traffic egresses the worker node, it is encapsulated with host-level headers that carry the node's security group identity. Without taints, a frontend pod scheduled onto a backend node would inherit that node's security group context, opening unauthorized network paths directly to private databases and AWS Secrets Manager endpoints.
 
-      - **Preserving IAM instance profile scoping (Identity layer)** - Worker nodes assume tier specific IAM roles via EC2 instance profiles, exposed to local containers via **IMDSv2**. Each tier enforces strict least privileges: frontend nodes only retrieve cluster join tokens, backend nodes access db credentials, and controlplane nodes hold GitHub PAT and Grafana credentials. Tains prevent a public-facing frontend pod from landing on a higher-privileged node and harvesting elevated AWS credentials via IMDS.
+      - **Preserving IAM instance profile scoping (Identity layer)** - Worker nodes assume tier specific IAM roles via EC2 instance profiles, exposed to local containers via **IMDSv2**. Each tier enforces strict least privileges: frontend nodes only retrieve cluster join tokens, backend nodes access db credentials, and controlplane nodes hold GitHub PAT and Grafana credentials. Taints prevent a public-facing frontend pod from landing on a higher-privileged node and harvesting elevated AWS credentials via IMDS.
 
       - **Protecting user experience on fixed compute `t3.medium` nodes** - We're running `t3.medium` EC2 instances (`2 vCPUs, 4GiB RAM`). Compute resources on these nodes are strictly constrained:
         - **With Taints** - The CPU and RAM on the `worker-frontend` EC2 nodes are reserved exclusively for rendering web pages and serving frontend assets.
         - **Without Taints** - Heavy backend workloads (like data processing or Go API spikes) could bleed onto the frontend nodes, starving Next.js of CPU and causing page loads to freeze for end users. Taints create an operational firewall between the tiers.
 
-8.  **Container definitions & Immutability `containers.image` & `ports`** - This is the exact cryptographic binary path referencing the application image stored in `ghcr.io`: `ghcr.io/manunebo/rr-v1-frontend:46dd0cae58aa503c7ccd4abe03c93820bd4febad` (note, your's will be different, see instructions below on how to retrieve this). Instead of referencing a loose, moving target like `:latest` or `:dev`, this configures Kubernete to pull a container built from a specific, unalterable git commit hash (`46dd0cae...`). Every time a pod starts or reschedules across the EC2 worker nodes, the container runtime uses this exact identifier to locate and pull the image layers. There are a few benefits to this:
+8.  **Container definitions & Immutability `containers.image` & `ports`** - This is the exact cryptographic binary path referencing the application image stored in `ghcr.io`: `ghcr.io/manunebo/rr-v1-frontend:46dd0cae58aa503c7ccd4abe03c93820bd4febad` (note, yours will be different, see instructions below on how to retrieve this). Instead of referencing a loose, moving target like `:latest` or `:dev`, this configures Kubernetes to pull a container built from a specific, unalterable git commit hash (`46dd0cae...`). Every time a pod starts or reschedules across the EC2 worker nodes, the container runtime uses this exact identifier to locate and pull the image layers. There are a few benefits to this:
     - **Eliminates environment drift & "silent re-pulls"** Standard tags like `:latest` or version numbers like `:v1.0.0` are mutable, they can be overwritten in the container registry at any time. If an EC2 node restarts or scales up, a node with `:latest` might pull a newly overwritten image, while an existing node runs then old image. Pinning the SHA guarantees that all worker nodes in the cluster execute 100% identical code.
     - **Strict GitOps alignment (ArgoCD** - In a GitOps workflow, git is the single source of truth. By writing the git commit SHA directly into the manifest, the deployment history in git maps **1-to-1** with the software running in Kubernetes. We can trace any running container back to the exact line of code that built it.
     - **Instant, reliable rollbacks** - If a deployment introduces a regression, rolling back does not require rebuilding code. Changing the commit SHA back to a previous hash in git causes Kubernetes to execute a deterministic rolling update to the known-good container image instantly.
 
     **Automated CI and GitOps feedback loop end-to-end**
-    The automated CI write-back loop is the critical engine that makes the whole SHA pinning strategy work in practice without manual overhead. Lets look into how this CI and GitOps feedback loop functions end-to-end:
+    The automated CI write-back loop is the critical engine that makes the whole SHA pinning strategy work in practice without manual overhead. Let's look into how this CI and GitOps feedback loop functions end-to-end:
     - **Code push & pipeline trigger** - A developer pushes code to GitHub, generating a unique git commit SHA e.g. `46dd0cae...`.
     - **Image build & tagging** - GitHub Actions builds the container image and pushes it to `ghcr.io`, tagging it directly with that exact git commit HASH.
     - **Automated manifest write-back** - Rather than requiring a human to manually update YAML files, the GitHub Actions workflow edits `v1-frontend-nextjs-deployment.yml`, overwrites the `image:` tag with the new commit SHA, and commits that change back to the repository.
@@ -1328,11 +1328,11 @@ This file is a Kubernetes `Deployment` manifest that managers the Version 1 Next
     - **Service-to-Pod port mapping: Kubernetes** - `services` use target port matching to route traffic from cluster-level virtual IPs down to individual pod instances. This port declaration ensures the `Service` selector maps incoming HTTP traffic directly to the Next.js process without misrouting requests to an unopened port.
     - **Tooling & Health probe contracts** - Monitoring tools, Prometheus scrapers and K8s readiness/liveness probes rely on `containerPort` metadata to discover active endpoints and perform automated health checks against the container.
 
-9.  **Health probes `readinessProbe` & `livenessProbe`** - These are automated application health monitors. Lets take a closer look:
-    - **The traffic controller `readinessProbe`** - This is a network-aware diagnostic check executed continuously by the Kubernete worker node's kubelet. It determines whether a pod is eligible to receive external user traffic from the Kubernetes service and Istio service mesh. It pings the `/api/health` endpoint on port `3000`. If the probe fails, Kubernetes forcefully removes this pod's IP address from the pool of the `rr-frontend-svc` service. The Istio envoy sidecars are immediately updated to stop routing user request to this specific pod. Crucially, **the pod is not killed or restarted**; it is simply taken out of the load-balancer rotation until the probe succeeds again. We need this for the following reasons:
+9.  **Health probes `readinessProbe` & `livenessProbe`** - These are automated application health monitors. Let's take a closer look:
+    - **The traffic controller `readinessProbe`** - This is a network-aware diagnostic check executed continuously by the Kubernetes worker node's kubelet. It determines whether a pod is eligible to receive external user traffic from the Kubernetes service and Istio service mesh. It pings the `/api/health` endpoint on port `3000`. If the probe fails, Kubernetes forcefully removes this pod's IP address from the pool of the `rr-frontend-svc` service. The Istio envoy sidecars are immediately updated to stop routing user request to this specific pod. Crucially, **the pod is not killed or restarted**; it is simply taken out of the load-balancer rotation until the probe succeeds again. We need this for the following reasons:
       - **Zero-Downtime rollouts** - When ArgoCD deploys a new Next.js pod, the container starts, but the Node.js server takes several seconds to boot and parse JavaScript chunks. Without a readiness probe, Kubernetes would instantly send user traffic to the pod the millisecond the container process starts, resulting in `502 Bad Gateway` errors for early users.
       - **Graceful Degradation** - If the pod experiences a temporary CPU spike and cannot serve requests quickly enough, it will fail readiness. Istio will route traffic to the other replica while this pod recovers, preventing a localized slowdown from affecting users.
-    - **The Process Executioner `livenessProbe`** - This is a dreastic, fail-safe diagnostic check also executed by the Kubelet, designed to detect irrecoverable application deadlocks. It also pings `/api/health` but its reaction to failure is entirely different. If the liveness probe fails consecutively, the Kubelet assumes the application is irreparably frozen. It issues a `SIGTERM`, and eventually a `SIGKILL` to terminate the container, completely destroying it and spinning up a fresh instance in its place. We need this for **Catching zombie processes**: Container runtimes, like **containerd** or **Docker**, only know if the main PID (Linux process ID 1) is running. If the Next.js application suffers a thread-pool exhaustion, an infinite loop, or a memory leak that freezes the web server, the process itself hasn't crashed, so the container runtime thinks it is healthy. The liveness probe detects this "zombie" state and forces a hard reset to restore functionality without requiring a human on-call engineer to SSH into the node..
+    - **The Process Executioner `livenessProbe`** - This is a drastic, fail-safe diagnostic check also executed by the Kubelet, designed to detect irrecoverable application deadlocks. It also pings `/api/health` but its reaction to failure is entirely different. If the liveness probe fails consecutively, the Kubelet assumes the application is irreparably frozen. It issues a `SIGTERM`, and eventually a `SIGKILL` to terminate the container, completely destroying it and spinning up a fresh instance in its place. We need this for **Catching zombie processes**: Container runtimes, like **containerd** or **Docker**, only know if the main PID (Linux process ID 1) is running. If the Next.js application suffers a thread-pool exhaustion, an infinite loop, or a memory leak that freezes the web server, the process itself hasn't crashed, so the container runtime thinks it is healthy. The liveness probe detects this "zombie" state and forces a hard reset to restore functionality without requiring a human on-call engineer to SSH into the node..
     - **Components** - Both probes use the same mechanism but are tuned with different timing parameters to serve their distinct purposes.
       - `httpGet (path: /api/health, port: 3000)` - This is the protocol and destination of the check. It instructs the Kubelet to send an unencrypted HTTP GET request to `127.0.0.1:3000/api/health`. It considers the probe successful only if the application returns an HTTP status code between `200` and `399`. This is a **"shallow"** probe: thus it doesn't query a database. That's the best practice for a frontend: If the backend DB goes down, we don't want Kubernetes to aggressively terminate all the frontend pods in response. All we want to know is that the Next.js server itself can return a `200 OK`.
       - **`initialDelaySeconds` (5s for Readiness, 15s for Liveness)** - This is the startup grace period. It tells the Kubelet how long to wait after the container starts before sending the very first health check. This is because the Next.js framework requires a few seconds to initialize:
@@ -1343,10 +1343,10 @@ This file is a Kubernetes `Deployment` manifest that managers the Version 1 Next
 10. **Service interconnect environment variable `containers.env`** - This environment variable passes runtime configuration into the application code without hardcoding values inside the container image i.e. setting `BACKEND_URL = "http://ritual-roast-backend:5000"` injects a dynamic configuration setting directly into the Next.js container when it boots up. When the Next.js server fetches data for a user, it reads this variable to know where to send its backend API requests inside the cluster `http://ritual-roast-backend:5000`. This is useful for a number of reasons:
     - **Change settings without rebuilding code** - We can point the frontend to different backend URLs across environments (`dev`, `staging`, `prod`) by modifying a single line in YAML. We never have to recompile the Next.js application or rebuild the container image.
     - **Unlocks canary deployments** - The frontend doesn't need to know whether the backend is running Flask (`v1`) or Go (`v2`). It sends every request to the neutral address `ritual-roast-back`, allowing Istio to step in and handle the percentage-based traffic split behind the scenes.
-    - **Keeps sever calls internal and fast** - Server-to-server requests stay safely inside the private Kubernetes network, avoiding slow and insecure round-trips over the public internet.
+    - **Keeps server calls internal and fast** - Server-to-server requests stay safely inside the private Kubernetes network, avoiding slow and insecure round-trips over the public internet.
 
 11. **Container compute boundaries `containers.resources`** - This is a resource contract for the Next.js container. It defines two distinct operational boundaries for CPU and Memory: **the guaranteed floor `Requests`** and **the maximum ceiling `Limits`**:
-    - **Requests `cpu: 100m`, `memory: 256Mi`** - Reserves a guaranteed minimum of **0.1 CPU core (100 millicores) and 256 Megabytes if RAM**. Kubernetes uses this baseline figure when deciding which worker node has enough capacity to accept the pod.
+    - **Requests `cpu: 100m`, `memory: 256Mi`** - Reserves a guaranteed minimum of **0.1 CPU core (100 millicores) and 256 Megabytes of RAM**. Kubernetes uses this baseline figure when deciding which worker node has enough capacity to accept the pod.
     - **Limits `cpu: 300m`, `memory: 512Mi`** - Sets an absolute maximum ceiling. During sudden traffic spikes, the container can temporarily burst up to **0.3 CPU cores and 512 Megabytes of RAM**, but it cannot exceed these bounds.
 
 This configuration is needed for a number of reasons:
@@ -1367,7 +1367,7 @@ This is the manifest file for the `v1` Flask backend API. It creates two pods in
    - `failureThreshold: 30` - Allows the application to fail this probe up to 30 times in a row before giving up.
    - `timeoutSeconds: 2` - Gives the app up to 2 seconds to respond to each ping.
 
-   By allowing 30 failures spcaed 5 seconds apart **(30 x 5 seconds)**, we create a maximum **150-seconds (2.5 minutes) boot window**. The container is considered successfully started the very first time it returns a `200 Ok` response. We are using this as a shield mechanism: a physical gatekeeper that **disables both `livenessProbe` and `readinessProbe`** until the application finishes booting. Lets step through the process phases:
+   By allowing 30 failures spaced 5 seconds apart **(30 x 5 seconds)**, we create a maximum **150-seconds (2.5 minutes) boot window**. The container is considered successfully started the very first time it returns a `200 Ok` response. We are using this as a shield mechanism: a physical gatekeeper that **disables both `livenessProbe` and `readinessProbe`** until the application finishes booting. Let's step through the process phases:
    - **Phase 1 (Booting)** - The container turns on. The `startupProbe` begins polling. As long as `startupProbe` is running, Kubernetes ignores `livenessProbe` and `readinessProbe` completely.
    - **Phase 2 (Success)** - The Flask app finishes booting and returns its first `200 Ok` on `/health`.
    - **Phase 3 (Handoff)** - The `startupProbe` turns off forever. Kubernetes immediately hands control over to `readinessProbe` to start routing user traffic, and `livenessProbe` to monitor long term runtime crashes.
@@ -1382,7 +1382,7 @@ This is the manifest file for the `v1` Flask backend API. It creates two pods in
    **With `startupProbe` (The solution)**
    The `startupProbe` hangs a **"Do Not Disturb"** sign on the container for up to 150 seconds. It gives Python all the time it needs to perform cold-start network tasks safely, without risking premature termination by the liveness executioner.
 
-2. **Bulk environment injection (`envFrom: configMapRef`)** - This is an automatic bulk importer that loads an entire group of configuration settings into the container all at once i.e. this is a Kubernetes environment injection bock, `envFrom`, that targets an external ConfigMap named `backend-config`. Instead of manually defining variables line-by-line using individual `env` blocks, `envFrom` reads a central configuration dictionary and imports every key-value pair inside it automatically.
+2. **Bulk environment injection (`envFrom: configMapRef`)** - This is an automatic bulk importer that loads an entire group of configuration settings into the container all at once i.e. this is a Kubernetes environment injection block, `envFrom`, that targets an external ConfigMap named `backend-config`. Instead of manually defining variables line-by-line using individual `env` blocks, `envFrom` reads a central configuration dictionary and imports every key-value pair inside it automatically.
 
    When Kubernetes creates the container, it opens the `backend-config` ConfigMap stored in the cluster, reads every key-value pair and sets them as environment variables inside the container's OS. When the application boots up, its code can access these values instantly as if they were typed directly into the container. **Note** this specific configMap we saw in `user_data_cp.sh`, I've included it below for clarity:
 
@@ -1417,7 +1417,7 @@ This is the manifest file for the `v1` Flask backend API. It creates two pods in
    - **Proportional scaling** - Sizing the container to 128Mi/256Mi matches the actual resource profile of a lightweight API microservice.
 
    This is useful for a number of reasons:
-   - **Maximizing `t3.medium` node density** - the worker node is running on `t3.medium` EC2 instances, which have strict physical memory limits. By cutting resource requests in half compared to the frontend, Kubernete can pack twice as many backend replicas onto a single node without wasting infrastructure capacity.
+   - **Maximizing `t3.medium` node density** - the worker node is running on `t3.medium` EC2 instances, which have strict physical memory limits. By cutting resource requests in half compared to the frontend, Kubernetes can pack twice as many backend replicas onto a single node without wasting infrastructure capacity.
    - **Blast radius protection** - If a bug in a database query or a memory leak causes the Python process to balloon in size, the 256Mi memory limit ensures it gets terminated locally (`OOMKilled`) rather than consuming all the RAM on the underlying EC2 instance and crashing neighboring pods.
 
 ### d. [frontend-service](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/k8s-manifests/dev-apps/services/frontend-service.yml)
@@ -1454,12 +1454,12 @@ This directory contains the deployment manifests for **Version 2** of the applic
 
 ### a. [v2-frontend-vite-deployment](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/k8s-manifests/canary-staging/v2-frontend-vite-deployment.yml)
 
-Structurally, this v2 manifest file is 90% identical to the v1 Next.js frontend manifest but lets focus on what's different.
+Structurally, this v2 manifest file is 90% identical to the v1 Next.js frontend manifest but let's focus on what's different.
 
 1.  **Canary subset label `version: v2`** - Changing the version label value from `v1` to `v2` while keeping `app: rr-frontend` pairs this deployment with the unified **`rr-frontend-svc`** loadbalancer while creating a distinct group of pods that Istio can target independently. Istio's `DestinationRule` looks for `version: v2` to register these pods as the `v2` subset. This allows us to run Next.js and Vite simultaneously under the same Kubernetes service, enabling Istio to control the exact percentage of user traffic sent to Vite e.g. a 10% canary split.
 2.  **Omission of the Runtime `env` block** - To understand this shift, we need to look at where the code is actually running and how the internal network is structured. Below is the detailed breakdown of how Nginx replaces the `BACKEND_URL` environment variable.
 
-    **The problem: The browser cannont see Kubernetes**
+    **The problem: The browser cannot see Kubernetes**
     In the Next.js architecture, the application runs on a Node.js server inside the Kubernetes cluster. Because it lives inside the cluster, it can read the `BACKEND_URL` environment variable and directly talk to `http://ritual-roast-backend:5000`.
 
     In the Vite architecture, the application is a **Single Page Application (SPA)**. Once Nginx sends the HTML and JavaScript to the user, the application is now running entirely on the **user's laptop or phone browser**. If the JavaScript in the browser tries to send an API request directly to `http://ritual-roast-backend:5000`, it will fail. The user's laptop has no idea what that internal Kubernetes address is.
@@ -1474,7 +1474,7 @@ Structurally, this v2 manifest file is 90% identical to the v1 Next.js frontend 
     - **Nginx intercepts** - The request hits the Nginx container on port 3000. Nginx sees that the URL path starts with `/api/`.
     - **The handoff `proxy_pass`** - Instead of looking for a static file, Nginx obeys the `proxy_pass` rule. It secretly opens a new connection to `http://ritual-roast-backend:5000/data` inside the cluster, grabs the response, and hands it back to the user's browser.
 
-    By hardcoding the internal K8S address directly intoo the `nginx.conf` file routing rules, Nginx handles the communication automatically. The container doesn't need K8s to pass a `BACKEND_URL` variable at boot because Nginx already knows exactly where to send API traffic.
+    By hardcoding the internal K8S address directly into the `nginx.conf` file routing rules, Nginx handles the communication automatically. The container doesn't need K8s to pass a `BACKEND_URL` variable at boot because Nginx already knows exactly where to send API traffic.
 
 3.  **Halved compute footprint `resources`** - This reduces resource allocation from `request: 256Mi, limit: 512Mi` for Next.js down to `request: 128Mi, limit: 256Mi` for Vite/Nginx. Essentially freeing half the memory reservation, per container, on the Kubernetes worker node. Thus Nginx is significantly lighter than the Node.js V8 runtime. Lowering these limits prevents wasting RAM on our `t3.medium` EC2 instances and lets us pack more pods onto each worker node.
 
@@ -1486,13 +1486,13 @@ The v2 Go backend introduces a massive architectural shift in how Kubernetes mon
 
 1. **Canary subset label `version: v2`** - We've seen this with the frontend where we changed the version label from `v1` to `v2`. Here it tags these pods as the new Go iteration of the application, while keeping them grouped under the shared `app: rr-backend` umbrella alongside the Python Flask pods. Istio in turn uses this exact label to differentiate the Go pods from the Flask pods behind the scenes, allowing it to mathematically split traffic e.g. send 10% of traffic to the `v2` label. Without this version distinction, Istio wouldn't be able to tell the Python and Go containers apart, and the controlled canary rollout wouldn't work.
 
-2. **Omission of the `startupProbe`** - To truly understand why the `startupProbe` was removed for the Go backend, we have to look at how Kubernete decides if an application is "alive", and how fundamentally different Python and Go are under the hood. Lets take a deep dive into why this component was dropped and how it changes the deployment's behaviour.
+2. **Omission of the `startupProbe`** - To truly understand why the `startupProbe` was removed for the Go backend, we have to look at how Kubernetes decides if an application is "alive", and how fundamentally different Python and Go are under the hood. Let's take a deep dive into why this component was dropped and how it changes the deployment's behaviour.
 
    **The Kubernetes "Impatient Manager" problem**
    Kubernetes is notoriously impatient. When it starts a container, it immediately wants to know if the application is ready to receive web traffic. It does this by pinging the `livenessProbe` and `readinessProbe` URLs. If an application takes too long to boot up, Kubernetes will ping the health URL, get no answer, assume the application is broken, and mercilessly kill the container to try again, creating a vicious cycle of **CrashLoopBackOff**.
 
    **The heavy engine: v1 Python scenario**
-   Python is an interpreted language. When the v1 Flask container starts, alot of heavy lifting happens sequentially before it can answer a web request:
+   Python is an interpreted language. When the v1 Flask container starts, a lot of heavy lifting happens sequentially before it can answer a web request:
    - The operating system loads the Python interpreter
    - Python reads and compiles the application code into memory.
    - The WSGI web server, like Gunicorn, spins up its worker processes.
@@ -1517,7 +1517,7 @@ The v2 Go backend introduces a massive architectural shift in how Kubernetes mon
 3. **The split-endpoint probe contract `livez` VS `/health`**
    To understand these concepts well, we must first understand the fundamental difference between how Kubernetes treats a **Liveness Probe** versus a **Readiness Probe**. They ask two very different questions, and Kubernetes reacts to the answers in completely different ways.
    - **Liveness Probe asks** - _"Do you have a pulse?"_
-     **if it failes** Kubernetes assumes the application has crashed or frozen. Its only response is to forcefully terminate the container and start a new one.
+     **if it fails** Kubernetes assumes the application has crashed or frozen. Its only response is to forcefully terminate the container and start a new one.
    - **Readiness Probe asks** - _"Are you ready to do work right now?"_
      **If it fails** Kubernetes assumes the application is busy loading or temporarily disconnected. It does not kill the container. It simply stops sending user traffic to it until the probe passes again.
 
@@ -1525,12 +1525,12 @@ The v2 Go backend introduces a massive architectural shift in how Kubernetes mon
    Here's exactly how mixing these up caused a major flaw in v1, and how the split-endpoints fix it in v2. In the v1 Flask deployment, both the Liveness and Readiness probes pointed to the exact same url: `/health`. This URL ran a script that checked if the database was reachable.
 
    **The scenario**
-   AWS RDS occassionally performs routine maintenance or a failover. When this happens, the database drops all connections and goes completely offline for about 30 seconds.
+   AWS RDS occasionally performs routine maintenance or a failover. When this happens, the database drops all connections and goes completely offline for about 30 seconds.
 
    **What happens in v1**
    - The database goes offline for 30 seconds
    - The Readiness probe hits `/health`, fails to reach the database, and tells Kubernetes: _"`/` can't work right now"_. Kubernetes stops sending it user traffic. This is the correct behaviour.
-   - But simultaneously, the Liveness probe hits `/health`, fails to reach the database, and tels Kubernete: _"I failed my check"_
+   - But simultaneously, the Liveness probe hits `/health`, fails to reach the database, and tells Kubernetes: _"I failed my check"_
    - Kubernetes interprets this as _"I do not have a pulse"_
    - **The disaster** - Kubernetes mercilessly executes the container. Because every backend pod lost database access at the exact same time, Kubernetes assassinates our entire backend fleet simultaneously.
    - When the pods restart, they have to go through their long 150 seconds boot sequence, causing a massive, multi-minute outage for our users over a simple 30 second database blip.
@@ -1545,7 +1545,7 @@ The v2 Go backend introduces a massive architectural shift in how Kubernetes mon
    When Kubernetes hits this URL, the Go application actively runs a `db.Ping()` command against the AWS RDS database. If the database responds, it returns `200 Ok`. It tells Kubernetes, _"I have everything I need to successfully process a user's web request right now"_. If the database is offline, it returns `503 Service Unavailable`.
 
    **The v2 scenario: Surviving the database blip**
-   Now lets look at what happens when AWS RDS goes offline for 30 seconds with the v2 architecture:
+   Now let's look at what happens when AWS RDS goes offline for 30 seconds with the v2 architecture:
    - The database goes offline.
    - Readiness `/health` fails. The probe sees the database is down. Kubernetes temporarily removes the pod from the active loadbalancer. User traffic is paused.
    - Liveness `/livez` succeeds: The probe sees the Go web server is still running perfectly fine. Kubernetes leaves the container alive and alone.
@@ -1559,7 +1559,7 @@ The v2 Go backend introduces a massive architectural shift in how Kubernetes mon
 
 This is a library of Istio `VirtualService` configurations, indicated by the `vs-` prefix. It contains pre-written rules that dictate exactly how much traffic should be sent to the stable `dev-apps` (v1) versus the new `canary-staging` (v2). It covers multiple release strategies:
 
-1.  **Canary** - Slowly bleeding/transferring traffic over in steps: 10% then 30%, upto 100%
+1.  **Canary** - Slowly bleeding/transferring traffic over in steps: 10% then 30%, up to 100%
 2.  **Blue/Green** - A hard toggle switching 100% of traffic from v1 instantly to v2.
 3.  **Shadow** Mirroring live user traffic to v2 invisibly in the background to test performance without the users knowing.
 
@@ -1567,27 +1567,27 @@ This is the core value of Istio. In standard Kubernetes, a deployment replaces o
 
 ## Canary deployments
 
-A canary deployment is a strategy where a new version of an application `v2` is released to a very small, controlled percentage of live users, **the "canary in the coal mine"**. If the new version crashes or throws errors, only a tiny fraction of users notice, while the rest remain safely on the stable version `v1`. If `v2` id healthy, we gradually increase the percentage until it reaches 100%. This is an useful, essential, deployment technique because migrating an entire tech stack from Python/Next.js to Go/Vite introduces massive operational risk. A canary deployment mitigates this big-bang risk. It allows us to prove that the new Go binary and Vite static files work flawlessly under real-world load before committing all users to the new architecture.
+A canary deployment is a strategy where a new version of an application `v2` is released to a very small, controlled percentage of live users, **the "canary in the coal mine"**. If the new version crashes or throws errors, only a tiny fraction of users notice, while the rest remain safely on the stable version `v1`. If `v2` is healthy, we gradually increase the percentage until it reaches 100%. This is a useful, essential, deployment technique because migrating an entire tech stack from Python/Next.js to Go/Vite introduces massive operational risk. A canary deployment mitigates this big-bang risk. It allows us to prove that the new Go binary and Vite static files work flawlessly under real-world load before committing all users to the new architecture.
 
 **The YAML files `vs-frontend-canary-10.yml` & `vs-backend-canary-10.yml`**
 We will look at these two files but the remaining files are variations of the above. In fact these files are patches to the baseline [istio-routing](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/k8s-manifests/dev-apps/routing/istio-routing.yml) file that we reviewed earlier. That file routes 100% of traffic to `v1`. These files are designed to overwrite those baseline rules temporarily. Thus the files are Istio `VirtualService` resources. They act as intelligent **Layer 7 of the OSI model (Application layer)** traffic cops. Instead of blindly distributing network packets, they intercept HTTP web traffic, look at the URLs, headers and cookies, and using a mathematical algorithm routes the requests to either `v1` or `v2` pods based on the rules defined herein. This is needed because standard Kubernetes Services only provide basic **"Round-robin"** loadbalancing; they cannot do percentage-based splits like (90/10) or inspect HTTP cookies. Istio `VirtualServices` provides the surgical precision required to control exactly who sees what version of the app.
 
 ## a. [vs-frontend-canary-10.yml](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/k8s-manifests/canary-variants/vs-frontend-canary-10.yml)
 
-Istio evaluates rules from top to bottom. The first rule that matches a user's request wins, and the rest are ignored. Lets look at the components, one by one.
+Istio evaluates rules from top to bottom. The first rule that matches a user's request wins, and the rest are ignored. Let's look at the components, one by one.
 
 1. **`spec:` block** - This is the specification block. It defines the desired state and the actual routing logic for this `VirtualService`. In Kubernetes, the `metadata` just gives the resource name. The `spec` is where the actual engineering happens.
 2. **The domain matcher `hosts: - "*"`** - This is the host/domain interceptor. It tells Istio which web addresses this rule applies to. The `"*"` is a wildcard meaning **"any domain name or IP address"**. This is needed because we want to catch absolutely all traffic heading into the frontend, regardless of whether the user typed `[www.ritual-roast.com](https://www.ritual-roast.com)`, an internal cluster address, or a raw IP address into their browser.
 3. **The entry point `gateways: - ritual-roast-gateway`** - This is the gateway binder. It attaches these specific routing rules to the cluster's front door, the Istio Ingress gateway. This is needed for intercepting and evaluating the user's traffic at the very edge of the cluster, before it even reaches the internal frontend services.
 4. **The protocol declaration `http:`** - This is the protocol block. It declares that all the rules following it are specifically for HTTP/HTTPS web traffic. Istio can route many types of traffic; TCP, gRPC, etc; By specifying HTTP, we tell Istio to look deep inside the web packets so it can read URLs, headers, and cookies.
-5. **Rule number 1: The v1 "Sticky" session** - This is the condition checker and router for existing stable users. It looks at the incoming we request. If the user's browser contains a cooking with `x-frontend=v1`, it immediately stops evaluating rules and forwards the traffic directly to the `v1` Next.js subset of the frontend service. This is needed to prevent browser crashes. If a user is currently clicking around the Next.js site, we must keep them on the Next.js site. Lets have a look at what the rule is comprised of:
-   - **The conditional trigger `- match`** - This is the "if" statement of the rule. It tells Istio's proxy to pause and inspect the incoming web request before deciding where to send it. It acts as a a gatekeeper, intercepting specific users rather than blindly treating all traffic exactly the same.
+5. **Rule number 1: The v1 "Sticky" session** - This is the condition checker and router for existing stable users. It looks at the incoming web request. If the user's browser contains a cookie with `x-frontend=v1`, it immediately stops evaluating rules and forwards the traffic directly to the `v1` Next.js subset of the frontend service. This is needed to prevent browser crashes. If a user is currently clicking around the Next.js site, we must keep them on the Next.js site. Let's have a look at what the rule is comprised of:
+   - **The conditional trigger `- match`** - This is the "if" statement of the rule. It tells Istio's proxy to pause and inspect the incoming web request before deciding where to send it. It acts as a gatekeeper, intercepting specific users rather than blindly treating all traffic exactly the same.
    - **The cookie inspector `- headers: { cookie: { regex: ".*x-frontend=v1.*" }}`** - This is the specific criteria the gatekeeper is looking for. It digs into the hidden data, HTTP headers, sent by the user's web browser and looks at their `cookie`. The `regex: ".*x-frontend=v1.*"` is a search pattern. It scans the entire cookie string to see if the exact phrase `x-frontend=v1` exists anywhere inside it. This is how we identify the users. If a browser has this cookie, it proves the user is currently navigating the old Next.js version of the website. We need this exact string to identify them so we don't disrupt their session.
    - **The action command `route:`** - This is the **"then"** statement of the rule. It tells Istio that if the `match` condition above is successfully met, it must execute the routing instructions that immediately follow. It bridges the logic. It separates the **"how to find the user"** part from the **"where to send the user"** part.
    - **The target destination `- destination: { host: rr-frontend-svc, subset: v1, port: { number: 80 } }`** - This is the final delivery address. It gives Istio the exact coordinates of where to send this user's web request: 1. `host: rr-frontend-svc`, Go to the main frontend service; 2. `subset: v1` - Crucially, bypass the generic pool and specifically target the pods labeled as `v1` (the Next.js pods); 3. `port: {number: 80}`, enter through port 80.
      Without this, Istio wouldn't know what to do with the matched user: Specifying the `v1` subset ensures that a user who started their journey on the `v1` website stays securely locked into the `v1` website for a seamless experience.
 6. **Rule number 2 `- match: - headers: { cookie: { regex: ".*x-frontend=v2.*" } } route - destination: { host: rr-frontend-svc, subset: v2, port: { number: 80 } }`** - This is the condition checker and router for the existing canary users. It scans the request for the `x-frontend=v2` cookie. If found, it routes the traffic directly to the `v2` (Vite) subset. This is needed because if a user was randomly selected to test the new Vite frontend 5 minutes ago, we must keep them pinned to Vite. If we didn't have this rule, they might click a link and accidentally be routed back to the old Next.js site, causing a jarring user experience.
-7. **Rule 3: The default fallback (The canary split) `- route: - destination: {...} weight: 90 ...`** - This is the catch-all canary distributor. Notice there is no `match:` block here. If a user reaches this far down the list, they do not have a `v1` cookie nor a `v2` cookie. They are a brand new visitor. Istio acts like a loaded roulette wheel: it sends **90%** of these new visitors to Next.js(`v1`) and **10%** of them to Vite (`v2`). This is the actual engine of the progressive rollout. It safely introduces a small **fraction, 10%** of new traffic to the new architecture. Once that **10%** lands on the Vite `v2` pods, the Nginx server running inside those pods will automatically inject the `x-frontenv2` cookie into the user's browser. On their very next click, they will hit **Rule 2** and remain safely locked into the `v2` experience.
+7. **Rule 3: The default fallback (The canary split) `- route: - destination: {...} weight: 90 ...`** - This is the catch-all canary distributor. Notice there is no `match:` block here. If a user reaches this far down the list, they do not have a `v1` cookie nor a `v2` cookie. They are a brand new visitor. Istio acts like a loaded roulette wheel: it sends **90%** of these new visitors to Next.js(`v1`) and **10%** of them to Vite (`v2`). This is the actual engine of the progressive rollout. It safely introduces a small **fraction, 10%** of new traffic to the new architecture. Once that **10%** lands on the Vite `v2` pods, the Nginx server running inside those pods will automatically inject the `x-frontend=v2` cookie into the user's browser. On their very next click, they will hit **Rule 2** and remain safely locked into the `v2` experience.
 
 **The remaining `vs-frontend-canary-X.yml` variants**
 The remaining frontend variant files differ only by their respective weights. Thus the same logic applies to them as above. There's no need to cover them in any detail.
@@ -1612,14 +1612,14 @@ Like the frontend, the remaining backend variant files differ only by their resp
 
 A **Blue-Green deployment strategy** is a zero-downtime application release model that uses two identical production environments named **Blue** and **Green**, to safely roll out updates.
 
-Lets have a look at how it works:
+Let's have a look at how it works:
 
 1. **Blue environment (Live production environment)** - This runs the current, stable version of the application and processes 100% of live user traffic through a gateway or loadbalancer such as Istio, AWS ALB, or Nginx.
-2. **Green environment (The standby production environment)** - Long before code ever reaches this stage, automated CI/CD workflows run pre-deployment checks such as: unit tests, static code analysis, and container security scans to catch bugs early in the pipeline. Once those checks pass, the new build is deployed to Green, an exact replica of the production environment i.e. running in paralell to the live environment. While Green initially receives 0% of live customer traffic, teams safely warm up database connection pools, pre-populate caches, and perform final smoke tests with zero risk to real users. Once Green is confirmed fully ready, the loadbalancer instantly flips 100% of live traffic from Blue to Green in a single atomic switch.
+2. **Green environment (The standby production environment)** - Long before code ever reaches this stage, automated CI/CD workflows run pre-deployment checks such as: unit tests, static code analysis, and container security scans to catch bugs early in the pipeline. Once those checks pass, the new build is deployed to Green, an exact replica of the production environment i.e. running in parallel to the live environment. While Green initially receives 0% of live customer traffic, teams safely warm up database connection pools, pre-populate caches, and perform final smoke tests with zero risk to real users. Once Green is confirmed fully ready, the loadbalancer instantly flips 100% of live traffic from Blue to Green in a single atomic switch.
 
 **Key advantages**
 
-- **Zero downtime** - Users experience no service interuption because the update happens by updating a proxy routing pointer rather than restarting containers under live load.
+- **Zero downtime** - Users experience no service interruption because the update happens by updating a proxy routing pointer rather than restarting containers under live load.
 - **Near instant rollback** - If Green fails post cut-over, flipping the loadbalancer pointer back to Blue restores stable operations in milliseconds.
 - **Risk isolation** - Live users never see incomplete builds or transient startup errors while new code initializes.
 
@@ -1643,7 +1643,7 @@ Canary deployments need `match` rules and cookies to carefully separate users in
 
 **Components**
 
-Lets have a look at the components:
+Let's have a look at the components:
 
 1. **The domain interceptor `hosts: - "*"`** - We've seen this before, it's the domain/URL matcher. It makes use of the wildcard `"*"` to catch any web address, hostname, or IP address the user typed into their browser to reach the cluster. This is needed to guarantee that this routing rule applies to all incoming frontend traffic, regardless of how the user navigated to the site.
 2. **The edge binder `gateways: - ritual-roast-gateway`** - This is the entry-point connection. It attaches this specific routing rule to the main Istio ingress gateway, the public front door of the Kubernetes cluster. This is needed to control and direct the user traffic at the very edge of the network, long before the traffic actually enters the internal application network.
@@ -1666,7 +1666,7 @@ This achieves the following:
 
 ## c. [vs-backend-blue-green-v2.yml.yml](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/k8s-manifests/canary-variants/vs-backend-blue-green-v2.yml)
 
-Like the other files previously reviewed, this is yet another variation of the `VirtualService` which updates the base file to route traffic to an alternative destination. There's nothing we haven't seen yet here but lets have a look at the **routing** section:
+Like the other files previously reviewed, this is yet another variation of the `VirtualService` which updates the base file to route traffic to an alternative destination. There's nothing we haven't seen yet here but let's have a look at the **routing** section:
 
 1. The `-route` is the execution command under `http`. It tells Istio to evaluate the destination list immediately beneath it to decide where to deliver the HTTP request. It bridges the incoming connection to the explicit target destinations.
 2. **The legacy endpoint `- destination: { host: ritual-roast-backend, subset: v1, port: { number: 5000 } } weight: 0`** - The target definition for the legacy Python/Flask backend. It targets port `5000` on the `v1` pods and assigns it a `weight: 0`. This completely cuts off all live traffic to the old backend. Keeping `v1` explicitly listed with `0` weight preserves the manifest structure. If `v2` experiences an issue after cutover, an engineer or automated script can perform an immediate rollback by simply flipping this `0` back to `100` and the `v2` weight to `0`.
@@ -1692,7 +1692,7 @@ Because `canary-variants/` is purely a library of `v2` **forward-transition targ
 
 Frontend shadowing is completely redundant and practically useless: A frontend web application (Next.js or Vite) exists to serve HTML, CSS, JavaScript, and static assets directly to a user's web browser so the browser can render a user interface. Because **Istio discards 100% of the mirrored HTTP responses** from `subset: v2`, the browser never receives `v2`'s HTML or JavaScript bundle. Thus the browser only ever renders `v1`. We cannot **"shadow test"** a visual user interface or client-side application because the client never receives the payload to display it.
 
-**Deep dive explaination**
+**Deep dive explanation**
 Frontend traffic shadowing fails because a web browser must receive code to execute and render a page, but Istio intentionally throws away the mirrored response before it ever reaches the user. To understand why this makes frontend shadowing completely pointless, it helps to look at how a browser actually loads a modern website versus how Istio handles mirrored traffic.
 
 1. **The "incinerator" analogy** - Imagine ordering a shirt online:
@@ -1713,7 +1713,7 @@ Did you test if the green shirt fits, looks good, or has torn seams? **No**. You
    - **No client-side code runs** - Modern frontend frameworks (React, Vite, Next.js) do almost all their heavy lifting inside the user's browser. Because the browser never receives `v2`'s JavaScript bundle, none of the new React components, state logic, or event listeners ever execute.
    - **We only test "File delivery"** - The only thing `v2` does in a shadow setup is read a static `.html` or `.js` file off its disk and hand it to Istio. Proving that a web server can read a static file takes almost zero resources and tells us nothing about whether our frontend app actually works.
 
-**The bottom line** - Shadowing is meant for backend **APIs** where we want to test server-side database queries, CPU load, and data processing on real payloads without sending responses back to the user. For a **frontend**, if the user's browser doesn't get the code, no actual test has occured.
+**The bottom line** - Shadowing is meant for backend **APIs** where we want to test server-side database queries, CPU load, and data processing on real payloads without sending responses back to the user. For a **frontend**, if the user's browser doesn't get the code, no actual test has occurred.
 
 ## a. [vs-backend-shadow.yml](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/k8s-manifests/canary-variants/vs-backend-shadow.yml)
 
@@ -1721,7 +1721,7 @@ Much of this file we've already seen several times so we'll skip explaining this
 
 **Components**
 
-1. **`- method: exact: GET`** - This acts as a strict request filter that inspects the HTTP verb of every incoming request and only applies the rule if it finds a strict match. **Lets look at how it works**:
+1. **`- method: exact: GET`** - This acts as a strict request filter that inspects the HTTP verb of every incoming request and only applies the rule if it finds a strict match. **Let's look at how it works**:
    - **`method`** - Instructs the Istio sidecar proxy to check the standard HTTP method header of the incoming request e.g. `GET`, `POST`, `PUT`, `DELETE`, `PATCH`.
    - **`exact:`** - Demands a 1:1 case-sensitive string match. `exact: GET` will trigger solely for `GET` requests. It ignores every other method type.
 
@@ -1739,7 +1739,7 @@ Much of this file we've already seen several times so we'll skip explaining this
 
 2. **`mirror:` block** - This is the traffic shadowing configuration. It acts like a two-way mirror. It takes a blind copy of the incoming `Get` request and fires it at the new, experimental version of the backend (`subset: v2`). This allows us to test how `v2` handles real-world production traffic, data, and load without risking the user experience. The user never knows `v2` exists, and Istio completely ignores any errors or slow responses that `v2` might generate.
 3. **The `mirrorPercentage` parameter (`value: 100.0`)** - This is the volume dial for the shadow traffic. It tells Istio to copy exactly 100% of the matched `GET` requests over to the `v2` mirror. If our `v2` environment is small or we just want to do a light smoke test, then we could set this to a lower value such as `10%`. Here we've set this to `100%` because we want to subject the `v2` to the exact same full-scale stress and volume that `v1` is currently handling.
-4. **The second `route` block (The fallback)** - This is a catch-all safety net at the bottom of the file. It routes any traffic that failed the first match, meaning any request that is NOT a `GET` request such as: `POST`, `PUT`, or `DELETE`, directly to `v1`. This fallback is needed becaue our first rule is explicitly locked to `GET` requests. Without this second block, if a user tried to log in or update their profile, Istio wouldn't know what to do with the request and would drop it, breaking the application. This ensures all non-read traffic is handled normally by the stable `v1` app and is completely excluded from the mirroring process.
+4. **The second `route` block (The fallback)** - This is a catch-all safety net at the bottom of the file. It routes any traffic that failed the first match, meaning any request that is NOT a `GET` request such as: `POST`, `PUT`, or `DELETE`, directly to `v1`. This fallback is needed because our first rule is explicitly locked to `GET` requests. Without this second block, if a user tried to log in or update their profile, Istio wouldn't know what to do with the request and would drop it, breaking the application. This ensures all non-read traffic is handled normally by the stable `v1` app and is completely excluded from the mirroring process.
 
 # 4. [observability](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/k8s-manifests/observability)
 
@@ -1753,13 +1753,13 @@ It consists of the following core operational components:
    - **`prometheus-app.yml`** - Deploys Prometheus to collect, store, and query time-series performance metrics (request counts, latency, memory/CPU usage) from the pods and proxies.
    - **`istio-app.yml` / `ritual-roast-app.yml` / `canary-staging-app.yml`** - These are GitOps definitions that tell ArgoCD how to deploy and sync the core mesh components, the production application, and canary/staging environments alongside their monitoring hooks.
 
-2. **Mesh telemetry engine `telemetry.yml`** - This is an Istio custom resource that acts as the **"Logging & Metrics valve"**. It configures envoy sidecar proxies to emit acces logs, trace requests, and export standardized metrics directly to Prometheus for all traffic flowing through the `dev` namespace.
+2. **Mesh telemetry engine `telemetry.yml`** - This is an Istio custom resource that acts as the **"Logging & Metrics valve"**. It configures envoy sidecar proxies to emit access logs, trace requests, and export standardized metrics directly to Prometheus for all traffic flowing through the `dev` namespace.
 
 3. **Visual Dashboards & Automation (`dashboards/`)**
    - **`ritual-roast-mesh-dashboard.json`** - This is a pre-configured Grafana dashboard template designed to monitor the Ritual Roast app (tracking traffic weights, error rates, response times, and canary/blue-green split performance).
    - **`push-to-grafana.sh`** - This is a helper script that uses the Grafana API to automatically upload and update `ritual-roast-mesh-dashboard.json` into the live Grafana instance without requiring manual UI configuration.
 
-Lets take a look at each file one by one.
+Let's take a look at each file one by one.
 
 ## a. [telemetry.yml](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/k8s-manifests/observability/telemetry.yml)
 
@@ -1771,7 +1771,7 @@ This file houses the manifest for several resources. Below we deep dive into eac
 
 - **The destination: sending data off cluster `prometheus.remote_write "grafana_cloud"`** - This defines the exit door for all collected metrics. To ship metrics to Grafana cloud so we can view dashboards without storing heavy historical data inside the cluster. It uses `env(...)` to read secrets (`GRAFANA_CLOUD_TOKEN`, etc.) safely injected into the pod environment. It uses `external_labels` to attach `cluster = "ritual-roast-dev` and `env = "dev"` onto every single metric that passes through. That way if we connect 10 clusters to Grafana cloud later, we can instantly filter metrics by environment.
 
-- **The bouncer: cutting out the noise `prometheus.relabel "istio_only"`** - This acts as a quality filter before metrics leave the cluster. Envoy proxies generate thousands of internal metrics per container (memory stats, detailed connection pools, internal buffers). Pushing all of that will blow past Grafana Cloud's free `1,500` samples/second tier. This concists of the following component rules:
+- **The bouncer: cutting out the noise `prometheus.relabel "istio_only"`** - This acts as a quality filter before metrics leave the cluster. Envoy proxies generate thousands of internal metrics per container (memory stats, detailed connection pools, internal buffers). Pushing all of that will blow past Grafana Cloud's free `1,500` samples/second tier. This consists of the following component rules:
   - `forward_to = [prometheus.remote_write.grafana_cloud.receiver]` - This is the `grafana_cloud` remote write component i.e. what we're sending to provided the conditions in the regular expression are met.
   - `source_labels = ["__name__"]` - This looks at the internal name of every metric incoming.
   - `regex = "istio_.*|up" & action = "keep"` - Drops everything except metrics starting with `istio_` (like request counts and latency) or named `up` (to tell if a container is alive).
@@ -1816,11 +1816,11 @@ This file houses the manifest for several resources. Below we deep dive into eac
 
     **Components**
 
-- **Annotations: ArgoCD Sync wave (`argocd.argoproj.io/sync-wave: "4"`)** - This is a deployment instruction for ArgoCD (The tool managing our cluster's deployments). It tells ArgoCD to wait until "Wave 4" (Step 4 in the deployment) before trying to create this DaemonSet. Kubernetes deployments often have dependencies. Alloy cannot start until its passwords (Secrets) and configuration files (ConfigMaps) exist. Putting Allow in Wave 4 ensures that Waves 1,2, and 3 have already built the foundation it needs to run successfully i.e. guarantees that the `observability` namespace exists, the `grafana-auth` secret containing our API token is loaded, the `alloy-config` file is mounted and ready. Only then does Alloy spin up, launching smoothly on the first try without crashing or looping on missing dependency errors.
+- **Annotations: ArgoCD Sync wave (`argocd.argoproj.io/sync-wave: "4"`)** - This is a deployment instruction for ArgoCD (The tool managing our cluster's deployments). It tells ArgoCD to wait until "Wave 4" (Step 4 in the deployment) before trying to create this DaemonSet. Kubernetes deployments often have dependencies. Alloy cannot start until its passwords (Secrets) and configuration files (ConfigMaps) exist. Putting Alloy in Wave 4 ensures that Waves 1,2, and 3 have already built the foundation it needs to run successfully i.e. guarantees that the `observability` namespace exists, the `grafana-auth` secret containing our API token is loaded, the `alloy-config` file is mounted and ready. Only then does Alloy spin up, launching smoothly on the first try without crashing or looping on missing dependency errors.
 - **Tolerations (`operator: "Exist"`)** - This is a VIP pass that bypasses node restrictions. Since in Kubernetes, administrators often place "taints" on nodes (as we have) to restrict pod placement. This toleration tells Kubernetes, _"I tolerate all taints, put me on this node anyway"_. This is needed as the resource at hand is a DaemonSet meant for cluster-wide monitoring: It needs to monitor everything. Without this rule, the restricted nodes would reject the Alloy pod, leaving those critical servers completely unmonitored.
-- **The container image (`image: grafana/alloy:v1.3.1`)** - This is the actual software being downloaded and run. It pulls version 1.3.1 of Grafana Alloy from the internet. We're using a specific pinned version (`v1.3.1`) rather than just asking for `:latest`. If it were set to `:latest`, a new update from Grafana could automatically download, chage how the software works and break our monitoring pipeline without warning. Pinned versions guarantee stability.
-- **Environment variables `valueFrom: secretKeyRef`** This is a secure method for handing passwords to a container. Instead of typing the Grafana Cloud password directly into this file, it reaches out to a locked Kubernets _"Secret"_ named `grafana-auth`, extracts the `bearer-token` and `instance-id`, and hands them to Alloy in memory as environment variables. This is a security measure: If we typed passwords directly into this YAML file, anyone who can read our code repository could steal our cloud credentials. Referencing a Secret keeps the passwords hidden and safe.
-- **Volume and mounts (`volumeMounts & volumes`)** - Thisis the mechanism for giving the container files it needs to read. It takes the `alloy-config` ConfigMap, the pipeline configuration we looked at earlier, and injects it directly into the Alloy container's file system at `/etc/alloy`. The Alloy software is just an empty engine; it doesn't know what to do until we give it instructions. This mount connects the engine to the template so it knows how to route our data. Making it `readOnly: true` ensures the container can't accidentally delete or overwrite its own instructions.
+- **The container image (`image: grafana/alloy:v1.3.1`)** - This is the actual software being downloaded and run. It pulls version 1.3.1 of Grafana Alloy from the internet. We're using a specific pinned version (`v1.3.1`) rather than just asking for `:latest`. If it were set to `:latest`, a new update from Grafana could automatically download, change how the software works and break our monitoring pipeline without warning. Pinned versions guarantee stability.
+- **Environment variables `valueFrom: secretKeyRef`** This is a secure method for handing passwords to a container. Instead of typing the Grafana Cloud password directly into this file, it reaches out to a locked Kubernetes _"Secret"_ named `grafana-auth`, extracts the `bearer-token` and `instance-id`, and hands them to Alloy in memory as environment variables. This is a security measure: If we typed passwords directly into this YAML file, anyone who can read our code repository could steal our cloud credentials. Referencing a Secret keeps the passwords hidden and safe.
+- **Volume and mounts (`volumeMounts & volumes`)** - This is the mechanism for giving the container files it needs to read. It takes the `alloy-config` ConfigMap, the pipeline configuration we looked at earlier, and injects it directly into the Alloy container's file system at `/etc/alloy`. The Alloy software is just an empty engine; it doesn't know what to do until we give it instructions. This mount connects the engine to the template so it knows how to route our data. Making it `readOnly: true` ensures the container can't accidentally delete or overwrite its own instructions.
 - **Resources (`requests` and `limits`)** - These are the hardware guardrails for CPU (processing power) and Memory (RAM).
 - **`requests`** - guarantees the pods get at least `100m` of CPU and `128Mi` of Memory to function.
 - **`limits`** - Puts a hard ceiling at 200m CPU and 256Mi memory. If the pod tries to use more, Kubernetes will restrict or restart it.
@@ -1837,7 +1837,7 @@ This manifest tells ArgoCD to install a **lightweight Prometheus server** into o
 - **Alloy's job** - is to collect long-term metrics and ship them out to the cloud.
 - **This Prometheus's job** - is to keep a super-fast, temporary **2 hour buffer** of local Istio metrics inside the cluster. Tools like **Kiali (Istio's service mesh topology visualizer)** query this local Prometheus to draw real-time traffic maps and service dependency graphs.
 
-The rest of this file review is broken into sections, We'll review them cronologically.
+The rest of this file review is broken into sections, We'll review them chronologically.
 
 1. **Metadata & Sync Wave** - This opening section declares the resources as an ArgoCD `Application` named `prometheus` inside the `argocd` namespace. By assigning it `argocd.argoproj.io/sync-wave: "1"`, ArgoCD knows to deploy Prometheus early in the cluster rollout. Spinning up the monitoring backend in Wave 1 ensures it is active and ready to collect metrics before application services start up in later waves.
 2. **Helm chart source & version locking** - Here, ArgoCD is directed to pull the official Prometheus Helm chart directly from the community repository. The deployment is explicitly locked to `targetRevision: '29.13.1'`. Pinning the exact chart version ensures that upstream changes won't automatically modify or break our monitoring setup during routine deployments.
@@ -1848,8 +1848,8 @@ The rest of this file review is broken into sections, We'll review them cronolog
    - **`istio-mesh`** - Discovers application pods in the `dev` namespace containing Istio sidecars. It rewrites target endpoints to Istio's telemetry port (`15020`), attaches identity tags like `app` and `version`, and filters specifically for `istio_*` and `pilot_*` metrics.
    - **istio-ingress-gateway** - Targets the edge gateway in the `istio-ingress` namespace on port `15020` so we can observe external traffic entering the cluster.
    - **`istiod`** - Connects to the mesh controlplane in `istio-system` on port `15014` to gather controlplane health and performance metrics.
-7. **Cluster permissions & access** - Setting `rbac.create: true` tells Helm to automatically generate the required ServiceAcounts, ClusterRoles, and RoleBindings. This gives Prometheus the read-only security permissions needed to discover pods and inspect metadata across every namespace in the cluster.
-8. **Target destination & self-healing sync** - The final lines instruct ArgoCD to deploy Prometheus into the `observability` namespace, creating the namespace automatically if it doesn't exist (`createNamespace=true`). Enabling `prune` removes cluster resources if they are deleted from Git, while `selfHeal` automatically reverts any manual cluster tweaks back to match to match Git ground truth.
+7. **Cluster permissions & access** - Setting `rbac.create: true` tells Helm to automatically generate the required ServiceAccounts, ClusterRoles, and RoleBindings. This gives Prometheus the read-only security permissions needed to discover pods and inspect metadata across every namespace in the cluster.
+8. **Target destination & self-healing sync** - The final lines instruct ArgoCD to deploy Prometheus into the `observability` namespace, creating the namespace automatically if it doesn't exist (`createNamespace=true`). Enabling `prune` removes cluster resources if they are deleted from Git, while `selfHeal` automatically reverts any manual cluster tweaks back to match Git ground truth.
 
 ## c. [kiali-app.yml](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/k8s-manifests/observability/kiali-app.yml)
 
@@ -1868,7 +1868,7 @@ Kiali is an open-source observability console and management dashboard built spe
 
 ## d. [dashboards](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/k8s-manifests/observability/dashboards/)
 
-**`dashboards/`** provides a complete, automated workflow for provisioning Istio service mesh observability in Grafana. It concists of two complementary components:
+**`dashboards/`** provides a complete, automated workflow for provisioning Istio service mesh observability in Grafana. It consists of two complementary components:
 
 1. **The Dashboard definition (`ritual-roast-mesh-dashboard.json`)** - A pre-configured, production-ready Grafana dashboard template designed specifically for microservices running in the Istio mesh. It visualizes:
    - **Traffic split** - Real world traffic distribution across `v1` and `v2` deployments for canary ramps, blue-green cutovers, or shadow traffic.
@@ -1930,8 +1930,8 @@ This is an automation script that deploys the `ritual-roast-mesh-dashboard.json`
 
 1.  **Environment Validation** - Verifies that required authentication credentials (`GRAFANA_URL`, `GRAFANA_API_TOKEN`) and system dependencies (`curl`, `jq`) are present before attempting network calls.
 2.  **Datasource Auto-Discovery** - Automatically queries the Grafana API to locate an active Prometheus datasource to bind to the dashboard if one is not explicitly provided.
-3.  **Dynamic Payload Assenbly** - Uses `jq` to safely bundle the raw JSON dashboard with the required important parameters, including the bound datasource and an instructions to overwrite existing versions.
-4.  **Direct impooit** - Pushes the constructed payload to Grafana's `/api/dashboards/import` endpoint and outputs a clickable URL to the newly provisioned dashboard.
+3.  **Dynamic Payload Assembly** - Uses `jq` to safely bundle the raw JSON dashboard with the required important parameters, including the bound datasource and an instructions to overwrite existing versions.
+4.  **Direct import** - Pushes the constructed payload to Grafana's `/api/dashboards/import` endpoint and outputs a clickable URL to the newly provisioned dashboard.
 
 By eliminating manual UI uploads, this script allows the dashboard to be managed as code and seamlessly integrated into CI/CD Pipelines
 
@@ -2039,16 +2039,16 @@ This file is an ArgoCD application manifest that bridges the gap between infrast
 **ArgoCD Application `ritual-roast-workloads`** - This resource operates as an automated deployment agent for the core application. Think of it as a supervisor that constantly watches our application's template folder and ensures the real-world cluster always matches those templates.
 
 1.  **Deployment ordering - `sync-wave: "3"`** - This is the most critical piece of metadata. By setting the wave to 3, it guarantees that the Ritual Roast application will not attempt to deploy until the Istio base (-1), Istiod (1), and Istio ingress gateway (2) are fully online and healthy. It prevents the application from starting before its network and security foundations exist.
-2.  **Source location & Recursion** - The `source` block points directly to the `main` branch of a GitHub repository, specifically targeting the `infrastructure/05-aws-k8s/k8s-manifests/dev-apps` directory. The `recurse: true` flag is highly powerful here, it tells ArgoCD to drill down into any subfolders within `dev-apps` and deploy every YAML file it finds. This allows developers to organize their app manifests (depployments, services, configmaps) logically into subfolders without having to update this ArgoCD file.
-3.  **Target environment `namespace: dev`** - It directs all the discovered workloads into a dedicated `dev` namespace, keeping the application securely isolated from system components like `istio-system` or `argocd`. The `CreateNamspace=true` flag ensures this `dev` environment is automatically built if it doesn't already exist.
-4.  **Strct state enforcement `syncPolicy`**
+2.  **Source location & Recursion** - The `source` block points directly to the `main` branch of a GitHub repository, specifically targeting the `infrastructure/05-aws-k8s/k8s-manifests/dev-apps` directory. The `recurse: true` flag is highly powerful here, it tells ArgoCD to drill down into any subfolders within `dev-apps` and deploy every YAML file it finds. This allows developers to organize their app manifests (deployments, services, configmaps) logically into subfolders without having to update this ArgoCD file.
+3.  **Target environment `namespace: dev`** - It directs all the discovered workloads into a dedicated `dev` namespace, keeping the application securely isolated from system components like `istio-system` or `argocd`. The `CreateNamespace=true` flag ensures this `dev` environment is automatically built if it doesn't already exist.
+4.  **Strict state enforcement `syncPolicy`**
     - `prune: true` - means if a developer deletes a YAML file from the GitHub repository, ArgoCD will automatically delete the corresponding resource running in the Kubernetes cluster.
     - `selfHeal: true` - prevents "configuration drift". If an engineer manually alters a running pod or service directly in the cluster via the command line, ArgoCD will instantly overwrite their changes and revert the system back to exactly what is written in GitHub
 
 ## d.5 [canary-staging-app.yml](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/k8s-manifests/observability/canary-staging-app.yml)
 
 This is another ArgoCD application manifest. It serves a specialized purpose: deploying the `v2` Ritual Roast application alongside the `v1` for safe testing. This file acts as the automated deployment agent specifically for the `v2`, experimental version. By deploying this alongside the main application, `v1`, we set the stage for Istio to route a small percentage of live traffic to the `v2` to test its performance.
-**ArgoCD application `ritual-roast-canary`** - This resource functions almost identically to the main workload application from our previous file, but it acts as a separate supervisor watching a different set of templates. Lets take a closer look:
+**ArgoCD application `ritual-roast-canary`** - This resource functions almost identically to the main workload application from our previous file, but it acts as a separate supervisor watching a different set of templates. Let's take a closer look:
 
 1.  **Deployment ordering `sync-wave: "3"`** It deploys at the exact same time as the main `ritual-roast-workloads` application. Because it is on wave 3, it safely waits for all the Istio network and security components to be fully built before trying to launch.
 2.  **Source location (the experimental folder)** - Instead of pointing to the main `dev-apps` folder, this application is hardcoded to watch the `infrastructure/05-aws-k8s/k8s-manifests/canary-staging` directory. The `recurse: true` flag ensures ArgoCD digs through any subfolders to deploy every manifest it finds. These manifests will contain the newer versions of our application code.
@@ -2133,7 +2133,7 @@ export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 18. View observability with Kiali: Take the loadbalancer DNS from `12.` above and add `/kiali` to the end, Open a new tab on the browser and paste it and press enter (See the images in `05-aws-k8s/documents/kiali-canary-images` for what you should expect.). Do the following in kiali:
 
 - Under Namespace select `dev`
-- Under Display play with the selection to see which draws out desireable characteristics. I recommend `traffic animation`.
+- Under Display play with the selection to see which draws out desirable characteristics. I recommend `traffic animation`.
 
 19. View Observability with Grafana: Open `05-aws-k8s/documents/Creating_a_Grafana_account_and_credentials` and follow the instructions under `Phase 5: Viewing observability with Grafana`
 
