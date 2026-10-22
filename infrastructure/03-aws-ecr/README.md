@@ -44,8 +44,8 @@ Let's look at key ideas of the OIDC:
 Let's look at how this applies in our case:
 
 1. GitHub being the Identity Provider, it knows which repo, branch, and workflow is running and can confirm that.
-2. AWS being the RP, doesn't know anything about GitHub org but is willing to trust tokens signed by GitHub's OIDC issuer, because we register the trust relationship via `aws_iam_openid_connect_provider` resource.
-3. On every workflow run, GitHub creates a fresh JSON Web Token (JWT) that's valid for that single run. The workflow presents the token to AWS STS via `sts:AssumeRoleWithWebIdentity`, the IAM role action. AWS then verifies the signature and checks conditions in the IAM role's trust policy, what it's allowed to do. If the policy conditions are met, AWS hands back temporary AWS credentials limited to that role, typically valid for an hour or so.
+2. AWS being the RP, doesn't know anything about GitHub entities but is willing to trust tokens signed by GitHub's OIDC issuer, because we register the trust relationship via `aws_iam_openid_connect_provider` resource.
+3. On every workflow run, GitHub creates a fresh JSON Web Token (JWT) that's valid for that single run. The workflow presents the token to AWS STS via `sts:AssumeRoleWithWebIdentity`, the IAM role action. AWS then verifies the signature and checks conditions in the IAM role's trust policy, what it's allowed to do. If the policy conditions are met, AWS hands back temporary AWS credentials limited to that role, typically valid for 15 minutes to 36 hours.
 
 **Why this is better than the old static-key approach**
 
@@ -55,7 +55,7 @@ Let's look at the advantages of this:
 2. Automatic expiry: Even if a token or the resulting temporary credential were somehow intercepted, it's only useful for a short window, not indefinitely.
 3. Fine-grained, declarative trust: The trust policy can pin down exactly which repo/branch/environment is allowed to assume the role; this is tighter and more auditable than "whoever has this access key."
 
-### tls.tf
+### [tls.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/03-aws-ecr/modules/tls/tls.tf)
 
 Now that we've got a good understanding of what OIDC is and how it works, let's take a closer look at how we've applied it.
 
@@ -65,7 +65,7 @@ data "tls_certificate" "rr_github" {
 }
 ```
 
-This data source performs a live TLS handshake against GitHub's OIDC token issuer endpoint and pulls back the certificate chain presented during that handshake i.e. this calls the GitHub API and retrieves the TLS certificate. Note, this is the same endpoint our GitHub Actions workflows will request identity tokens from. The reason for fetching it dynamically, like this, instead of hardcoding a certificate thumbprint as a string, is that GitHub rotates its TLS certificates over time; a hardcoded thumbprint would silently go stale and eventually need manual updating, when GitHub next rotates its TLS, whereas this data source re-fetches the current certificate on every `terraform apply`.
+This data source performs a live TLS handshake against GitHub's OIDC token issuer endpoint and pulls back the certificate chain presented during that handshake i.e. this calls the GitHub API and retrieves the TLS certificate. Note, this is the same endpoint our GitHub Actions workflows will request identity tokens from. The reason for fetching it dynamically, like this, instead of hardcoding a certificate thumbprint as a string, is that GitHub rotates its TLS certificates over time; a hardcoded thumbprint would silently go stale and eventually need manual updating when GitHub next rotates its TLS, whereas this data source re-fetches the current certificate on every `terraform apply`.
 
 ```hcl
 resource "aws_iam_openid_connect_provider" "rr_github" {
@@ -83,6 +83,37 @@ Let's take a look at the components in detail:
 2. `client_id_list = ["sts.amazonaws.com"]` - This is the audience (`aud` claim) GitHub Actions will request when it asks GitHub for an identity token intended for AWS. AWS verifies that the token's audience matches an entry in this list before trusting it. This is what restricts the token specifically to **"usable against AWS STS"** instead of some other service GitHub tokens might target.
 3. `thumbprint_list = [data.tls_certificate.rr_github.certificates[0].sha1_fingerprint]` - This pulls the SHA1 fingerprint of the first certificate in the chain returned by the data source above. Note, this argument is effectively legacy for GitHub specifically: As of July 2023, AWS validates GitHub's OIDC identity provider connections using an internal library of trusted root certificate authorities rather than checking this thumbprint value. Essentially, this argument is a requirement for Terraform but AWS doesn't need it. Thus its presence is for backward compatibility.
 
+### JWT token
+
+For the workflow runners to authenticate with AWS, GitHub issues a JWT. Inside that token are key-value pairs called claims; who issued it, who it's for, which repo triggered it etc. Below is a fabricated example for the frontend, for illustration, note this is **not** the actual token:
+
+```JSON
+{
+  "iss": "https://token.actions.githubusercontent.com",
+  "aud": "sts.amazonaws.com",
+  "sub": "repo:ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised:ref:refs/heads/main",
+  "repository": "ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised",
+  "repository_owner": "ManunEbo",
+  "actor": "ManunEbo",
+  "workflow": "Deploy Frontend",
+  "run_id": "1234567890",
+  "event_name": "push",
+  "ref": "refs/heads/main",
+  "sha": "a1b2c3d4e5f6789012345678901234567890abcd",
+  "iat": 1775030400,
+  "exp": 1775031000
+}
+```
+
+AWS evaluates this payload by running checks against the claims, line by line, to see if values match. Let's take a closer look at these **claims**:
+
+1. `"iss": "https://token.actions.githubusercontent.com"` - This is the **Issuer** of the token. Its value matches `var.oidc_provider_arn` output. When the authentication request reaches AWS STS, AWS contacts `https://token.actions.githubusercontent.com/.well-known/jwks]` to fetch GitHub's public cryptographic keys and verify the token's signature, target.
+2. `"aud": "sts.amazonaws.com"` - This is the **Audience**, who the token was created for; it's referenced in `conditions = {}` section of the role below; it's matched against `token.actions.githubusercontent.com:aud`. AWS sees `sts.amazonaws.com` which satisfies the `StringEquals` condition.
+3. `"sub": "repo:ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised:ref:refs/heads/main"` - This is the subject, AWS reads the repo which satisfies the wildcard check in the `StringLike` rule below: `repo:ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised:*`.
+4. `"iat": 1775030400` & `"exp": 1775031000` - These are **Issued At** and **Expiration** time. They ensure the token is currently valid and hasn't expired. Note, tokens are short-lived, usually expiring in 10-15 minutes.
+
+Once all the checks are completed and all the conditions pass, **AWS** issues temporary access keys (`AccessKeyId`, `SecretAccessKey`, `SessionToken`) to the GitHub Actions runner.
+
 ### outputs.tf
 
 This module only has one output, `oidc_provider_arn`, which will be referenced/attached to the IAM roles.
@@ -99,7 +130,7 @@ Above, we output the OIDC provider ARN making it available to the root module, t
 
 This module creates the Elastic Container Registries (ECR), a private AWS hosted Docker image registry, repositories for our frontend and backend images. Once this exists, we can run GitHub Actions workflows to push the images to the respective repos. Then have ECS pull them when we deploy Layer 4.
 
-### ecr.tf
+### [ecr.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/03-aws-ecr/modules/ecr/ecr.tf)
 
 This file houses both the frontend and backend ECR repo creation. The code is identical for creating both. All explanation will focus on the frontend but the same applies to the backend.
 
@@ -134,7 +165,7 @@ As can be seen there are a few components to the resource above, so let's briefl
 
 **ECR Lifecycle policy**
 
-Housing images in ECR incurs a storage cost. We don't want to indefinitely be pushing images, particularly in development, to lower the cost it's best to limit the number of images we keep.
+Housing images in ECR incurs a storage cost. We don't want to indefinitely be pushing images, particularly in development. To lower the cost, it's best to limit the number of images we keep.
 
 ```hcl
 resource "aws_ecr_lifecycle_policy" "frontend_lifecycle" {
@@ -185,40 +216,7 @@ This module provides a few outputs but only the following outputs are passed int
 
 This module is the AWS security guard which enables GitHub workflow runners to communicate with the respective ECR repos via the role they assume.
 
-### JWT token
-
-For the workflow runners to authenticate with AWS GitHub issues a JWT. Inside that token are key-value pairs called claims; who issued it, who it's for, which repo triggered it etc. Below is a fabricated example for the frontend, for illustration, note this is **not** the actual token:
-
-```JSON
-{
-  "iss": "https://token.actions.githubusercontent.com",
-  "aud": "sts.amazonaws.com",
-  "sub": "repo:ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised:ref:refs/heads/main",
-  "repository": "ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised",
-  "repository_owner": "ManunEbo",
-  "actor": "ManunEbo",
-  "workflow": "Deploy Frontend",
-  "run_id": "1234567890",
-  "event_name": "push",
-  "ref": "refs/heads/main",
-  "sha": "a1b2c3d4e5f6789012345678901234567890abcd",
-  "iat": 1775030400,
-  "exp": 1775031000
-}
-```
-
-AWS evaluates this payload by running checks against the claims, line by line, to see if values match. Let's take a closer look at these **claims**:
-
-1. `"iss": "https://token.actions.githubusercontent.com"` - This is the **Issuer** of the token. Its value matches `var.oidc_provider_arn` output. When the authentication request reaches AWS STS, AWS contacts `https://token.actions.githubusercontent.com/.well-known/jwks]` to fetch GitHub's public cryptographic keys and verify the token's signature, target.
-2. `"aud": "sts.amazonaws.com"` - This is the **Audience**, who the token was created for; it's referenced in `conditions = {}` section of the role below; it's matched against `token.actions.githubusercontent.com:aud`. AWS sees `sts.amazonaws.com` which satisfies the `StringEquals` condition.
-3. `"sub": "repo:ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised:ref:refs/heads/main"` - This is the subject, AWS reads the repo which satisfies the wildcard check in the `StringLike` rule below: `repo:ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised:*`.
-4. `"iat": 1775030400` & `"exp": 1775031000` - These are **Issued At** and **Expiration** time. They ensure the token is currently valid and hasn't expired. Note, tokens are short-lived, usually expiring in 10-15 minutes.
-
-Once all the checks are completed and all the conditions pass, **AWS** issues temporary access keys (`AccessKeyId`, `SecretAccessKey`, `SessionToken`) to the GitHub Actions runner.
-
-Now that we've seen an example of the JWT and its usecase. Let's look at the roles that use the JWT.
-
-### iam_frontend.tf
+### [iam_frontend.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/03-aws-ecr/modules/iam/iam_frontend.tf)
 
 Once again, both the frontend IAM role and the backend IAM role are identical. So we will focus on the frontend and everything we discuss applies to the backend. Let's take a closer look at the frontend file:
 
@@ -371,7 +369,7 @@ output "backend_github_role_arn" {
 }
 ```
 
-However, these outputs are not consumed by any module in this Layer. In Layer 4 and 5 we use data sources to retrieve resources created in this Layer.
+However, these outputs are not consumed by any module in this Layer. In Layer 4, we use data sources to retrieve resources created in this Layer.
 
 ## Instructions
 

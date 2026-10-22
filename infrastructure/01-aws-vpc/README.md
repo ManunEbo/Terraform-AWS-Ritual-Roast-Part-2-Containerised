@@ -36,7 +36,7 @@ This layer spans three Availability Zones (AZs) across the AWS London region (`e
 
 # Introduction to Terraform
 
-Before we get deep into the Terraform code, let's explain a few foundational concepts of Terraform that will prepare us for the deep dive in `infrastructure/`:
+Before we get deep into the Terraform code, let's explain a few foundational concepts of Terraform that will prepare us for the deep dive ahead:
 
 ## a. A layered approach
 
@@ -120,10 +120,10 @@ In a layered infrastructure setup a directory like `01-aws-vpc/environments/dev`
      - **Local storage** - Here we save the file directly in our project folder. This is problematic for team environments as it risks file loss, concurrent overwritten changes, and exposes secrets in plain text on our laptop.
 
      - **Remote backends (Recommended)** - There are a few options here:
-       - **AWS S3 bucket** a central encrypted object storage, standard for AWS architectures, this is what we're using
-       - **Terraform Cloud / HashiCorp Cloud Platform (HCP)**, managed state handling, access controls, and policy enforcement
-       - **Azure blob Storage / Google Cloud Storage (GCS)**, these are object storage equivalents for Azure and GCP environments respectively
-       - **HTTP / GitLab / GitHub State Storage**, API-based remote state management from GitHub
+       - **AWS S3 bucket** - a central encrypted object storage, standard for AWS architectures, this is what we're using
+       - **Terraform Cloud / HashiCorp Cloud Platform (HCP)** - managed state handling, access controls, and policy enforcement
+       - **Azure blob Storage / Google Cloud Storage (GCS)** - these are object storage equivalents for Azure and GCP environments respectively
+       - **HTTP / GitLab / GitHub State Storage** - API-based remote state management from GitHub
 
    - **Comparing the files** - These three files manage completely different aspects of Terraform stability and safety:
      - **`.terraform.lock.hcl`** - ensures everyone uses the exact same plugin binaries to build the code
@@ -136,11 +136,11 @@ In a layered infrastructure setup a directory like `01-aws-vpc/environments/dev`
 
 5. **The execution point** - This is the directory where we actually run our commands (`terraform init`, `terraform plan`, `terraform apply`). The code inside this folder pulls in the generic layers we built (Layer 1, Layer 2 etc), injects the `dev` variables into them, reads the `dev` remote state, and orchestrates the actual deployment to AWS.
 
-Note, these multiple environments; `dev`, `staging`, `prod`; exist as separate directories, their configuration are applied directly to the modules within that layer. **That makes the code base flexible such that we can deploy the same code in all environments simultaneously**, the difference being the values we pass to them, which could dramatically change the outcome.
+Note, there can be multiple environments; `dev`, `staging`, `prod`; if used they exist as separate directories, their configuration are applied directly to the modules within that layer. **That makes the code base flexible such that we can deploy the same code in all environments simultaneously**, the difference being the values we pass to them, which could dramatically change the outcome.
 
 ## d. The root module
 
-Since we're using a layered approach, each layer consists of a root module, which is under the corresponding `environments/dev/` subdirectory, this is essentially the management module for the environment. The root module will also have the same essential files above in addition to **main.tf**. This file defines all corresponding modules in the layer and passes values as input parameters to the module being defined.
+Since we're using a layered approach, each layer consists of a root module, which is the corresponding `environments/dev/` subdirectory in our `dev` environment. This is essentially the management module for the environment. The root module will also have the same essential files above in addition to **main.tf**. This file defines all corresponding modules in the layer and passes values as input parameters to the module being defined.
 
 ## e. Variable precedence in Terraform
 
@@ -183,7 +183,7 @@ A data source in Terraform is a read-only query that fetches real time informati
     }
     ```
 
-    Here we're looking for a `aws_vpc` resource type filtering by tags and the matching value is `"rr-dev-RR-vpc"`. This will return all matching values. `"main"` is the name we're attaching to this data source for referencing the returned resource.
+    Here we're looking for an `aws_vpc` resource type filtering by tags and the matching value is `"rr-dev-RR-vpc"`. This will return all matching values. `"main"` is the name we're attaching to this data source for referencing the returned resource.
 
 2.  **API query** - When Terraform runs, it makes a direct API call to AWS using those filters.
 3.  **Attribute exposure** - AWS responds with the live resource's details and Terraform makes those attributes available to the rest of our configuration using the syntax `data.<TYPE>.<NAME>.<ATTRIBUTE>` e.g. `data.aws_vpc.main.id` or `data.aws_vpc.main.cidr_block`.
@@ -212,7 +212,7 @@ Since the `01-aws-vpc/environments/dev` is the subdirectory that holds all the c
 
 ## a. [providers.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/01-aws-vpc/environments/dev/providers.tf):
 
-**`required_version = "1.14.3"`** - This defines which terraform version we're using with ensuring reproducibility i.e. when you clone this repo you will need this version of Terraform or upgrade/downgrade to it to ensure everything works as expected.
+**`required_version = "1.14.3"`** - This defines which terraform version we're using, ensuring reproducibility i.e. when you clone this repo you will need this version of Terraform or upgrade/downgrade to it to ensure everything works as expected.
 
 **S3 Backend**:
 
@@ -273,7 +273,7 @@ module "vpc" {
 
 ```
 
-The example above shows how we pass parameter values as inputs to the `vpc module`. In the `vpc module` these variables and the values will be mapped to a variable defined in the corresponding `variables.tf` of the `vpc module`. Then that specific variable can be used throughout the module as if it originated locally.
+The example above shows how we pass parameter values as inputs to the `vpc module`. In the `vpc module` each of these variables and their values will be mapped to a variable defined in the corresponding `variables.tf` of the `vpc module`. Then that specific variable can be used throughout the module as if it originated locally.
 
 Any values starting with `local.` is coming from `shared_locals.tf` . Any values starting with `var.` is coming from `variables.tf`, however, due to the variable precedence that value might be coming from an environment variable or from `terraform.tfvars`, for example all the subnets data is coming from `terraform.tfvars` file.
 
@@ -303,7 +303,7 @@ Above the endpoints module needs the endpoints security group `endpoints_sg_id =
 
 ## c. [shared_locals.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/01-aws-vpc/environments/dev/shared_locals.tf):
 
-locals is another flexible way to create variables and assign values to them. Locals are module scoped object (immutable and static, at the point of call) variables that can take the form of lists, maps and single variable. Their values can't be set by .tfvars nor values from the cli. They can only be set by module specific internal, computed/derived values; any externally derived values must be passed through a variable and the variable can then be assigned to the locals. Locals are referenced using `local.<name>` i.e. we drop the s in local(s).
+locals is another flexible way to create variables and assign values to them. Locals are module scoped object (immutable and static, at the point of call) variables that can take the form of lists, maps and single variable. Their values can't be set by .tfvars nor values from the cli. They can only be set by module specific internal, computed/derived values; any externally derived values must be passed through a variable and the variable can then be assigned to the locals. Locals are referenced using `local.<name>` i.e. we drop the **"s"** in local(s).
 
 ```hcl
 locals {
@@ -348,7 +348,7 @@ This is how we defined our ALB: the tags section, labels, is a merge between the
 
 ## d. [terraform.tfvars](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/01-aws-vpc/environments/dev/terraform.tfvars):
 
-To better understand the use of `.tfvars` it's useful to understand the variable precedence in Terraform: Terraform resolves variable values from multiple possible sources, and when the same variable is set in more than one place, the highest priority source wins. The precedence from lowest to highest:
+To better understand the use of `.tfvars` it's useful to understand the variable precedence in Terraform, with examples this time: Terraform resolves variable values from multiple possible sources, and when the same variable is set in more than one place, the highest priority source wins. The precedence from lowest to highest:
 
 1. Default value in the variable block (lowest priority)
 
@@ -361,7 +361,7 @@ variable "environment" {
 2. Environment variables ( "TF_VAR\_<variable-name>" )
 
 ```hcl
-export TF_VAR_environmenstaging
+export TF_VAR_environmentstaging
 ```
 
 3. terraform.tfvars file (if present in the working directory)
@@ -407,11 +407,11 @@ public_subnet_list = [
 ]
 ```
 
-All objects in terraform.tfvars must have a matching name in variables.tf for their values to be passed onto the variable. If there's no match the `.tfvars` value is ignored.
+All values in `terraform.tfvars` must have a matching name and a compatible type declared in `variables.tf`. If there is no matching variable name, Terraform will throw an error rather than ignoring the value.
 
 ## e. [variables.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/01-aws-vpc/environments/dev/variables.tf):
 
-This file contains all the variable definitions for the respective scope, in this case the layer root module. Since the corresponding `terraform.tfvars` file has created lists of maps (key value pairs) the corresponding objects in `variables.tf` must also match the type else terraform will throw an error, see example below:
+This file contains all the variable definitions for the respective scope, in this case the layer root module. Since the corresponding `terraform.tfvars` file has created lists of maps (key value pairs) the corresponding objects in `variables.tf` must also match the type else Terraform will throw an error, see example below:
 
 ```hcl
 variable "public_subnet_list" {
@@ -492,7 +492,7 @@ It is common practice to break this large network into smaller isolated chunks.
 
 ## a. Subnets
 
-Those smaller isolated chunks are called subnets. Essentially they re-arrange the number of bits allocated to the network and the host portions of the CIDR block through an exchange called borrowing network bits. The more network bits borrowed the higher the number of networks and the lower the number host IP addresses. For a comprehensive derivation of the subnets used in this project please see the first project, [Terraform-AWS-Ritual-Roast-Part-1](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-1) section 6. 🚀 Technical Highlights, VPC and Subnetting. In this project we use 15 subnet groups, to isolate the various resources deployed, see network layouts below.
+Those smaller isolated chunks are called subnets. Essentially they re-arrange the number of bits allocated to the network and the host portions of the CIDR block through an exchange called borrowing network bits. The more network bits borrowed the higher the number of networks and the lower the number host IP addresses per network. For a comprehensive derivation of the subnets used in this project please see the first project, [Terraform-AWS-Ritual-Roast-Part-1](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-1) section 6. 🚀 Technical Highlights, VPC and Subnetting. In this project we use 15 subnet groups, to isolate the various resources deployed, see network layouts below.
 
 ### The network layout
 
@@ -508,19 +508,19 @@ The VPC is carved into five tiers, each spread across three Availability Zones (
 
 Each `/20` gives 4,096 addresses per subnet, generous headroom for a project this size, carved out of the `/16` as contiguous, non-overlapping blocks so there's room to grow without re-plumbing anything later. Also AWS reserves 5 ip addresses. So in our first subnet (`10.16.0.0/20`), for example the following ip addresses are reserved:
 
-| IP            | Reserved for                                                                                                          |
-| ------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `10.16.0.0`   | Network address (standard, not usable)                                                                                |
-| `10.16.0.1`   | Reserved by AWS for the VPC router                                                                                    |
-| `10.16.0.2`   | Reserved by AWS for DNS (maps to the Amazon-provided DNS server, base of VPC CIDR + 2)                                |
-| `10.16.0.3`   | Reserved by AWS for future use                                                                                        |
-| `10.16.0.255` | Network broadcast address (standard, not usable — though AWS doesn't actually support broadcast, it's still reserved) |
+| IP             | Reserved for                                                                                                          |
+| -------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `10.16.0.0`    | Network address (standard, not usable)                                                                                |
+| `10.16.0.1`    | Reserved by AWS for the VPC router                                                                                    |
+| `10.16.0.2`    | Reserved by AWS for DNS (maps to the Amazon-provided DNS server, base of VPC CIDR + 2)                                |
+| `10.16.0.3`    | Reserved by AWS for future use                                                                                        |
+| `10.16.15.255` | Network broadcast address (standard, not usable — though AWS doesn't actually support broadcast, it's still reserved) |
 
 The above applies to all other subnets.
 
 Note, the **K8s** subnets consists of left over subnets from the original calculations; that's why they don't follow the additive property of +16 on the third number ("octet").
 
-The K8s tier is tagged `kubernetes.io/role/internal-elb=1`, a label AWS's own Kubernetes cloud-controller looks for so it can automatically discover the right subnets if an internal Kubernetes-managed load balancer is ever created — a small detail, but one that has to be right before Kubernetes exists, since it's a property of the subnet, not something Kubernetes can add after the fact.
+The K8s tier is tagged `kubernetes.io/role/internal-elb=1`, a label AWS's own Kubernetes cloud-controller looks for so it can automatically discover the right subnets if an internal Kubernetes-managed load balancer is ever created; a small detail, but one that has to be right before Kubernetes exists, since it's a property of the subnet, not something Kubernetes can add after the fact.
 
 ## b.Routing
 
@@ -530,12 +530,12 @@ In this section we create three route tables in [routing.tf](https://github.com/
 
    ```hcl
 
-   resource "aws_route_table" "public" { ... }
-   resource "aws_route" "public_internet_access" {
-     route_table_id         = aws_route_table.public.id
-     destination_cidr_block = "0.0.0.0/0"
-     gateway_id              = aws_internet_gateway.main.id
-   }
+    resource "aws_route_table" "public" {
+      vpc_id = aws_vpc.rr_vpc.id
+      tags = merge(var.common_tags, {
+      Name = "rr-${var.environment}-${var.vpc_name}-public-rt"
+      })
+    }
 
    ```
 
@@ -632,10 +632,15 @@ The 404 default action means that if neither is deployed (say, mid-migration bet
 Note, in production HTTPS, port 443, is used for all communication, and the TLS certificate usually terminates here at the LoadBalancer i.e. encrypted traffic from the internet is decrypted at the LoadBalancer and continues forth into the VPC unencrypted. The load balancer's own security group already permits inbound HTTPS on 443, even though currently its only listener is plain HTTP(unencrypted) on 80:
 
 ```hcl
+
 resource "aws_security_group_rule" "alb_allow_443_inbound" {
-  type = "ingress"; from_port = 443; to_port = 443; protocol = "tcp"
+  type = "ingress"
+  from_port = 443
+  to_port = 443
+  protocol = "tcp"
   cidr_blocks = ["0.0.0.0/0"]
   security_group_id = aws_security_group.rr_alb.id
+
 }
 ```
 
@@ -644,9 +649,11 @@ It is addressed/annotated that an HTTPS, port 443, is a must have for production
 ## e. VPC Endpoints
 
 There are two types of VPC Endpoints used in this project:
-**Gateway** This works by injecting a route into a route table; this is a routing trick instead of a real network presence. It's only available for S3 and DynamoDB.
+
+**Gateway** - This works by injecting a route into a route table; this is a routing trick instead of a real network presence. It's only available for S3 and DynamoDB.
 Since route tables don't consume any Elastic Network Interfaces nor any per Availability zone (AZ) infrastructure, it's free (cheap) and ideal.
-**Interface** This endpoint type is provided by PrivateLink: All AWS services that supports interface endpoints sit behind an AWS managed (private) NLB. This NLB facilitates exposure of the AWS services in the AWS internal backend VPC. Each of these services has a public dns endpoint that resolves to a public IP address. Without PrivateLink, reaching these services is a round trip, from our private subnets:
+
+**Interface** - This endpoint type is provided by PrivateLink: All AWS services that supports interface endpoints sit behind an AWS managed (private) NLB. This NLB facilitates exposure of the AWS services in the AWS internal backend VPC. Each of these services has a public dns endpoint that resolves to a public IP address. Without PrivateLink, reaching these services is a round trip, from our private subnets to the internet to get to the service public IP address:
 
 **NATGW → IGW → AWS Service public IP/DNS endpoint → Back**
 
@@ -683,7 +690,7 @@ Note, this endpoint incurs hourly and per gigabyte costs in addition to the ENIs
 
 # Where this fits in the bigger picture
 
-Every later layer depends on this layer and none of them can be usefully applied without it. The sequential deploy order that runs through this whole project — VPC, then RDS, then ECR, then ECS, then (after destroying ECR & ECS) Kubernetes exists specifically because layers 2 onward all read this layer's subnet IDs, VPC ID, and security groups as inputs. See the root project documentation for the full five-layer sequence, and `infrastructure/04-aws-ecs/README.md` /
+Every later layer depends on this layer and none of them can be usefully applied without it. The sequential deployment order that runs through this whole project; VPC, then RDS, then ECR, then ECS, then Kubernetes(after destroying ECR & ECS); exists specifically because layers 2 onward all read this layer's subnet IDs, VPC ID, and security groups as inputs. See the root project documentation for the full five-layer sequence, and `infrastructure/04-aws-ecs/README.md` /
 `infrastructure/05-aws-k8s/README.md` for how each of them attaches its own listener rule onto the one ALB this layer creates.
 
 # Instructions

@@ -11,7 +11,7 @@ the IAM role that enables the Lambda function to carry out its tasks, and both t
 
 Here we're provisioning the centralized, highly available database tier (**Amazon RDS MySQL**) within the isolated private data subnets, created back in Layer 1, integrated with automated zero downtime credential management.
 
-**Key Highlights** Below are the main highlights based on the HLD above:
+**Key Highlights** - Below are the main highlights based on the HLD above:
 
 1. **High-Availability Database Tier** - Deploys a Multi-AZ Amazon RDS MySQL instance across three private data subnets, providing synchronous replication and automatic failover.
 
@@ -58,7 +58,7 @@ data "aws_subnets" "rr_db_subnets" {
 }
 ```
 
-These data sources query the respective AWS resource, aws_vpc and aws_subnets, for all resource instances that match the filter criteria i.e. any "Name" tag that matches the `values` pattern is returned. Thus this returns an object which could be a map, a list or string or a combination of them all. Above `rr_vpc` resource will return a single object which has several attributes id, name, cidr etc while the `rr_db_subnets` resource will return a list object containing maps of database subnets with all of its attributes; subnet_name, cidr, az. From this we can extract the specific desired resource attribute such as vpc.id and subnet.az .
+These data sources query the respective AWS resource, aws_vpc and aws_subnets, for all resource instances that match the filter criteria i.e. any "Name" tag that matches the `values` pattern is returned. Thus this returns an object which could be a map, a list or string or a combination of them all. Above `rr_vpc` resource will return a single object which has several attributes id, name, cidr etc. The `rr_db_subnets` resource will return a list object containing maps of database subnets with all of its attributes; subnet_name, cidr, az. From these resources, we can extract the specific desired resource attribute such as vpc.id and subnet.az .
 
 The other two data sources are used to retrieve the account id of the current user and the region set by the current user. Note these are AWS parameters.
 
@@ -104,7 +104,7 @@ data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 ```
 
-From the first data source we can retrieve the account id. From the second we can retrieve the current AWS region, set by the user.
+From the first data source we can retrieve the account id. From the second, we can retrieve the current AWS region, set by the user.
 
 ### IAM Lambda role
 
@@ -335,7 +335,7 @@ resource "aws_security_group" "rr_database" {
 
 ```
 
-There are two interesting components worth noting here: `lifecycle` rule and `name_prefix` label: The `create_before_destroy = true` lifecycle rule ensures that we create the replacement first then destroy the old one; that way replacing it doesn't leave a dependent database briefly without a security group. When this new security group is created it will have the same name as the old one. This will cause a conflict and Terraform will reject this. To bypass this error we use the `name_prefix` convention with `"rr-${var.environment}-database-sg-"`, this allows Terraform to add some hex characters after the `-` at the end, ensuring that the new security group has a slightly different name to the old one. Then it proceeds to destroying the old security group.
+There are two interesting components worth noting here: `lifecycle` rule and `name_prefix` label: The `create_before_destroy = true` lifecycle rule ensures that we create the replacement first then destroy the old one; that way replacing it doesn't leave a dependent database briefly without a security group. When this new security group is created it will have the same name as the old one. This will cause a conflict and Terraform will reject this. To bypass this error we use the `name_prefix` convention with `"rr-${var.environment}-database-sg-"`, this allows Terraform to add some hex characters after the `"-"` at the end, ensuring that the new security group has a slightly different name to the old one. Then it proceeds to destroying the old security group.
 
 In this layer there is a single service that communicates with the database, that is the Lambda function. As we move to layer 4 and layer 5, they will add their own corresponding security group rules to the database security group. Below is the ingress security group rule that enables inbound communication from the Lambda security group to the database security group.
 
@@ -367,7 +367,7 @@ The main events of this module occur in 3 files:
 
 Let's look into these files in detail:
 
-### index.py
+### [index.py](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/02-aws-rds/modules/lambda/index.py)
 
 This is the source code for the Lambda function. It assumes that the pymysql dependency is installed. It starts off importing the necessary Python modules then it sets the logging level to **INFO**. The majority of the functions below write logs.
 
@@ -548,7 +548,7 @@ Now that the new database credentials have been tested successfully, it is time 
 
 Now the rotation is complete.
 
-### layers.tf
+### [layers.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/02-aws-rds/modules/lambda/layers.tf)
 
 In this file we install the pymysql dependency, zip it and cleanly remove the installation directory
 
@@ -634,9 +634,9 @@ Let's look at the above resource block in more details:
 5. `description` - Self explanatory
 6. `source_code_hash` - This determines whether AWS should create a new layer version or not. AWS checks this hash against the value in the state, if it has changed then this means the underlying contents has changed, thus there is a valid reason for publishing a new layer version, else it skips publishing a new layer version. Thus locally, we can rebuild the layer as many times as we like, unless the contents of the built package changes, AWS will do nothing with what's pushed up.
 
-### rotation.tf
+### [rotation.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/02-aws-rds/modules/lambda/rotation.tf)
 
-In this section we deploy the Lambda function; we package `index.py` and send it to AWS Lambda. Everything is contained in one file [rotation.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/02-aws-rds/modules/Lambda/rotation.tf). The process is split into four components, each accomplishing a different task.
+In this section we deploy the Lambda function; we package `index.py` and send it to AWS Lambda. Everything is contained in one file rotation.tf. The process is split into four components, each accomplishing a different task.
 
 **Archiving index.py**
 
@@ -715,9 +715,9 @@ Let's look at this resource in details:
 
 In this module we create the secret in Secrets Manager and instantiate the database. The module structure follows the standard we've used all through out this project. Thus only **secrets.tf** and **rds.tf** are new and of real interest. Lets take a closer look inside:
 
-### secrets.tf
+### [secrets.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/02-aws-rds/modules/rds/secrets.tf)
 
-[secrets.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/02-aws-rds/modules/rds/secrets.tf) is where we tackle the logical issue for creating the secret. There's a chicken and egg problem here: **the database needs the secret to start but the secret needs the database's host address to be complete**; the database host is not known until the database is live, a placeholder is used to bypass this so that the secret can be created; the host is needed because the Lambda function needs to know which host to connect to, to update db credentials; for the database to boot it needs to retrieve the database credentials from the secret and this can only happen if the secret exists prior to the database. To resolve this, a multi-stage versioning approach is adopted for creating the secret.
+**secrets.tf** is where we tackle the logical issue for creating the secret. There's a chicken and egg problem here: **the database needs the secret to start but the secret needs the database's host address to be complete**; the database host is not known until the database is live, a placeholder is used to bypass this so that the secret can be created; the host is needed because the Lambda function needs to know which host to connect to, to update db credentials; for the database to boot it needs to retrieve the database credentials from the secret and this can only happen if the secret exists prior to the database. To resolve this, a multi-stage versioning approach is adopted for creating the secret.
 
 **Creating the secret shell**
 
@@ -765,7 +765,7 @@ resource "aws_secretsmanager_secret_version" "rr_db_skeleton" {
 
 Above, this is the first secret version, named `rr_db_skeleton`, below we explain its attributes:
 
-1. `secret_id = aws_secretsmanager_secret.rr_db_secret.id` - this attaches the secret shell to this secret version, essentially loading the db credentials onto it.
+1. `secret_id = aws_secretsmanager_secret.rr_db_secret.id` - this links the secret shell to this secret version, essentially loading the db credentials onto it.
 2. `secret_string = jsonencode({})` - this is the format of the secret i.e. all the values it will have. The **username & password** values will be passed through the cli into environment variables, see instructions below. Note the host has **"placeholder"** for value, this is the reason we're using `aws_secretsmanager_secret_version`; when the database has booted, the host value will be extracted into the next version.
 3. `lifecycle {}` - Terraform ensures that the deployment is a reflection of the state file, expected deployment; thus when deployed resources deviate from the state file, Terraform will destroy or recreate resources to match the state file. `ignore_changes = [secret_string]` tells Terraform to relinquish control of this resource so that the Lambda function can take control of rotating these values, else Terraform will reset the changed values to the infile values every time we run `terraform apply`, which would lead to the secret being out of sync with the database, breaking the application in the process.
 
@@ -870,15 +870,15 @@ Lets take a closer look at this resource:
 4. `principal = "secretsmanager.amazonaws.com"` - This names the entity being granted the invocation permission. Note, this is very open: it allows any Secrets Manager rotation schedule in the entire account, not just from a specific role, to trigger this Lambda function when a rotation is due.
 5. `source_arn = aws_secretsmanager_secret.rr_db_secret.arn` - This restricts the invocation of our Lambda function to this secret ARN i.e. only secrets rotation events from this secret, `rr_db_secret`, can invoke the function.
 
-### rds.tf
+### [rds.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/02-aws-rds/modules/rds/rds.tf)
 
-[rds.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/02-aws-rds/modules/rds/rds.tf) contains everything we need to properly setup the database: from the subnet groups to the database parameters. Lets take a closer look inside:
+**rds.tf** contains everything we need to properly setup the database: from the subnet groups to the database parameters. Lets take a closer look inside:
 
 **Database subnet group**
 
-Relational database service (RDS) is an AWS managed service. We have no access to the container environment that it runs in i.e. it does not run in our VPC nor account. However, by specifying a subnet group, the service places real Elastic Network Interfaces (ENIs) directly in our specified subnets — the database has a genuine network presence inside our VPC, even though the underlying compute is managed by AWS outside our account.
+Relational database service (RDS) is an AWS managed service. We have no access to the container environment that it runs in i.e. it does not run in our VPC nor account. However, by specifying a subnet group, the service places real Elastic Network Interfaces (ENIs) directly in our specified subnets to give the database a genuine network presence inside our VPC, even though the underlying compute is managed by AWS outside our account.
 
-Note, a multi-AZ setup places two ENIs in the subnet group — one for the primary instance and one for the standby failover target. RDS ensures that they are placed in different AZ. Below is the subnet group definition:
+Note, a multi-AZ setup places two ENIs in the subnet group: one for the primary instance and one for the standby failover target. RDS ensures that they are placed in different AZ. Below is the subnet group definition:
 
 ```hcl
 resource "aws_db_subnet_group" "rr_db_subnet_group" {
@@ -952,7 +952,28 @@ Let's look into this a little deeper:
 15. `lifecycle` - As usual, this tells Terraform to stop tracking drift on the password after initial creation. Without this, every `tf apply` after rotating password changes will result in a mismatch and Terraform will try to reset the password.
 16. `tags` - Same as usual: merges project specific labels with the instance name.
 
-## 6. Instructions
+## 6. Known issues - AWS Lambda Python 3.9 runtime support
+
+AWS Lambda has officially ended support for the **Python 3.9 runtime**. This was phased out in the following deprecation schedule:
+
+1. **December 15, 2025** - AWS officially ended support and stopped applying security patches or updates to the `python3.9` runtime.
+2. **August 31, 2026** - AWS blocked the creation of new Lambda functions using Python 3.9
+3. **September 30, 2026** - AWS blocked updates to any existing Python 3.9 functions. Thus we can no longer modify code or configuration for remaining functions. _Note, however, I was able to execute this deployment without any issue. But I did receive a notice from AWS_
+
+**Upgrading our Lambda function**
+
+To avoid any issues we need to upgrade our Lambda function code from `Python 3.9` to any of the following:
+
+1. **Python 3.12:** - This is a stable widely compatible option supported through to **October 2028**
+2. **Python 3.13** - The newer option offering performance enhancements and support through **June 2029**
+
+**Steps to upgrade Python 3.9**
+
+1. In [rotation.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/02-aws-rds/modules/lambda/rotation.tf) update `runtime = "python3.9"` to either `"python3.12"` or `"python3.13"`
+2. In [layers.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/02-aws-rds/modules/lambda/layers.tf) update `compatible_runtimes = ["python3.9"]` to `compatible_runtimes = ["python3.12", "python3.13"]`
+3. Don't forget to commit and push with git from the project root: `git add .` , `git commit -m "Updated lambda runtime from python3.9 to python3.??"` and `git push origin main`.
+
+## 7. Instructions
 
 Here is the step by step guide to deploy Layer 2 successfully:
 
