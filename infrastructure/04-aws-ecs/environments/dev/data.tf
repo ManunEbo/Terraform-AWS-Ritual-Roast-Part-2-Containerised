@@ -1,13 +1,13 @@
- #==========================================
+#==========================================
 # 1. Common tags from V1
 # =========================================
 locals {
   common_tags_vpc = {
-    Project        = "ritual-roast-ECS"
-    Project_owner  = "Elvy ManunEbo"
-    Terraform      = "true"
-    Environment    = "dev"
-    Region         = "eu-west-2"
+    Project       = "ritual-roast-ECS"
+    Project_owner = "Elvy ManunEbo"
+    Terraform     = "true"
+    Environment   = "dev"
+    Region        = "eu-west-2"
   }
 }
 
@@ -21,9 +21,9 @@ data "aws_region" "current" {}
 
 # 1. Fetch the existing Layer 1 VPC
 data "aws_vpc" "rr_vpc" {
-  tags = local.common_tags_vpc  
+  tags = local.common_tags_vpc
   filter {
-    name = "tag:Name"
+    name   = "tag:Name"
     values = ["rr-${var.environment}-*"]
   }
 }
@@ -38,21 +38,21 @@ data "aws_subnets" "public_subnets" {
 
 # Retrieve Frontend subnets
 data "aws_subnets" "web_subnets" {
-    tags = local.common_tags_vpc
-    filter {
-      name = "tag:Name"
-      values = ["WebSubnet-*"]
-    }
+  tags = local.common_tags_vpc
+  filter {
+    name   = "tag:Name"
+    values = ["WebSubnet-*"]
+  }
 }
 
 # Retrieve Backend subnets
 data "aws_subnets" "AppSubnets" {
-    tags = local.common_tags_vpc
+  tags = local.common_tags_vpc
 
-    filter {
-      name = "tag:Name"
-      values = ["AppSubnet-*"]
-    }
+  filter {
+    name   = "tag:Name"
+    values = ["AppSubnet-*"]
+  }
 }
 
 
@@ -88,7 +88,7 @@ data "aws_route_tables" "private_rts" {
   # Adjust this filter if your Layer 1 named them differently!
   filter {
     name   = "tag:Tier"
-    values = ["app"] 
+    values = ["app"]
   }
 }
 

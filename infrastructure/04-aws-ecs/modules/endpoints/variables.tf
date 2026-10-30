@@ -33,10 +33,6 @@ variable "route_table_ids" {
   type        = list(string)
 }
 
-variable "app_s3_bucket" {
-  description = "The name of the specific S3 bucket the application is allowed to write to"
-  type        = string
-}
 
 # --- Variables for tightening IAM policy for S3 endpoints ---
 

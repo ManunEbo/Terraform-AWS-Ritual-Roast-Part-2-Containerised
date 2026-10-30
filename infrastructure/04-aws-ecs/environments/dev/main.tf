@@ -6,13 +6,13 @@ module "security_groups" {
   environment = var.environment
 
   # Satisfying the module's strict variables
-  vpc_name    = data.aws_vpc.rr_vpc.tags["Name"]
-  aws_region  = data.aws_region.current.id
+  vpc_name   = data.aws_vpc.rr_vpc.tags["Name"]
+  aws_region = data.aws_region.current.id
 }
 
 # --- 2. Compute IAM Roles ---
 module "iam" {
-  source         = "../../modules/iam"
+  source = "../../modules/iam"
 
   environment    = var.environment
   common_tags    = local.common_tags
@@ -23,19 +23,18 @@ module "iam" {
 
 # --- 3. Endpoints
 module "endpoints" {
-  source          = "../../modules/endpoints"
-  
-  vpc_id          = data.aws_vpc.rr_vpc.id
-  vpc_name        = data.aws_vpc.rr_vpc.tags["Name"]
-  aws_region      = data.aws_region.current.id
-  environment     = var.environment
-  common_tags     = local.common_tags
-  
+  source = "../../modules/endpoints"
+
+  vpc_id      = data.aws_vpc.rr_vpc.id
+  vpc_name    = data.aws_vpc.rr_vpc.tags["Name"]
+  aws_region  = data.aws_region.current.id
+  environment = var.environment
+  common_tags = local.common_tags
+
   endpoints_sg_id = data.aws_security_group.rr_endpoints_sg.id
   app_subnet_ids  = data.aws_subnets.AppSubnets.ids
   route_table_ids = data.aws_route_tables.private_rts.ids
-  app_s3_bucket   = local.s3_bucket 
-  
+
   # Injecting specific identities for the Zero-Trust S3 policy
   ecs_execution_role_arn     = module.iam.ecs_execution_role_arn
   ecs_backend_task_role_arn  = module.iam.ecs_backend_task_role_arn
@@ -45,7 +44,7 @@ module "endpoints" {
 # --- 4. Load Balancers (Public & Internal) ---
 module "alb" {
   # Ensure this spelling matches your folder exactly (hyphen vs underscore)
-  source = "../../modules/load-balancers" 
+  source = "../../modules/load-balancers"
 
   environment = var.environment
   common_tags = local.common_tags
@@ -59,8 +58,8 @@ module "alb" {
   public_subnet_ids = data.aws_subnets.public_subnets.ids
 
   # Security Groups
-  public_alb_sg_id   = data.aws_security_group.public_alb_sg.id
-  
+  public_alb_sg_id = data.aws_security_group.public_alb_sg.id
+
   # Note: Ensure "rr_internal_alb" matches the exact output name in your security_groups module
   internal_alb_sg_id = module.security_groups.internal_alb_sg.id
 
@@ -72,8 +71,8 @@ module "alb" {
 
 # --- 5. Elastic Container Service ---
 module "ecs" {
-  source      = "../../modules/ecs"
-  
+  source = "../../modules/ecs"
+
   environment = var.environment
   common_tags = local.common_tags
 

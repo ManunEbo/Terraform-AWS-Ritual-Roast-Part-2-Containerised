@@ -5,19 +5,6 @@
 
 # The Secrets Manager interface endpoint has moved to Layer 1 to make it available to Layer 2,4 and 5
 # (see infrastucture/01-aws-vpc/modules/endpoints/secrets_manager_endpoint.tf)
-# # Secrets Manager: For lambda rotation and App secret retrieval
-# resource "aws_vpc_endpoint" "secretsmanager" {
-#   vpc_id              = var.vpc_id
-#   service_name        = "com.amazonaws.${var.aws_region}.secretsmanager"
-#   vpc_endpoint_type   = "Interface"
-#   security_group_ids  = [var.endpoints_sg_id]
-#   subnet_ids          = var.app_subnet_ids
-#   private_dns_enabled = true
-
-#   tags = merge(var.common_tags, {
-#     Name = "${var.environment}-secrets-endpoint"
-#   })
-# }
 
 # *** The following PrivateLink Interface endpoints are only needed here, Layer 4, so we keep them here ***
 
@@ -68,19 +55,6 @@ resource "aws_vpc_endpoint" "logs" {
 #--------------------------------------------------------------
 
 # This Gateway is what makes your private subnets "NAT-less" for ECR layer pulls.
-# resource "aws_vpc_endpoint" "s3" {
-#   vpc_id            = var.vpc_id
-#   service_name      = "com.amazonaws.${var.aws_region}.s3"
-#   vpc_endpoint_type = "Gateway"
-  
-#   # Clean, explicit variable injection
-#   route_table_ids   = var.route_table_ids
-
-#   tags = merge(var.common_tags, {
-#     Name = "rr-${var.environment}-s3-gateway"
-#   })
-# }
-
 # locked down using IAM Policies
 resource "aws_vpc_endpoint" "s3" {
   vpc_id            = var.vpc_id

@@ -8,18 +8,7 @@
 # It sits on the "receiving" end of all those internal HTTPS calls.
 
 
-# Rule 1: Identity - Backend Tier
-resource "aws_security_group_rule" "rr_endpoints_ingress_from_backend" {
-  type                     = "ingress"
-  description              = "RR: Auth only for Backend containers (ECR/Secrets)"
-  from_port                = 443
-  to_port                  = 443
-  protocol                 = "tcp"
-  security_group_id        = data.aws_security_group.rr_endpoints_sg.id
-  source_security_group_id = aws_security_group.rr_backend.id
-}
-
-# # Rule 2: Identity - Frontend Tier
+# # Rule 1: Identity - Frontend Tier
 resource "aws_security_group_rule" "rr_endpoints_ingress_from_frontend" {
   type                     = "ingress"
   description              = "RR: Auth only for Frontend containers (ECR)"
@@ -28,4 +17,15 @@ resource "aws_security_group_rule" "rr_endpoints_ingress_from_frontend" {
   protocol                 = "tcp"
   security_group_id        = data.aws_security_group.rr_endpoints_sg.id
   source_security_group_id = aws_security_group.rr_frontend.id
+}
+
+# Rule 2: Identity - Backend Tier
+resource "aws_security_group_rule" "rr_endpoints_ingress_from_backend" {
+  type                     = "ingress"
+  description              = "RR: Auth only for Backend containers (ECR/Secrets)"
+  from_port                = 443
+  to_port                  = 443
+  protocol                 = "tcp"
+  security_group_id        = data.aws_security_group.rr_endpoints_sg.id
+  source_security_group_id = aws_security_group.rr_backend.id
 }

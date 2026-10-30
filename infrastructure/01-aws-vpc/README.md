@@ -485,7 +485,7 @@ To make resources created inside this base layer available in other layers, one 
 
 # Virtual Private Cloud (VPC)
 
-Consider it a private intranet closed off from the outside world i.e. the IP addresses of resources within the VPC are not routable on the internet; they cannot be found online and they cannot speak to the internet, by default. To enable internet access we use an Internet Gateway (`igw`) or a Network Address Translation (NAT) Gateway placed in the subnet with access to the `igw`. Then we create a route table with a rule that sends all outgoing/egress traffic to the `igw` on a specific port. Equally, we can create an incoming/ingress rule that allows traffic on a specific port.
+Consider it a private intranet closed off from the outside world—the IP addresses of resources within the VPC are not routable on the internet and cannot speak to the internet by default. To enable internet access, we use an Internet Gateway (igw) or a Network Address Translation (NAT) Gateway. We configure a route table with a rule that sends all internet-bound traffic (0.0.0.0/0) to the igw. Separately, we use Security Groups to control incoming and outgoing traffic on specific ports and protocols.
 
 An important component of the VPC is the VPC CIDR block, this is the broad IP range of the entire VPC e.g. **10.16.0.0/16** results in 65,536 distinct IP addresses.
 It is common practice to break this large network into smaller isolated chunks.
@@ -566,7 +566,7 @@ In this section we create three route tables in [routing.tf](https://github.com/
    Later on we can place a NAT gateway in any of these public subnet to enable egress internet access for our resources in private subnets.
 
 2. **Private route table**
-   There is a default route table that all subnets within a VPC are associated to, initially. Instead of using that table which would include the public subnets, we create a private route table and associate all the non-public subnets, with the exception of k8s subnets, to it. The process is exactly as above so no illustrations needed. Since there is no route to the internet, resources in these subnets will not have internet access. All our ECS resources will be deployed in these private subnets. Every AWS service they need (Secrets Manager, ECR, CloudWatch Logs, S3) is reachable through a private VPC endpoint instead which is both cheaper than a NAT gateway (no per-GB processing charge, no hourly charge) and more secure (traffic never transits the public internet at all, even privately).
+   There is a default route table that all subnets within a VPC are associated to, initially. Instead of using that table which would include the public subnets, we create a private route table and associate all the non-public subnets, with the exception of k8s subnets, to it. The process is exactly as above so no illustrations needed. Since there is no route to the internet, resources in these subnets will not have internet access. All our ECS resources will be deployed in these private subnets. Every AWS service they need is reachable through private VPC endpoints: a free Gateway endpoint for S3 (avoiding heavy ECR image pull costs), and Interface endpoints for Secrets Manager, ECR (API), and CloudWatch Logs. While Interface endpoints have a minor hourly and data-processing fee, they remain significantly cheaper than a NAT gateway and provide higher security because traffic never transits the public internet.
 
 3. **K8s route table**
 
