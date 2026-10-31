@@ -6,12 +6,12 @@ resource "aws_ecs_task_definition" "rr_frontend_task" {
   family                   = "rr-${var.environment}-frontend-task"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = 512   # Upgraded compute
-  memory                   = 1024  # Upgraded compute
+  cpu                      = 512  # Upgraded compute
+  memory                   = 1024 # Upgraded compute
   execution_role_arn       = var.ecs_execution_role_arn
-  
+
   # ZERO-TRUST FIX: Frontend gets its own isolated role (No DB Secret Access)
-  task_role_arn            = var.ecs_frontend_task_role_arn
+  task_role_arn = var.ecs_frontend_task_role_arn
 
   # 1. Carve out a block of Fargate's ephemeral storage
   volume {
@@ -20,14 +20,14 @@ resource "aws_ecs_task_definition" "rr_frontend_task" {
 
   container_definitions = jsonencode([
     {
-      name      = "rr-frontend-container-01"
-      
+      name = "rr-frontend-container-01"
+
       # Pulling securely from ECR via VPC Endpoints
       image     = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.id}.amazonaws.com/rr-${var.environment}-frontend:latest"
       essential = true
 
       # The OS remains mathematically locked
-      readonlyRootFilesystem = true 
+      readonlyRootFilesystem = true
 
       # 2. Mount the empty volume exclusively to the cache path
       mountPoints = [
@@ -63,7 +63,7 @@ resource "aws_ecs_task_definition" "rr_frontend_task" {
       }
     }
   ])
-  
+
   tags = merge(var.common_tags, {
     Name = "rr-${var.environment}-frontend-task"
   })
@@ -79,9 +79,9 @@ resource "aws_ecs_task_definition" "rr_backend_task" {
   cpu                      = 256
   memory                   = 512
   execution_role_arn       = var.ecs_execution_role_arn
-  
+
   # ZERO-TRUST FIX: Backend gets its own isolated role (Has DB Secret Access)
-  task_role_arn            = var.ecs_backend_task_role_arn
+  task_role_arn = var.ecs_backend_task_role_arn
 
   container_definitions = jsonencode([
     {

@@ -53,8 +53,8 @@ resource "aws_lb" "rr_public" {
 # This listener catches any traffic that DOES NOT match an ECS or K8s rule
 resource "aws_lb_listener" "rr_public_http" {
   load_balancer_arn = aws_lb.rr_public.arn
-  port = "80"
-  protocol = "HTTP"
+  port              = "80"
+  protocol          = "HTTP"
 
   default_action {
     type = "fixed-response"
@@ -62,7 +62,7 @@ resource "aws_lb_listener" "rr_public_http" {
     fixed_response {
       content_type = "text/plain"
       message_body = "404: Service Not Found. Welcome to the Ritual Roast Gateway."
-      status_code = "404"
+      status_code  = "404"
     }
   }
 }

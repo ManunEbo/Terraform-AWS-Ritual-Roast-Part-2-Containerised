@@ -28,7 +28,7 @@ resource "aws_security_group_rule" "backend_to_db" {
   to_port                  = 3306
   protocol                 = "tcp"
   security_group_id        = aws_security_group.rr_backend.id
-  source_security_group_id = data.aws_security_group.database_sg.id 
+  source_security_group_id = data.aws_security_group.database_sg.id
 }
 
 # -------------------------------------------------------------------------
@@ -36,14 +36,14 @@ resource "aws_security_group_rule" "backend_to_db" {
 # -------------------------------------------------------------------------
 # The database security group needs to have an ingress rule accepting traffic from the Backend
 resource "aws_security_group_rule" "db_ingress_from_backend" {
-  description              = "RR: Retroactively injected by Layer 4 to allow Backend to access MySQL"
-  type                     = "ingress"
-  from_port                = 3306
-  to_port                  = 3306
-  protocol                 = "tcp"
+  description = "RR: Retroactively injected by Layer 4 to allow Backend to access MySQL"
+  type        = "ingress"
+  from_port   = 3306
+  to_port     = 3306
+  protocol    = "tcp"
 
   # 1. The Security Group being modified (The Database SG from Layer 2)
-  security_group_id        = data.aws_security_group.database_sg.id
+  security_group_id = data.aws_security_group.database_sg.id
   # 2. The source allowed to enter (The Backend SG in Layer 4)
   source_security_group_id = aws_security_group.rr_backend.id
 }

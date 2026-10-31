@@ -25,7 +25,7 @@ module "security_groups" {
   common_tags = local.common_tags
   aws_region  = var.aws_region
 
-  vpc_id      = module.vpc.vpc_id # Assumes output matches standard syntax
+  vpc_id      = module.vpc.vpc_id
   environment = var.environment
   vpc_name    = var.vpc_name
 }
@@ -33,23 +33,24 @@ module "security_groups" {
 module "alb" {
   source = "../../modules/load_balancers"
 
-  vpc_id = module.vpc.vpc_id
-  vpc_name = var.vpc_name
-  common_tags = local.common_tags
-  environment = var.environment
+  vpc_id            = module.vpc.vpc_id
+  vpc_name          = var.vpc_name
+  common_tags       = local.common_tags
+  environment       = var.environment
   public_subnet_ids = module.vpc.public_subnet_ids
-  public_alb_sg_id = module.security_groups.alb_sg_id  
+  public_alb_sg_id  = module.security_groups.alb_sg_id
 }
 
 module "endpoints" {
   source = "../../modules/endpoints"
 
-  vpc_id          = module.vpc.vpc_id
-  environment     = var.environment
-  common_tags     = local.common_tags
-  aws_region      = var.aws_region
-  app_subnet_ids  = module.vpc.app_subnet_ids
-  
+  vpc_id                  = module.vpc.vpc_id
+  environment             = var.environment
+  common_tags             = local.common_tags
+  aws_region              = var.aws_region
+  app_subnet_ids          = module.vpc.app_subnet_ids
+  private_route_table_ids = [module.vpc.private_route_table_id]
+
   # THE CRITICAL LINK: This forces Terraform to build the SG before the Endpoint
-  endpoints_sg_id = module.security_groups.endpoints_sg_id 
+  endpoints_sg_id = module.security_groups.endpoints_sg_id
 }

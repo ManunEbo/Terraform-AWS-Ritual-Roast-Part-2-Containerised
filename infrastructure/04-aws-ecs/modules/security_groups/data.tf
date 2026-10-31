@@ -20,7 +20,7 @@ data "aws_security_group" "database_sg" {
 
 # 4. Fetching Layer 2: Lambda Security Group Shell
 data "aws_security_group" "lambda_sg" {
-  name = "rr-${var.environment}-lambda-sg" 
+  name = "rr-${var.environment}-lambda-sg"
 }
 
 # Fetch the Endpoints Security Group from Layer 1

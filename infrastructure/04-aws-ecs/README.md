@@ -987,7 +987,7 @@ Elastic Container Service (ECS) consists of three broad components: Cluster, Tas
 2. `Tasks` - This is the employee actually doing the work
 3. `Service` - This is the department manager ensuring the right number of employees are always on shift.
 
-### ECS [cluster](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/04-aws-ecs/modules/ecs/cluster.tf)
+### ECS cluster
 
 An ECS cluster is a logical grouping, a perimeter, of our ECS resources. We can consider it a namespace for our applications.
 
@@ -995,7 +995,7 @@ An ECS cluster is a logical grouping, a perimeter, of our ECS resources. We can 
 
 The cluster acts as the overarching environment that holds our underlying infrastructure, either Fargate capacity or EC2 instances, and the applications running on them. It doesn't actually run any code. It provides isolation such as `production-cluster` and `dev-cluster` to ensure workloads in either space never mix.
 
-#### How it does it: Infrastructure management & State tracking
+#### Infrastructure management & State tracking
 
 1. `Infrastructure management` - When we instruct ECS to run a container, we must also specify which cluster to use. When using EC2 instances, the cluster tracks the total available CPU and memory and allocates the containers to available resources.
 2. `State tracking` - The cluster acts as the central brain for state. It constantly monitors how many resources are available, which instances are connected, and which applications are running where.
@@ -1004,11 +1004,11 @@ The cluster acts as the overarching environment that holds our underlying infras
 
 Tasks are the smallest deployable units of compute in ECS. It is a running instance of a **Task Definition** which is just a JSON file that specifies the configurations such as the Docker image, memory in GB RAM, port etc.
 
-**What it does**
+#### What it does
 
 Tasks do the actual work: A task is simply one or more Docker containers running together on the same host. Thus if our application requires a web server container and a background logging container to run side-by-side and share local storage, we group them into a single task, like sidecars in Kubernetes.
 
-**How they do it in the ECS family**
+#### How it works
 
 1. `Execution` - When a Task is launched, ECS pulls the required Docker image from our registry.
 2. `Resource consumption` - The task is allocated the exact amount of CPU and memory defined in its configuration file.
@@ -1017,13 +1017,13 @@ Tasks do the actual work: A task is simply one or more Docker containers running
 
 ### ECS Services
 
-An ECS Service is a long-running manager and scheduler for Tasks.
+An ECS Service is a long-running manager and scheduler for Tasks, like a deployment in Kubernetes.
 
-**What they do**
+#### What they do
 
 Because Tasks die when they crash and don't auto restart, we don't run tasks manually. Instead we create a Service. The Service's job is to ensure that a specified number of Tasks, **Desired count**, are constantly running and healthy.
 
-**How they do it in ECS family**
+#### How they do it
 
 1. `Auto-healing` - The Service continuously loops, comparing the **"Desired count"** of Tasks with the **"Running count"**. If the app crashes and a Task dies, the running count drops. The Service immediately notices this and commands the Cluster to spin up a new Task to replace it.
 2. `Loadbalancing` - The Service acts as a bridge between Tasks and the ALB: When the Service spins up a new Task, it takes that Task's private IP address and automatically registers it with the ALB. When a Task is being shut down, the Service deregisters it so users don't get routed to a dead container.
@@ -1034,7 +1034,7 @@ Because Tasks die when they crash and don't auto restart, we don't run tasks man
 Here in Layer 4 we're deploying ECS with Fargate but let's compare the two methods of deploying ECS.
 The core difference between EC2 and Fargate comes down to **who manages the underlying servers**. This choice in ECS is known as the "Launch Type" or "Capacity Provider".
 
-**ECS on EC2 (The "DIY" Approach)**
+#### ECS on EC2 (The "DIY" Approach)
 
 With the EC2 launch type , we rent and manage the actual EC2 instances that will run our containers.
 
@@ -1042,7 +1042,8 @@ With the EC2 launch type , we rent and manage the actual EC2 instances that will
 2. `Cost model` - **We pay for the entire EC2 instance while it is running, regardless of consumption patterns e.g. CPU utilization**
 3. `Customization` - We have complete control: We can attach GPUs, use specific CPU architectures, access the host operating system, and run custom host-level agents
 
-**ECS on Fargate (The "Serverless" Approach)**
+#### ECS on Fargate (The "Serverless" Approach)
+
 Fargate is a serverless compute engine for containers whereby AWS takes responsibility of managing the underlying infrastructure leaving us accountable only for the application to be deployed on that infrastructure. Thus:
 
 1. `Management` - There are no servers to manage, patch, or secure. We simply tell AWS how much CPU and memory our tasks require and AWS finds the capacity and runs it automatically.
@@ -1051,9 +1052,8 @@ Fargate is a serverless compute engine for containers whereby AWS takes responsi
 
 So now that we've looked at the difference between ECS on EC2 vs Fargate, let's look at the setup for our project using Fargate.
 
-### Ritual Roast ECS Cluster
+### [Ritual Roast ECS cluster](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/04-aws-ecs/modules/ecs/cluster.tf)
 
-**What it is**
 The Ritual Roast ECS cluster, `rr_ecs_cluster` is our project's logical boundary and administrative grouping within AWS ECS where we will deploy and manage our containerized Next.js Frontend and Flask Backend Tasks.
 
 ```hcl
@@ -1070,9 +1070,12 @@ resource "aws_ecs_cluster" "rr_ecs_cluster" {
 }
 ```
 
-**What it does**
+#### What it does
+
 This acts as the control center i.e. the control plane for our ECS deployment. It manages Task orchestration, tracks running container instances, monitors health and performance metrics, and isolates our Ritual Roast applications, both Frontend and Backend, resources from other workloads in our AWS account.
-**Why we need it**
+
+#### Why we need it
+
 AWS ECS cannot run our Ritual Roast Tasks, Services in a vacuum. The cluster serves as the starting point for our deployment.
 
 Let's take a closer look at the components we haven't seen before:
@@ -1097,9 +1100,12 @@ resource "aws_ecs_cluster_capacity_providers" "rr_ecs_cp" {
 }
 ```
 
-**What it does**
+#### What it does
+
 It defines where and how AWS provisions underlying compute infrastructure when launching containers. Instead of managing EC2 servers manually, this instructs ECS on how to leverage AWS serverless compute options i.e. it tells ECS where to run our containers, like standard Fargate or discounted Fargate Spot such that we don't have to manage any servers.
-**Why we need it**
+
+#### Why we need it
+
 It establishes default scaling and cost-allocation strategies for the cluster. It allows us to mix standard guaranteed serverless compute with discounted capacity options without having to manage servers or underlying virtual machines.
 
 Let's take a look at the components:
@@ -1109,11 +1115,11 @@ Let's take a look at the components:
    **FARGATE** - Standard, high-availability serverless compute with guaranteed resources.
    **FARGATE_SPOT** - Leverages spare AWS capacity at up to 70% discount, however AWS can reclaim that capacity with a 2 minute warning if that capacity is needed elsewhere.
 3. `default_capacity_provider_strategy {}` - This defines the default rule that ECS will use whenever a service or task is launched without explicitly specifying its own compute strategy
-   **`base = 1`** - Guarantees that atleast one Task will always run on the specified provider, **Standard FARGATE**, to maintain a minimum baseline of guaranteed reliability
-   **`weight = 100`** - Sets the relative ratio for Task allocation after the `base` requirement is met. Because `FARGATE` is assigned a weight of `100` in this strategy, 100% of additional Tasks launched under the default rule will go to standard `FARGATE`.
-   **`capacity_provider = "FARGATE"`** - Sets standard `FARGATE` as the primary capacity provider for this default strategy, prioritizing uptime over spot discounts for baseline cluster operations.
+   - **`base = 1`** - Guarantees that atleast one Task will always run on the specified provider, **Standard FARGATE**, to maintain a minimum baseline of guaranteed reliability
+   - **`weight = 100`** - Sets the relative ratio for Task allocation after the `base` requirement is met. Because `FARGATE` is assigned a weight of `100` in this strategy, 100% of additional Tasks launched under the default rule will go to standard `FARGATE`.
+   - **`capacity_provider = "FARGATE"`** - Sets standard `FARGATE` as the primary capacity provider for this default strategy, prioritizing uptime over spot discounts for baseline cluster operations.
 
-### CloudWatch [log groups](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/04-aws-ecs/modules/ecs/log-groups.tf)
+### [CloudWatch log groups](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/04-aws-ecs/modules/ecs/log-groups.tf)
 
 In this file we create two distinct AWS CloudWatch Log groups: one for the Frontend, `rr_frontend_logs`, and another for the Backend, `rr_backend_logs`. Log groups are essentially base directories in the AWS cloud that organise and stores text-based console output.
 
@@ -1127,9 +1133,12 @@ resource "aws_cloudwatch_log_group" "rr_frontend_logs" {
 }
 ```
 
-**What they do**
+#### What they do
+
 They act as a centralized, highly available storage destination for our application logs. When our ECS Fargate containers are running, the built-in AWS log driver (`awslogs`) captures everything our application prints to the console, **standard output & standard error**, and instantly streams it into these groups.
-**Why we need it**
+
+#### Why we need it
+
 Because Fargate containers are ephemeral, we need to transfer the logs to a persistent storage e.g. if our Flask backend hits a fatal error and the container crashes, AWS immediately destroys the container and spins up a new one. If we stored logs locally inside the container hard drive, those logs would vanish into thin air, leaving us completely blind as to why the crash happened. By streaming the output directly to CloudWatch Log Groups, our logs are safely preserved outside of the container. If a crash occurs, we can log into the AWS console, open these log groups and read the exact error trace that caused the failure.
 
 Let's take a look at the components one by one:
@@ -1140,14 +1149,15 @@ Let's take a look at the components one by one:
 2. `retention_in_days = 7` -
    This is a crucial cost-saving mechanism. By default, AWS CloudWatch keeps logs forever. Log storage costs money per gigabyte. By explicitly setting this to 7, we are telling AWS to automatically delete any log lines older than 7 days. This creates a rolling 7 day window of logs, sufficient time to debug recent issues without accumulating infinite storage costs.
 
-### ECS [Tasks](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/04-aws-ecs/modules/ecs/tasks.tf)
+### [ECS Tasks](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/04-aws-ecs/modules/ecs/tasks.tf)
 
 Earlier we described that a task is the worker that does the work. In the file above we have the definitions of those workers, `aws_ecs_task_definition` i.e. the recipe for running containers in AWS ECS. In this file we're creating two distinct recipes:
 
 1. `rr_frontend_task` - The recipe for launching our Next.js Frontend
 2. `rr_backend_task` - The recipe for launching our Flask Backend
 
-**What they do**
+#### What they do
+
 They instruct AWS Fargate on how to run our applications. They specify:
 
 1. Which Docker image to pull from Amazon ECR
@@ -1157,14 +1167,15 @@ They instruct AWS Fargate on how to run our applications. They specify:
 5. What environment variables to pass into the application
 6. Where to send application logs
 
-**Why we need it**
+#### Why we need it
+
 Containers cannot run in ECS without instructions. Fargate doesn't manage servers, it needs a declarative manifest detailing every operational parameter before it spins up a Task. ECS Service will use these Task Definitions as the exact template to instantiate healthy, running containers.
 
 Let's now turn our attention to the individual Task manifest
 
 #### Frontend Task `rr_frontend_task`
 
-To save space we'll jump right into the components but for the full resource please click the file link for **Tasks** above.
+To save space we'll jump right into the components but for the full resource please click [here](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/04-aws-ecs/modules/ecs/tasks.tf).
 
 1. `family = "rr-${var.environment}-frontend-task"` - This is the name/namespace for this task definition series. Note, every time we update this Terraform code, ECS increments the revision number.
 2. `network_mode = "awsvpc"` - This is required for Fargate. It gives every running Task its own ENI and private IP allowing us to attach security groups to them.
@@ -1174,60 +1185,53 @@ To save space we'll jump right into the components but for the full resource ple
 6. `execution_role_arn = var.ecs_execution_role_arn` - This is the infrastructure role used by the ECS agent to pull the Docker image from ECR and send log streams to CloudWatch.
 7. `task_role_arn = var.ecs_frontend_task_role_arn` - This is the application role used by the code running inside the Frontend container, it has no access to anything e.g. RDS or Secrets Manager.
 8. `volume { name = "nextjs-cache" }` - This is a writable cache mount. It defines a temporary block of Fargate's local space named `nextjs-cache`. This volume will be mounted at `/app/.next/cache` inside our container with `readOnly = false`. Let's elaborate on this:
-
-- Setting `readonlyRootFilesystem = true` locks down the entire container OS by default
-- `mountPoints` with `readOnly = false` explicitly carves out targeted, writable exceptions where the application needs to store temporary runtime data
-  Essentially, this is a way around the readOnly root filesystem to provide a temporary writable location without the OS throwing an error.
+   - Setting `readonlyRootFilesystem = true` locks down the entire container OS by default
+   - `mountPoints` with `readOnly = false` explicitly carves out targeted, writable exceptions where the application needs to store temporary runtime data.
+   - Essentially, this is a way around the readOnly root filesystem to provide a temporary writable location without the OS throwing an error.
 
 9. `container_definitions = jsonencode()` - This block defines the individual Docker container settings. Let's expand on its components:
+   - `name = "rr-frontend-container-01"` - This is the container's name inside ECS
 
-- `name = "rr-frontend-container-01"` - This is the container's name inside ECS
+   - `image = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.id}.amazonaws.com/rr-${var.environment}-frontend:latest` - This is the full URI directing Fargate to fetch the Docker image from the private ECR repo
 
-- `image = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.id}.amazonaws.com/rr-${var.environment}` - This is the full URI directing Fargate to fetch the Docker image from the private ECR repo
+   - `essential = true` - This tells ECS that if this container crashes or stops, the entire task should be shut down and replaced.
 
-- `essential = true` - This tells ECS that if this container crashes or stops, the entire task should be shut down and replaced.
+   - `readonlyRootFilesystem = true` - This makes the container OS read-only. Thus if an attacker manages to exploit an application vulnerability, they cannot modify system files, write malware, or download malicious scripts to disk.
 
-- `readonlyRootFilesystem = true` - This makes the container OS read-only. Thus if an attacker manages to exploit an application vulnerability, they cannot modify system files, write malware, or download malicious scripts to disk.
+   - **`mountPoints = [...]`** - This attaches a Task level storage volume directly into a specified folder inside our running Docker container. It consists of an array of configuration objects that maps defined storage volumes to paths inside the container. Thus it enables mounting multiple volumes to different directories within a single container. Let's look into its constituents:
+     - `sourceVolume  = "nextjs-cache"` - This is the exact name of the storage volume declared above, `volume { name = "nextjs-cache" }`, it identifies which underlying Fargate ephemeral storage block to attach.
 
-- **`mountPoints = [...]`** - This attaches a Task level storage volume directly into a specified folder inside our running Docker container. It consists of an array of configuration objects that maps defined storage volumes to paths inside the container. Thus it enables mounting multiple volumes to different directories within a single container. Let's look into its constituents
+     - `containerPath = "/app/.next/cache"` - This is the absolute file path inside the container where the volume is mounted. Note, for Next.js `"/app/.next/cache"` is the precise directory where the framework writes compiled build outputs, image optimization files, and server-side rendering caches during runtime.
 
-- `sourceVolume  = "nextjs-cache"` - This is the exact name of the storage volume declared above, `volume { name = "nextjs-cache" }`, it identifies which underlying Fargate ephemeral storage block to attach.
+     - `readOnly = false` - The much talked about **readOnly**; this grants read-write permissions to this specific directory path inside the container. Even when the OS is locked down, this setting applied to the target mount point creates a targeted write exception so Next.js can read and write cache files without crashing.
 
-- `containerPath = "/app/.next/cache"` - This is the absolute file path inside the container where the volume is mounted. Note, for Next.js `"/app/.next/cache"` is the precise directory where the framework writes compiled build outputs, image optimization files, and server-side rendering caches during runtime.
+   - **`portMappings = [...]`** - This is an array of objects defining network access rules for the container. It exposes internal container ports to external traffic such as our public ALB or any other services within our VPC:
+     - `containerPort = 3000` - This is the specific port inside the container that our application listens for incoming traffic on.
 
-- `readOnly = false` - The much talked about **readOnly**; this grants read-write permissions to this specific directory path inside the container. Even when the OS is locked down, this setting applied to the target mount point creates a targeted write exception so Next.js can read and write cache files without crashing.
+     - `hostPort = 3000` - The port reserved on the underlying network interface to receive incoming traffic from external resources. Note, because Fargate tasks run in `awsvpc` network mode, where every Task gets its own dedicated ENI and IP, AWS requires `hostPort` to either match `containerPort` exactly or be omitted entirely
 
-- **`portMappings = [...]`** - This is an array of objects defining network access rules for the container. It exposes internal container ports to external traffic such as our public ALB or any other services within our VPC.
+     - `protocol = "tcp"` - Web applications using HTTP/HTTPS require TCP to guarantee reliable, ordered packet delivery.
 
-- `containerPort = 3000` - This is the specific port inside the container that our application listens for incoming traffic on.
+   - `environment = [...]` - This array object is used to pass environment variables into the container process at runtime. Essentially it decouples application configuration from container build images, making it flexible to pass credentials across environments (dev, staging, prod) without rebuilding the Docker image.
+     - `name = "BACKEND_URL"` - This is the exact key name assigned to the environment variable. Application code inside the container reads this value directly at runtime.
 
-- `hostPort = 3000` - The port reserved on the underlying network interface to receive incoming traffic from external resources. Note, because Fargate tasks run in `awsvpc` network mode, where every Task gets its own dedicated ENI and IP, AWS requires `hostPort` to either match `containerPort` exactly or be omitted entirely
+     - `value = "http://${var.internal_alb_dns_name}"` - This injects the private DNS record of the internal ALB, allowing the Frontend to route API requests to the Backend tier without hardcoding ephemeral container IP addresses. Note this is HTTP traffic.
 
-- `protocol = "tcp"` - Web applications using HTTP/HTTPS require TCP to guarantee reliable, ordered packet delivery.
+   - `logConfiguration = {}` - This configures how ECS captures standard output, `stdout` and standard error, `stderr`, streams from the container and routes them to CloudWatch:
+     - `logDriver = "awslogs"` - This specifies the log driver mechanism. The `awslogs` driver uses the native AWS log driver to stream console output directly from the container to CloudWatch logs
 
-- `environment = [...]` - This array object is used to pass environment variables into the container process at runtime. Essentially it decouples application configuration from container build images, making it flexible to pass credentials across environments (dev, staging, prod) without rebuilding the Docker image.
+     - `options = {...}` - These are key-value pairs supplying required parameters specific to the `awslogs` driver.
+       - `"awslogs-group" = aws_cloudwatch_log_group.rr_frontend_logs.name` - This specifies the destination CloudWatch Log Group where log entries will be sent. This reference dynamically passes the log group's name, `/ecs/rr-dev-frontend`, and creates a Terraform dependency ensuring the log group exists before the Task definition is registered.
 
-- `name = "BACKEND_URL"` - This is the exact key name assigned to the environment variable. Application code inside the container reads this value directly at runtime.
+       - `"awslogs-region" = data.aws_region.current.id` - Defines the AWS region hosting the CloudWatch Log Group. The data source ensures that the logs ship to the current deployment region without hardcoding values.
 
-- `value = "http://${var.internal_alb_dns_name}"` - This injects the private DNS record of the internal ALB, allowing the Frontend to route API requests to the Backend tier without hardcoding ephemeral container IP addresses. Note this is HTTP traffic.
-
-- `logConfiguration = {}` - This configures how ECS captures standard output, `stdout` and standard error, `stderr`, streams from the container and routes them to CloudWatch.
-
-- `logDriver = "awslogs"` - This specifies the log driver mechanism. The `awslogs` driver uses the native AWS log driver to stream console output directly from the container to CloudWatch logs
-
-- `options = {...}` - These are key-value pairs supplying required parameters specific to the `awslogs` driver.
-
-- `"awslogs-group" = aws_cloudwatch_log_group.rr_frontend_logs.name` - This specifies the destination CloudWatch Log Group where log entries will be sent. This reference dynamically passes the log group's name, `/ecs/rr-dev-frontend`, and creates a Terraform dependency ensuring the log group exists before the Task definition is registered.
-
-- `"awslogs-region" = data.aws_region.current.id` - Defines the AWS region hosting the CloudWatch Log Group. The data source ensures that the logs ship to the current deployment region without hardcoding values.
-
-- `"awslogs-stream-prefix" = "frontend"` - This assigns a prefix to log stream names within the log group. Note CloudWatch formats log stream as `<prefix>/<container-name>/<task-id>` e.g. `frontend/rr-frontend-container-01/a1b2c3d4...`. This makes it easy to filter and distinguish logs across Task deployments.
+       - `"awslogs-stream-prefix" = "frontend"` - This assigns a prefix to log stream names within the log group. Note CloudWatch formats log stream as `<prefix>/<container-name>/<task-id>` e.g. `frontend/rr-frontend-container-01/a1b2c3d4...`. This makes it easy to filter and distinguish logs across Task deployments.
 
 #### Backend Task `rr_backend_task`
 
 Since the Backend Task is the same as the Frontend Task bar a few changes, we'll focus on what is different between them.
 
-In the Frontend Task we passed the internal ALB URI into an environment variable. Here we pass the
+In the Frontend Task we passed the internal ALB URI into an environment variable. Here we pass the following:
 
 ```hcl
 environment = [
@@ -1243,6 +1247,36 @@ environment = [
 ```
 
 Here we're injecting the ARN pointing to the database secret stored in AWS Secrets Manager into an environment variable, note it's retrieved dynamically using data source at runtime. We also retrieve the AWS region to correctly map to the region in which our database secret is kept, since Secrets Manager Secrets are region specific i.e. the AWS SDK uses this variable to direct its API call to the correct regional Secrets Manager endpoint.
+
+### [services.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/04-aws-ecs/modules/ecs/services.tf)
+
+#### Recap:
+
+If we think of a Task definition as an architectural recipe, and a Task as the actual running container built from that recipe then an ECS Service is the supervisor or manager that watches over the containers.
+
+#### What it does
+
+It makes sure that the desired number of containers are running 24/7, handles replacing them if they crash, wires them up to the LoadBalancer, and manages deployments when we push new code.
+
+#### Why we need it
+
+Without an ECS Service, we would have to manually start, stop and route traffic to our Docker containers by hand. The service automates all of that, guaranteeing **high availability** and uptime for our application.
+
+**services.tf** houses both the frontend and backend service. We'll take a detailed look at the frontend service but the backend is practically identical. Thus what's discussed below applies equally to the backend.
+
+#### `rr_frontend_service` components breakdown:
+
+1. **`name`** - This is the unique name given to this service in AWS, it will translate to `rr-dev-frontend-service`. This is useful to identify, track, and log this specific service in AWS console, CLI, and Terraform state files.
+2. **`cluster`** - This is a referrence to the ECS cluster where this service lives, `aws_ecs_cluster.rr_ecs_cluster`.
+3. **`task_definition`** - This is a pointer to the frontend task definition template,`aws_ecs_task_definition.rr_frontend_task`. It tells the service what to run, as we seen earlier.
+4. **`desired_count = 2`** - The exact number of container replicas that must be running simultaneously, in this case 2. This is how we maintain **High availability and zero downtime**. If one containr crashes, the second container keeps handling the traffic while a second container is instantiated to replace the other container.
+5. **`health_check_grace_period_seconds = 120`** - This is a 120-second "breathing room" buffer where ECS tells the LoadBalancer to ignore health checks while the container boots up. Next.js frontend applications take a moment to initialize, load scripts, and start up. Without this grace period, the LoadBalancer would check the container the exact second it launches, think it's unresponsive, and kill it in an infinite **CrashLoopBackOff** before it finishes booting.
+6. **`network_configuration`** - Here we specify the Subnets, Security groups and disable public IP addresses. This is a security feature as the frontend containers do not need public IP addresses exposing them directly to the internet. They live safely in private subnets, completely shielded from direct external attacks, and only accept traffic coming through the LoadBalancer.
+7. **`load_balancer` Target group, Container name and Port** - This is the routing bridge that connects the public ALB to this ECS service. It tells the ALB: _"When traffic comes in, forward it to container `rr-frontend-container-01` on port `3000`"_. This is because users visiting the website hit the public ALB; the ALB needs to know which internal ECS containers to send that web traffic to.
+8. **`capacity_provider_strategy`** - This tells ECS to use **Fargate** as the underlying compute engine with a weight of 1.
+9. **`lifecycle (ignore_changes = [task_definition, desired_count])`** - This is a safety rule telling Terraform to ignore local changes to the task definition version and desired container count during a `tf apply`. In a real world pipeline, once we deploy, auto-scalers might change the desired count, doing so creates drift from Terraform state, thus Terraform would attempt to rollback the live production change by deleting resources which could lead to a disruption.
+
+## Known issues
 
 ## Instructions
 

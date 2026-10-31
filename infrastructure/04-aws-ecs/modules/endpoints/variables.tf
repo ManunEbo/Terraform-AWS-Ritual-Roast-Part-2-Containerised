@@ -15,7 +15,7 @@ variable "common_tags" {
 }
 
 variable "environment" {
-  type = string  
+  type = string
 }
 
 variable "endpoints_sg_id" {
@@ -27,12 +27,6 @@ variable "app_subnet_ids" {
   description = "Subnets where the endpoint network interfaces will live"
   type        = list(string)
 }
-
-variable "route_table_ids" {
-  description = "A list of route table IDs to inject the S3 gateway route into"
-  type        = list(string)
-}
-
 
 # --- Variables for tightening IAM policy for S3 endpoints ---
 

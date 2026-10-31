@@ -81,16 +81,6 @@ data "aws_lb_listener" "gateway_http_listener" {
   port              = 80
 }
 
-data "aws_route_tables" "private_rts" {
-  vpc_id = data.aws_vpc.rr_vpc.id
-
-  # Assuming your private route tables have a common tag like Tier = app or private
-  # Adjust this filter if your Layer 1 named them differently!
-  filter {
-    name   = "tag:Tier"
-    values = ["app"]
-  }
-}
 
 data "aws_security_group" "rr_endpoints_sg" {
   filter {

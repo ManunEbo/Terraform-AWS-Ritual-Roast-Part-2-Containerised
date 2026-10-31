@@ -1,17 +1,17 @@
 variable "vpc_id" {
-    type = string
+  type = string
 }
 
 variable "aws_region" {
-    type = string
+  type = string
 }
 
 variable "environment" {
-    type = string  
+  type = string
 }
 
 variable "common_tags" {
-    type = map(string)
+  type = map(string)
 }
 
 variable "app_subnet_ids" {
@@ -22,4 +22,9 @@ variable "app_subnet_ids" {
 variable "endpoints_sg_id" {
   description = "The ID of the VPC Endpoints Security Group"
   type        = string
+}
+
+variable "private_route_table_ids" {
+  description = "Route tables the s3 gateway endpoint is attached to"
+  type        = list(string)
 }

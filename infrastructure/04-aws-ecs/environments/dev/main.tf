@@ -33,7 +33,6 @@ module "endpoints" {
 
   endpoints_sg_id = data.aws_security_group.rr_endpoints_sg.id
   app_subnet_ids  = data.aws_subnets.AppSubnets.ids
-  route_table_ids = data.aws_route_tables.private_rts.ids
 
   # Injecting specific identities for the Zero-Trust S3 policy
   ecs_execution_role_arn     = module.iam.ecs_execution_role_arn

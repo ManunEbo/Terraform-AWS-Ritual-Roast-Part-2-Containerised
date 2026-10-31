@@ -3,7 +3,7 @@ variable "environment" {
 }
 
 variable "aws_region" {
-    type = string  
+  type = string
 }
 
 variable "aws_account_id" {
@@ -15,5 +15,5 @@ variable "common_tags" {
 }
 
 variable "s3_bucket" {
-    type = string
+  type = string
 }
