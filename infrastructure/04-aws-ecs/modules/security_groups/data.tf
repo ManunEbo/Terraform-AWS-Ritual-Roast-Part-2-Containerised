@@ -1,5 +1,6 @@
-# 1. Fetching the AWS Managed S3 Prefix List (For VPC Endpoints)
-# What does this do????
+# 1. Fetching the AWS Managed S3 Prefix List (For VPC Endpoints). Note this is region specific
+# (Defining it here makes it available for all SGs in this module)
+
 data "aws_prefix_list" "s3" {
   name = "com.amazonaws.${var.aws_region}.s3"
 }

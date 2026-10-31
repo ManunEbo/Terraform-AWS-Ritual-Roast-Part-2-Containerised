@@ -2,12 +2,6 @@
 # 2. frontend-SG: The Web server Security Group
 #--------------------------------------------------------------
 
-# Fetch the official AWS S3 IP List for your region
-# (Defining it here makes it available for all SGs in this module)
-# data "aws_prefix_list" "s3" {
-#   name = "com.amazonaws.${var.aws_region}.s3"
-# }
-
 resource "aws_security_group" "rr_frontend" {
   name        = "rr-${var.environment}-frontend-sg"
   description = "Frontend containers (Web Tier) security group"
