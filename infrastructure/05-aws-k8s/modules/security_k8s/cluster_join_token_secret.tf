@@ -9,7 +9,7 @@ resource "random_password" "k3s_join_token" {
 resource "aws_secretsmanager_secret" "rr_k3s_join_token" {
   name                    = "rr-${var.environment}-k3s-join-token"
   recovery_window_in_days = 0
-  
+
   tags = merge(var.common_tags, {
     Name = "rr-${var.environment}-k3s-join-token"
   })

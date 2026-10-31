@@ -3,16 +3,16 @@
 # =========================================================================
 resource "aws_lb_target_group" "rr_k8s_frontend_tg" {
   name        = "rr-${var.environment}-k8s-frontend-istio-tg"
-  port        = 30080            
+  port        = 30080
   protocol    = "HTTP"
   vpc_id      = var.vpc_id
-  target_type = "instance"        
+  target_type = "instance"
 
   health_check {
     enabled             = true
-    path                = "/" 
+    path                = "/"
     port                = "30080"
-    interval            = 15               
+    interval            = 15
     timeout             = 5
     healthy_threshold   = 2
     unhealthy_threshold = 3
@@ -38,7 +38,7 @@ resource "aws_autoscaling_attachment" "rr_k8s_frontend_asg_attach" {
 # =========================================================================
 resource "aws_lb_listener_rule" "rr_k8s_absolute_cutover" {
   listener_arn = var.gateway_listener_arn
-  priority     = 10 
+  priority     = 10
 
   action {
     type             = "forward"
@@ -47,7 +47,7 @@ resource "aws_lb_listener_rule" "rr_k8s_absolute_cutover" {
 
   condition {
     path_pattern {
-      values = ["/*"] 
+      values = ["/*"]
     }
   }
 }

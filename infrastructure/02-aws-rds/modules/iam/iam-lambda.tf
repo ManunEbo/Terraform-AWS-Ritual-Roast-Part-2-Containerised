@@ -5,7 +5,7 @@
 # 1. The Core IAM Role
 resource "aws_iam_role" "rr_lambda_secrets_role" {
   name = "rr-${var.environment}-lambda-secrets-role"
-  
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{

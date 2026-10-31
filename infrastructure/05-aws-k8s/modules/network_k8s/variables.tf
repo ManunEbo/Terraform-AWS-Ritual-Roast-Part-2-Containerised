@@ -11,5 +11,5 @@ variable "common_tags" {
 }
 
 variable "public_subnet_id" {
-    type = string
+  type = string
 }

@@ -41,7 +41,7 @@ resource "aws_security_group_rule" "rr_cp_ingress_api_from_nlb" {
   from_port                = 6443
   to_port                  = 6443
   protocol                 = "tcp"
-  source_security_group_id = aws_security_group.rr_k8s_nlb_sg.id 
+  source_security_group_id = aws_security_group.rr_k8s_nlb_sg.id
   security_group_id        = aws_security_group.rr_k8s_control_plane_sg.id
 }
 
@@ -100,17 +100,17 @@ resource "aws_security_group_rule" "rr_cp_egress_http" {
 
 # INJECTED INGRESS: Let Control Plane into Layer 1 Endpoints SG (Port 443)
 resource "aws_security_group_rule" "rr_endpoints_ingress_from_cp" {
-  description              = "RR: Allow Control Plane to reach Secrets Manager via VPC Endpoint"
-  type                     = "ingress"
-  from_port                = 443
-  to_port                  = 443
-  protocol                 = "tcp"
-  
+  description = "RR: Allow Control Plane to reach Secrets Manager via VPC Endpoint"
+  type        = "ingress"
+  from_port   = 443
+  to_port     = 443
+  protocol    = "tcp"
+
   # 1. The Target being modified (Layer 1)
-  security_group_id        = var.endpoints_sg_id
-  
+  security_group_id = var.endpoints_sg_id
+
   # 2. The Source allowed in (Layer 5)
-  source_security_group_id = aws_security_group.rr_k8s_control_plane_sg.id 
+  source_security_group_id = aws_security_group.rr_k8s_control_plane_sg.id
 }
 
 

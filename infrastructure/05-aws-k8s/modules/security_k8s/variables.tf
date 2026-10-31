@@ -20,7 +20,7 @@ variable "common_tags" {
 
 variable "alb_sg_id" {
   description = "Security Group ID of the V1 ALB"
-  type = string
+  type        = string
 }
 
 # variable "web_sg_id" {

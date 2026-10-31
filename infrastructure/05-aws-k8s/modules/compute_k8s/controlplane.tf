@@ -6,9 +6,9 @@ resource "aws_lb" "rr_k3s_cp_nlb" {
   internal           = true
   load_balancer_type = "network"
   subnets            = var.k8s_private_subnets
-  
+
   # THE FIX: Wire the security group to the NLB
-  security_groups    = [var.nlb_sg_id]
+  security_groups = [var.nlb_sg_id]
 
   tags = merge(var.common_tags, {
     Name = "rr-${var.environment}-k3s-cp-nlb"
@@ -69,9 +69,9 @@ resource "aws_launch_template" "rr_k3s_cp" {
   }
 
   user_data = base64encode(templatefile("${path.module}/user_data_cp.sh", {
-    environment  = var.environment
-    aws_region   = var.aws_region
-    nlb_dns_name = aws_lb.rr_k3s_cp_nlb.dns_name
+    environment   = var.environment
+    aws_region    = var.aws_region
+    nlb_dns_name  = aws_lb.rr_k3s_cp_nlb.dns_name
     DB_SECRET_ARN = data.aws_secretsmanager_secret.rr_db_secret.arn
   }))
 

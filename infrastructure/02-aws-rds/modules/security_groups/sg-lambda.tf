@@ -40,15 +40,15 @@ resource "aws_security_group_rule" "rr_lambda_egress_to_endpoints" {
 
 # 2. INJECTED INGRESS: VPC Endpoints <- Lambda (Inbound)
 resource "aws_security_group_rule" "endpoints_ingress_from_lambda" {
-  type                     = "ingress"
-  description              = "RR: Injected by Layer 2 - Allow Lambda into Endpoints SG"
-  from_port                = 443
-  to_port                  = 443
-  protocol                 = "tcp"
-  
+  type        = "ingress"
+  description = "RR: Injected by Layer 2 - Allow Lambda into Endpoints SG"
+  from_port   = 443
+  to_port     = 443
+  protocol    = "tcp"
+
   # The Target being modified (Layer 1 Endpoint SG)
-  security_group_id        = data.aws_security_group.rr_endpoints_sg.id
-  
+  security_group_id = data.aws_security_group.rr_endpoints_sg.id
+
   # The Source allowed in (This Lambda)
   source_security_group_id = aws_security_group.rr_lambda.id
 }

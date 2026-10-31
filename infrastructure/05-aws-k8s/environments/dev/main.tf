@@ -59,7 +59,7 @@ module "compute_k8s" {
   common_tags        = local.common_tags
 
   # DO NOT BOOT INSTANCES UNTIL THE INTERNET BRIDGE IS UP
-  depends_on = [ module.network_k8s ]
+  depends_on = [module.network_k8s]
 
   # Add this line to bridge the modules:
   nlb_sg_id = module.security_k8s.nlb_sg_id
@@ -68,9 +68,9 @@ module "compute_k8s" {
 module "network_k8s" {
   source = "../../modules/network_k8s"
 
-  environment = var.environment
-  common_tags = local.common_tags
-  vpc_name = var.vpc_name
+  environment      = var.environment
+  common_tags      = local.common_tags
+  vpc_name         = var.vpc_name
   public_subnet_id = data.aws_subnet.rr_public_subnet_1.id
 }
 
@@ -80,7 +80,7 @@ module "load_balancers_k8s" {
   environment = var.environment
   vpc_id      = data.aws_vpc.rr_vpc.id
   common_tags = local.common_tags
-  
+
   gateway_listener_arn = data.aws_lb_listener.gateway_http_listener.arn
 
   # --- THE NEW DYNAMIC BRIDGE ---

@@ -10,10 +10,10 @@ resource "aws_launch_template" "rr_k3s_worker_backend" {
   network_interfaces {
     security_groups = [var.worker_backend_sg_id]
   }
-    
+
   metadata_options {
-    http_endpoint               = "enabled"
-    http_tokens                 = "required"
+    http_endpoint = "enabled"
+    http_tokens   = "required"
     # =========================================================
     # THE FIX: Kubernetes pods require 2 hops to reach IMDSv2
     # =========================================================

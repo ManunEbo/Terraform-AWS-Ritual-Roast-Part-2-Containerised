@@ -2,18 +2,18 @@
 module "security_groups" {
   source      = "../../modules/security_groups"
   common_tags = local.common_tags
-  
-  aws_region  = data.aws_region.current.id 
+
+  aws_region  = data.aws_region.current.id
   vpc_id      = data.aws_vpc.rr_vpc.id
   environment = var.environment
-  vpc_name    = var.vpc_name 
+  vpc_name    = var.vpc_name
 }
 
 # --- 2. IAM Roles ---
 module "iam" {
-  source         = "../../modules/iam"
-  environment    = var.environment
-  common_tags    = local.common_tags
+  source      = "../../modules/iam"
+  environment = var.environment
+  common_tags = local.common_tags
 }
 
 # --- 3. Lambda Rotation Engine ---
@@ -38,6 +38,6 @@ module "rds" {
 
   db_username = var.db_username
   db_password = var.db_password
-  
+
   rotation_lambda_arn = module.lambda.lambda_function_arn
 }
