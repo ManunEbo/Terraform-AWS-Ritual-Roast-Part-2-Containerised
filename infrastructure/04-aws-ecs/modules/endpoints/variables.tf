@@ -27,20 +27,3 @@ variable "app_subnet_ids" {
   description = "Subnets where the endpoint network interfaces will live"
   type        = list(string)
 }
-
-# --- Variables for tightening IAM policy for S3 endpoints ---
-
-variable "ecs_execution_role_arn" {
-  description = "IAM Role ARN used by Fargate to pull images"
-  type        = string
-}
-
-variable "ecs_backend_task_role_arn" {
-  description = "IAM Role ARN used by the backend application"
-  type        = string
-}
-
-variable "ecs_frontend_task_role_arn" {
-  description = "IAM Role ARN used by the frontend application"
-  type        = string
-}
