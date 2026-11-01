@@ -22,7 +22,9 @@ FROM python:3.11-slim AS runner
 RUN groupadd -r ritualuser && useradd -r -g ritualuser ritualuser
 WORKDIR /app
 
-# Copy libraries AND the SSL certificate from the builder
+# Copy libraries AND the SSL certificate from the builder.
+# COPY creates everything owned by root, which is what we want:
+# the app user can read and run its code, but cannot change it.
 COPY --from=builder /root/.local /home/ritualuser/.local
 COPY --from=builder /build/global-bundle.pem /app/global-bundle.pem
 COPY . .
@@ -31,9 +33,14 @@ ENV PATH=/home/ritualuser/.local/bin:$PATH
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Hardened Permissions: Root owns the cert, user can only read it
-RUN chown root:root /app/global-bundle.pem && chmod 444 /app/global-bundle.pem
-RUN chown -R ritualuser:ritualuser /app && chmod 755 /app
+# Hardened permissions: root owns /app and everything in it.
+#  - Directories 755, files 644: the app user can read and traverse, never write.
+#    (Normalised here so files copied from the build machine can't arrive
+#    unreadable, e.g. 600, or writable by others.)
+#  - Certificate 444: read-only for everyone, root included.
+# Because root also owns the DIRECTORY, the app user cannot delete or replace
+# the certificate either. Directory ownership controls delete and rename.
+RUN chmod -R u=rwX,go=rX /app && chmod 444 /app/global-bundle.pem
 
 USER ritualuser
 EXPOSE 5000
