@@ -789,92 +789,7 @@ This module outputs three things in [outputs.tf](https://github.com/ManunEbo/Ter
 
 VPC endpoints are fundamentally about keeping AWS traffic on the private AWS network backbone, rather than traversing the public internet. This improves security, reduces latency, and often lowers data transfer costs.
 
-### [data.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/04-aws-ecs/modules/endpoints/data.tf)
-
-The use of data source in this module to create an `aws_iam_policy_document` is not something we've seen before so lets take a closer look:
-
-#### The S3 endpoint policy: `data "aws_iam_policy_document"`
-
-```hcl
-data "aws_iam_policy_document" "s3_gateway" {
-  statement {
-    sid       = "AllowReads"
-    effect    = "Allow"
-    principals {
-      type        = "AWS"
-      identifiers = ["*"]
-    }
-    actions   = ["s3:GetObject", "s3:ListBucket"]
-    resources = ["*"]
-    condition {
-      test     = "ArnEquals"
-      variable = "aws:PrincipalArn"
-      values   = [
-        var.ecs_execution_role_arn,
-        var.ecs_backend_task_role_arn,
-        var.ecs_frontend_task_role_arn
-      ]
-    }
-  }
-}
-```
-
-This data source is fundamentally different from the data sources used elsewhere in this project. In earlier layers, a data source queries AWS for an existing resource (such as looking up a VPC by its tag). **`aws_iam_policy_document` makes no API call.** It is a local HCL policy generator: Terraform takes the policy written in HCL, validates its syntax, and compiles it locally into the JSON format that AWS expects. We then pass that compiled JSON directly to the S3 gateway endpoint:
-
-```hcl
-resource "aws_vpc_endpoint" "s3" {
-  # ...
-  policy = data.aws_iam_policy_document.s3_gateway.json
-}
-```
-
-#### Why generate the policy instead of writing raw JSON?
-
-1. **Validation** - Terraform checks the structure (statements, actions, variables, conditions) at `plan` time, catching typos immediately rather than letting AWS reject malformed JSON at `apply` time.
-2. **Variable Interoperability** - Terraform native variables (like `var.ecs_execution_role_arn`) can be interpolated cleanly without complex string-escaping inside a multi-line JSON heredoc.
-3. **Stable Plans** - The provider produces consistently formatted JSON, preventing "phantom" diffs caused by whitespace or key ordering differences in version control.
-4. **Inline Documentation** - HCL native comments allow each statement to explain _why_ it exists directly in the code. JSON does not support comments.
-
-#### What an Endpoint Policy Does (and Doesn't Do)
-
-A VPC endpoint policy **does not grant permissions**. It acts strictly as a network boundary filter determining what traffic is allowed to pass through that specific tunnel. A request via the endpoint succeeds _only_ if it is allowed by all three layers of evaluation:
-
-1. **The caller’s IAM policy** (attached to the ECS execution or task role).
-2. **The VPC endpoint policy** (the policy we are defining here).
-3. **The target S3 bucket policy**, if one exists.
-
-Because of this evaluation order, an endpoint policy can only **narrow access**—it can never widen it. Even if an IAM role has full permissions to read from S3, it will be blocked if the endpoint policy denies it.
-
-#### Deep Dive: How the `condition {}` Block Enforces Zero-Trust
-
-A critical requirement of AWS S3 Gateway VPC Endpoints is that **AWS enforces a wildcard principal (`identifiers = ["*"]`)**. If you attempt to restrict the `principals` block directly to specific IAM roles for an S3 Gateway, AWS will reject the policy or break S3 routing entirely.
-
-To solve this paradox and achieve a strict Zero-Trust security posture, we combine a wildcard principal with an explicit **`condition` block**:
-
-```hcl
-    principals {
-      type        = "AWS"
-      identifiers = ["*"]
-    }
-    ...
-    condition {
-      test     = "ArnEquals"
-      variable = "aws:PrincipalArn"
-      values   = [
-        var.ecs_execution_role_arn,
-        var.ecs_backend_task_role_arn,
-        var.ecs_frontend_task_role_arn
-      ]
-    }
-```
-
-- **`test = "ArnEquals"`**: Tells AWS to perform an exact string match against the caller's Amazon Resource Name (ARN). This prevents partial or wildcard spoofing.
-- **`variable = "aws:PrincipalArn"`**: Evaluates the cryptographic identity of the IAM entity (role) making the request, rather than the IP address or network interface.
-- **`values = [...]`**: Whitelists only the three explicit ECS roles (the execution role that pulls images and logs, and the two application task roles).
-
-Any other service, user, or rogue container trying to stream data through this S3 gateway tunnel is instantly rejected at the network perimeter, even if they possess valid AWS credentials elsewhere in the account.
-
-### The two types of Endpoints
+### Recap: The two types of Endpoints
 
 AWS provides two distinct types of VPC Endpoints: **Interface Endpoints** and **Gateway Endpoints**. Both are provided and managed by AWS, but they operate at different layers of the network. Gateway Endpoints were introduced first, specifically for S3 and DynamoDB, as a free routing feature. However, modifying route tables doesn't easily extend to thousands of different AWS and third-party services, nor does it allow on-premises resources to use them, via **VPN/Direct Connect**.
 
@@ -934,34 +849,6 @@ While the API Endpoint gets the metadata, the `dkr` Endpoint does the heavy lift
 
 Fargate containers don't have permanent hard drives. If they crash, all local logs are destroyed. Fargate uses the `awslogs` driver to instantly stream console output, Next.js and Flask logs, to CloudWatch. Without this endpoint, Fargate cannot reach CloudWatch, and if the task cannot send its logs, Fargate will refuse to start the container at all.
 
-### Gateway Endpoint `s3`
-
-Here there is some differences from the `Interface` Endpoints above. When ECS Fargate tasks start up, they pull container images from Amazon ECR. However, behind the scenes, ECR stores the heavy Docker image layers (.tar gzip files) in hidden, AWS-managed S3 buckets.
-
-Without a direct route to S3, Fargate image pulls hang and fail silently during container initialization. A **Gateway Endpoint** provides that private route inside the VPC boundary, ensuring image layers are downloaded securely over AWS's internal backbone with **no NAT gateway data-processing charges and no hourly endpoint fees**.
-
-```hcl
-resource "aws_vpc_endpoint" "s3" {
-  vpc_id            = var.vpc_id
-  service_name      = "com.amazonaws.${var.aws_region}.s3"
-  vpc_endpoint_type = "Gateway"
-  route_table_ids   = var.route_table_ids
-
-  # Attach the Zero-Trust Policy
-  policy = data.aws_iam_policy_document.s3_gateway.json
-
-  tags = merge(var.common_tags, {
-    Name = "rr-${var.environment}-s3-gateway"
-  })
-}
-```
-
-Let's have a look at the components that are different:
-
-1. `vpc_endpoint_type = "Gateway"` - This specifies that this is a routing-based endpoint, meaning no ENIs and no hourly charges.
-2. `route_table_ids = var.route_table_ids` - Instead of providing `subnet_ids` like an interface endpoint, we specify route tables. AWS will automatically inject a custom route into these tables, e.g. `"Destination:S3 -> Target:vpce-xxx"`, for our private subnets.
-3. `policy = data.aws_iam_policy_document.s3_gateway.json` - We've seen this above: Here we specify an IAM policy document to enforce a Zero-Trust security posture, ensuring this tunnel only permits the ECS execution role to pull image layers, blocking any accidental or malicious S3 access by attaching an IAM policy directly to the network tunnel.
-
 ### outputs.tf
 
 Here we bundled up all of the endpoints ID into a dictionary object and output them, making them available for the root module. It's not referenced by any module at all so it's just for exercise.
@@ -974,7 +861,6 @@ output "endpoint_ids" {
     ecr_api = aws_vpc_endpoint.ecr_api.id
     ecr_dkr = aws_vpc_endpoint.ecr_dkr.id
     logs    = aws_vpc_endpoint.logs.id
-    s3      = aws_vpc_endpoint.s3.id
   }
 }
 ```

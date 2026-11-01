@@ -650,10 +650,106 @@ It is addressed/annotated that an HTTPS, port 443, is a must have for production
 
 There are two types of VPC Endpoints used in this project:
 
-**Gateway** - This works by injecting a route into a route table; this is a routing trick instead of a real network presence. It's only available for S3 and DynamoDB.
-Since route tables don't consume any Elastic Network Interfaces nor any per Availability zone (AZ) infrastructure, it's free (cheap) and ideal.
+### Gateway
 
-**Interface** - This endpoint type is provided by PrivateLink: All AWS services that supports interface endpoints sit behind an AWS managed (private) NLB. This NLB facilitates exposure of the AWS services in the AWS internal backend VPC. Each of these services has a public dns endpoint that resolves to a public IP address. Without PrivateLink, reaching these services is a round trip, from our private subnets to the internet to get to the service public IP address:
+This works by injecting a route into a route table; it's a routing trick rather than a real network presence. It's only available for S3 and DynamoDB. Because it doesn't consume any Elastic Network Interfaces or any per Availability Zone (AZ) infrastructure, it's free.
+
+Before looking at the **S3 gateway endpoint**, let's look at the policy attached to it and why. It mainly prepares for Layer 4, where the ECS tasks use this endpoint to pull images from ECR. The endpoint is created here because it attaches to Layer 1's private route table, `resource "aws_route_table" "private" {...}`, which all private subnets except the K8s subnets share. Note, **a route table can hold only one S3 endpoint route**, so there is one shared endpoint, owned by the layer that owns the route table.
+
+#### [aws_iam_policy_document](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/01-aws-vpc/modules/endpoints/data.tf)
+
+The use of a data source in this file to create an `aws_iam_policy_document` is somewhat unusual:
+
+```hcl
+data "aws_iam_policy_document" "s3_ecr_layers" {
+  statement {
+    sid    = "AllowEcrImageLayersOnly"
+    effect = "Allow"
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    actions   = ["s3:GetObject"]
+    resources = ["arn:aws:s3:::prod-${var.aws_region}-starport-layer-bucket/*"]
+  }
+}
+```
+
+This data source is fundamentally different from the data sources used elsewhere in this project. As explained earlier, a data source usually queries AWS for an existing resource, such as looking up a VPC by its tag. However, **`aws_iam_policy_document` makes no API call.** It is a local policy generator: Terraform takes the policy written in HCL, checks its structure, and compiles it locally into the JSON format that AWS expects. We then pass that JSON to the S3 gateway endpoint:
+
+```hcl
+resource "aws_vpc_endpoint" "s3" {
+  # ...
+  policy = data.aws_iam_policy_document.s3_ecr_layers.json
+}
+```
+
+#### Why generate the policy instead of writing raw JSON?
+
+1. **Validation** - Terraform checks the structure (statements, actions, resources, conditions) at `plan` time, catching mistakes early rather than letting AWS reject malformed JSON at `apply` time.
+2. **Variable interpolation** - Terraform variables, like `var.aws_region` in the bucket ARN above, can be used directly without awkward string-escaping inside a multi-line JSON heredoc.
+3. **Stable plans** - The provider produces consistently formatted JSON, avoiding "phantom" diffs caused by whitespace or key-order differences.
+4. **Inline documentation** - HCL allows comments, so each statement can explain _why_ it exists directly in the code. JSON does not support comments.
+
+#### What's happening behind the scenes
+
+Amazon ECR (Elastic Container Registry) does not store the heavy Docker image layers (compressed `.tar` files) in its own service backend. Instead, it stores them in AWS-managed S3 buckets known as **Starport buckets**, named `prod-<region>-starport-layer-bucket`. So pulling an image from ECR also means downloading its layers from S3.
+
+#### The permission
+
+This policy statement allows one action, `s3:GetObject` (reading or downloading files), and only from the regional ECR image-layer bucket, `prod-${var.aws_region}-starport-layer-bucket/*`. When attached to the S3 gateway endpoint, it tells AWS: _"Allow traffic through this endpoint only to download container image layers from ECR's underlying storage, and nothing else."_
+
+The principal is `*`, meaning all, because the restriction is by destination, not by identity. Access to the image layers themselves is still controlled by ECR, which only hands out short-lived download links to callers that are allowed to pull the image.
+
+#### What an endpoint policy does (and doesn't do)
+
+A VPC endpoint policy **does not grant permissions**, it acts as a filter on what may pass through that specific gateway endpoint. A request through the endpoint succeeds **only** if it is allowed by all three of:
+
+1. **The caller's IAM policy** - in Layer 4, this is the ECS execution role, which pulls the images.
+2. **The VPC endpoint policy** - the policy we are defining here.
+3. **The target S3 bucket policy**, if one exists.
+
+Because all three must allow a request, an endpoint policy can only **narrow access**; it can never widen it. Even if an IAM role has full S3 permissions, its requests are blocked here if the endpoint policy doesn't allow them.
+
+#### Why limit to the Starport bucket
+
+If no policy is given, AWS attaches a default full-access policy to the endpoint: any principal, any S3 action, any bucket. Limiting it to the ECR image-layer bucket **prevents our workloads from using this route to reach any other S3 storage**.
+
+#### Implementing the Principle of Least Privilege
+
+This policy applies least privilege in three ways:
+
+- **Resource scoping (`resources`)** - Instead of allowing access to every S3 bucket in this AWS account, or public buckets anywhere, it locks the destination to a single bucket path: `arn:aws:s3:::prod-${var.aws_region}-starport-layer-bucket/*`.
+- **Action minimisation (`actions`)** - It allows read-only `s3:GetObject` and nothing else: no writing (`s3:PutObject`), no deleting (`s3:DeleteObject`), and no listing bucket contents (`s3:ListBucket`).
+- **Reduced blast radius** - If a container in our private subnets were ever compromised, an attacker could not use this path to read our other buckets (such as the Terraform state bucket) or to upload stolen data to a bucket they own. Anything not destined for container image retrieval is blocked.
+
+#### [Gateway Endpoint for S3](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/01-aws-vpc/modules/endpoints/s3_endpoint.tf)
+
+When ECS Fargate tasks start, they pull their container images from Amazon ECR. The private subnets have no route to the internet, so without a route to S3 the image pulls hang until they time out, and the tasks fail to start. A **gateway endpoint** provides that private route inside the VPC, so image layers download over AWS's internal network with **no NAT gateway charges and no hourly endpoint fees**.
+
+```hcl
+resource "aws_vpc_endpoint" "s3" {
+  vpc_id            = var.vpc_id
+  service_name      = "com.amazonaws.${var.aws_region}.s3"
+  vpc_endpoint_type = "Gateway"
+  route_table_ids   = var.private_route_table_ids
+  policy            = data.aws_iam_policy_document.s3_ecr_layers.json
+
+  tags = merge(var.common_tags, {
+    Name = "rr-${var.environment}-s3-gateway"
+  })
+}
+```
+
+Let's look at the components that differ from an interface endpoint:
+
+1. `vpc_endpoint_type = "Gateway"` - This makes it a routing-based endpoint: no ENIs and no hourly charges.
+2. `route_table_ids = var.private_route_table_ids` - Instead of `subnet_ids`, as an interface endpoint uses, we give it route tables. AWS adds a route to each one, for example `Destination: pl-xxxx (the S3 prefix list) -> Target: vpce-xxxx`. Here it's the private route table shared by the web, app and database subnets, passed in from `main.tf` as `[module.vpc.private_route_table_id]`.
+3. `policy = data.aws_iam_policy_document.s3_ecr_layers.json` - We've seen this above: it limits what can pass through this endpoint to downloading ECR image layers. Any other S3 request sent through it is blocked, no matter which role sent it.
+
+### Interface
+
+This endpoint type is provided by PrivateLink: All AWS services that supports interface endpoints sit behind an AWS managed (private) NLB. This NLB facilitates exposure of the AWS services in the AWS internal backend VPC. Each of these services has a public dns endpoint that resolves to a public IP address. Without PrivateLink, reaching these services is a round trip, from our private subnets to the internet to get to the service public IP address:
 
 **NATGW → IGW → AWS Service public IP/DNS endpoint → Back**
 
@@ -665,8 +761,9 @@ That's the long way home. PrivateLink brings these services a lot closer; it ena
 
 Thus a round trip involving the public internet becomes an internal dash across the AWS backend.
 
-**Interface Endpoint for Secrets Manager**
-In this Layer we only deploy an interface VPC Endpoint for Secrets Manager because that is the only endpoint resource that both Layer 4 and Layer 5 will use.
+#### [Interface Endpoint for Secrets Manager](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/01-aws-vpc/modules/endpoints/secrets_manager_endpoint.tf)
+
+In this Layer we only deploy an interface VPC Endpoint for Secrets Manager because that is the only interface endpoint resource that both Layer 4 and Layer 5 will use.
 
 ```hcl
 
