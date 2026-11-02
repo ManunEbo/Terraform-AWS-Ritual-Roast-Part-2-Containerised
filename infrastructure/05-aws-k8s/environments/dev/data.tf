@@ -24,9 +24,10 @@ data "aws_vpc" "rr_vpc" {
 
 # 2. Fetch the existing RDS Security Group
 data "aws_security_group" "rr_rds_sg" {
+  vpc_id = data.aws_vpc.rr_vpc.id
   filter {
     name   = "tag:Name"
-    values = ["rr-${var.environment}-database-sg"] # <--- FIXED
+    values = ["rr-${var.environment}-database-sg"]
   }
 }
 
@@ -40,6 +41,7 @@ data "aws_internet_gateway" "rr_igw" {
 
 # Fetch aws_subnet.public_subnets[1].id
 data "aws_subnet" "rr_public_subnet_1" {
+  vpc_id = data.aws_vpc.rr_vpc.id
   tags = merge(local.common_tags_vpc, {
     Name = "PublicSubnet-01-2a"
   })
@@ -48,7 +50,10 @@ data "aws_subnet" "rr_public_subnet_1" {
 # Fetching the k8s subnets
 data "aws_subnets" "rr_k8s_subnets" {
   tags = local.common_tags_vpc
-
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.rr_vpc.id]
+  }
   filter {
     name   = "tag:Name"
     values = ["K8sSubnet-*"]
@@ -61,24 +66,12 @@ data "aws_subnets" "rr_k8s_subnets" {
 
 # 3. Fetch 01-aws-vpc ALB Security Group (Name standardized)
 data "aws_security_group" "rr_alb_sg" {
+  vpc_id = data.aws_vpc.rr_vpc.id
   tags = merge(local.common_tags_vpc, {
     Name = "rr-${var.environment}-alb-sg"
   })
 }
 
-# 4. Fetch 01-aws-vpc Web Security Group
-# data "aws_security_group" "rr_web_sg" {
-#   tags = merge(local.common_tags_vpc, {
-#     Name = "rr-${var.environment}-web-sg"
-#   })
-# }
-
-# 5. Fetch 01-aws-vpc App Security Group
-# data "aws_security_group" "rr_app_sg" {
-#   tags = merge(local.common_tags_vpc, {
-#     Name = "rr-${var.environment}-app-sg"
-#   })
-# }
 
 data "aws_lb" "gateway_alb" {
   name = "rr-${var.environment}-public-alb"
@@ -90,6 +83,7 @@ data "aws_lb_listener" "gateway_http_listener" {
 }
 # Fetch the Endpoints Security Group from Layer 1
 data "aws_security_group" "rr_endpoints_sg" {
+  vpc_id = data.aws_vpc.rr_vpc.id
   filter {
     name   = "tag:Name"
     values = ["rr-${var.environment}-vpc-endpoints-sg"]

@@ -15,6 +15,10 @@ data "aws_vpc" "rr_vpc" {
 data "aws_subnets" "rr_db_subnets" {
   tags = local.common_tags_vpc
   filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.rr_vpc.id]
+  }
+  filter {
     name   = "tag:Name"
     values = ["DataSubnet-*"]
   }

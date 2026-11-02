@@ -31,6 +31,10 @@ data "aws_vpc" "rr_vpc" {
 # Fetching Public Networking for the ALB Module ---
 data "aws_subnets" "public_subnets" {
   filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.rr_vpc.id]
+  }
+  filter {
     name   = "tag:Name"
     values = ["PublicSubnet-*"]
   }
@@ -40,6 +44,10 @@ data "aws_subnets" "public_subnets" {
 data "aws_subnets" "web_subnets" {
   tags = local.common_tags_vpc
   filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.rr_vpc.id]
+  }
+  filter {
     name   = "tag:Name"
     values = ["WebSubnet-*"]
   }
@@ -48,7 +56,10 @@ data "aws_subnets" "web_subnets" {
 # Retrieve Backend subnets
 data "aws_subnets" "AppSubnets" {
   tags = local.common_tags_vpc
-
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.rr_vpc.id]
+  }
   filter {
     name   = "tag:Name"
     values = ["AppSubnet-*"]
@@ -57,20 +68,13 @@ data "aws_subnets" "AppSubnets" {
 
 
 data "aws_security_group" "public_alb_sg" {
-  name = "rr-${var.environment}-alb-sg"
+  vpc_id = data.aws_vpc.rr_vpc.id
+  name   = "rr-${var.environment}-alb-sg"
 }
-
 
 data "aws_secretsmanager_secret" "rr_db_secret" {
   name = "rr-${var.environment}-db-secret"
 }
-
-
-
-# data "aws_security_group" "public_alb_sg" {
-#   # Grabbing the public shell SG from Layer 1
-#   name = "rr-${var.environment}-public-alb-sg" 
-# }
 
 data "aws_lb" "gateway_alb" {
   name = "rr-${var.environment}-public-alb"
@@ -83,6 +87,7 @@ data "aws_lb_listener" "gateway_http_listener" {
 
 
 data "aws_security_group" "rr_endpoints_sg" {
+  vpc_id = data.aws_vpc.rr_vpc.id
   filter {
     name   = "tag:Name"
     values = ["rr-${var.environment}-vpc-endpoints-sg"]
