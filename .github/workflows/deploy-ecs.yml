@@ -2,10 +2,10 @@ name: Build and Push V1 to AWS ECR
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
     paths:
-      - 'apps/v1-frontend-nextjs/**'
-      - 'apps/v1-backend-flask/**'
+      - "apps/v1-frontend-nextjs/**"
+      - "apps/v1-backend-flask/**"
   workflow_dispatch:
 
 env:
@@ -46,17 +46,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Configure AWS Credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/rr-dev-github-frontend-role
           aws-region: ${{ env.AWS_REGION }}
-          
+
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
-        
+
       - name: Build and Push Frontend
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
@@ -64,8 +64,10 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
         working-directory: ./apps/v1-frontend-nextjs
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY --all-tags
+          # Tag with the commit SHA only: ECR repositories are IMMUTABLE, so a moving
+          # "latest" tag would be rejected after the first push. Layer 4 deploys by digest.
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
   build-v1-backend:
     needs: detect-changes
@@ -73,17 +75,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Configure AWS Credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/rr-dev-github-backend-role
           aws-region: ${{ env.AWS_REGION }}
-          
+
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
-        
+
       - name: Build and Push Backend
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
@@ -91,5 +93,7 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
         working-directory: ./apps/v1-backend-flask
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY --all-tags
+          # Tag with the commit SHA only: ECR repositories are IMMUTABLE, so a moving
+          # "latest" tag would be rejected after the first push. Layer 4 deploys by digest.
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG

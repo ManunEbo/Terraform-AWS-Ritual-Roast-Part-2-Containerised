@@ -2,7 +2,7 @@
 # 1. Frontend ECS Service
 #--------------------------------------------------------------
 
-# Where are the ECS Target groups kept?????
+# Target groups are created in modules/load-balancers and passed in as variables.
 
 resource "aws_ecs_service" "rr_frontend_service" {
   name            = "rr-${var.environment}-frontend-service"
@@ -36,9 +36,11 @@ resource "aws_ecs_service" "rr_frontend_service" {
     base              = 1
   }
 
-  # TEMPORARILY UNLOCKED: Allowing Terraform to push the new Task Definition
+  # task_definition is NOT ignored: when a new image digest creates a new task
+  # definition revision, Terraform moves the service onto it (a rolling deployment).
+  # desired_count stays ignored so a manual or autoscaling change isn't reverted.
   lifecycle {
-    ignore_changes = [task_definition, desired_count]
+    ignore_changes = [desired_count]
   }
 
   tags = merge(var.common_tags, {
@@ -80,9 +82,11 @@ resource "aws_ecs_service" "rr_backend_service" {
     weight            = 1
   }
 
-  # TEMPORARILY UNLOCKED: Allowing Terraform to push the new Task Definition
+  # task_definition is NOT ignored: when a new image digest creates a new task
+  # definition revision, Terraform moves the service onto it (a rolling deployment).
+  # desired_count stays ignored so a manual or autoscaling change isn't reverted.
   lifecycle {
-    ignore_changes = [task_definition, desired_count]
+    ignore_changes = [desired_count]
   }
 
   tags = merge(var.common_tags, {

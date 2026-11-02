@@ -1,4 +1,24 @@
 #--------------------------------------------------------------
+# 0. Image lookups: deploy by digest, not by the "latest" tag
+#--------------------------------------------------------------
+# Finds the most recently pushed image in each ECR repository and returns its
+# digest (sha256:...), the image's unique content fingerprint. A digest can
+# never point at different content, so each new image produces a new task
+# definition revision, which ECS then rolls out.
+# If a repository is empty, the plan fails here: push the images (Layer 3
+# pipeline) before applying this layer.
+
+data "aws_ecr_image" "frontend" {
+  repository_name = "rr-${var.environment}-frontend"
+  most_recent     = true
+}
+
+data "aws_ecr_image" "backend" {
+  repository_name = "rr-${var.environment}-backend"
+  most_recent     = true
+}
+
+#--------------------------------------------------------------
 # 1. Frontend Task Definition (The RR Web Greenprint)
 #--------------------------------------------------------------
 
@@ -22,8 +42,8 @@ resource "aws_ecs_task_definition" "rr_frontend_task" {
     {
       name = "rr-frontend-container-01"
 
-      # Pulling securely from ECR via VPC Endpoints
-      image     = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.id}.amazonaws.com/rr-${var.environment}-frontend:latest"
+      # Pulling securely from ECR via VPC Endpoints, pinned to an exact image digest
+      image     = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.id}.amazonaws.com/rr-${var.environment}-frontend@${data.aws_ecr_image.frontend.image_digest}"
       essential = true
 
       # The OS remains mathematically locked
@@ -85,8 +105,9 @@ resource "aws_ecs_task_definition" "rr_backend_task" {
 
   container_definitions = jsonencode([
     {
-      name      = "rr-backend-container-01"
-      image     = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.id}.amazonaws.com/rr-${var.environment}-backend:latest"
+      name = "rr-backend-container-01"
+      # Pinned to an exact image digest
+      image     = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.id}.amazonaws.com/rr-${var.environment}-backend@${data.aws_ecr_image.backend.image_digest}"
       essential = true
 
       # Locking the root file system
