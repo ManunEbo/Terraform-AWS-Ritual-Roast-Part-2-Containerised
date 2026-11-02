@@ -34,9 +34,10 @@ spec:
         tier: frontend
       containers:
         - name: vite-frontend
-          # REBUILD REQUIRED: nginx.conf must (a) listen 3000 [D4] and
-          # (b) set x-frontend=v2 cookie [D5]. See revised nginx.conf.
-          # Dockerfile EXPOSE should also change 80 -> 3000.
+          # Image pinned to a commit SHA; the CI write-back updates it on each build.
+          # nginx listens on 3000 (same port as the v1 Next.js frontend, so one
+          # Service fronts both) and sets the x-frontend=v2 cookie for Istio
+          # session stickiness.
           image: ghcr.io/manunebo/rr-v2-frontend:0cb383b3ed3d70edf305ec188eb23f37d53dc9df
           ports:
             - containerPort: 3000 # Vite/nginx rebuilt to listen on 3000

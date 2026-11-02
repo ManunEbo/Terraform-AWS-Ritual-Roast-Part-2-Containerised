@@ -34,9 +34,9 @@ spec:
         tier: frontend
       containers:
         - name: nextjs-frontend
-          # REBUILD REQUIRED: image must add the x-frontend=v1 cookie via
-          # next.config.ts headers() (D5). Tag stays :latest; CI write-back
-          # will seed the SHA. See next.config.ts snippet in the handover.
+          # Image pinned to a commit SHA; the CI write-back updates it on each build.
+          # The image sets the x-frontend=v1 cookie (next.config.ts headers()) for
+          # Istio session stickiness.
           image: ghcr.io/manunebo/rr-v1-frontend:0cb383b3ed3d70edf305ec188eb23f37d53dc9df
           ports:
             - containerPort: 3000
