@@ -24,7 +24,7 @@ resource "time_sleep" "wait_for_iam" {
 resource "aws_lambda_function" "rr_secret_rotation_function" {
   function_name = "rr-${var.environment}-secret-rotation-function"
   handler       = "index.lambda_handler"
-  runtime       = "python3.9"
+  runtime       = "python3.13"
 
   # FIXED: Pointing to the automated zip created above, removing S3 references
   filename         = data.archive_file.rr_rotation_zip.output_path

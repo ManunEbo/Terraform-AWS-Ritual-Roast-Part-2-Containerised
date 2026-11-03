@@ -112,7 +112,7 @@ In [iam-Lambda.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2
 file we create the magic that permits the Lambda function to do what it needs to do. Firstly, we create the role:
 
 ```hcl
-resource "aws_iam_role" "rr_Lambda_secrets_role" {
+resource "aws_iam_role" "rr_lambda_secrets_role" {
   name = "rr-${var.environment}-Lambda-secrets-role"
 
   assume_role_policy = jsonencode({
@@ -140,13 +140,13 @@ Now that the role is created we can load it with permissions. First we attach so
 
 ```hcl
 
-resource "aws_iam_role_policy_attachment" "rr_Lambda_vpc_access" {
-  role       = aws_iam_role.rr_Lambda_secrets_role.name
+resource "aws_iam_role_policy_attachment" "rr_lambda_vpc_access" {
+  role       = aws_iam_role.rr_lambda_secrets_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
-resource "aws_iam_role_policy_attachment" "rr_Lambda_basic_execution" {
-  role       = aws_iam_role.rr_Lambda_secrets_role.name
+resource "aws_iam_role_policy_attachment" "rr_lambda_basic_execution" {
+  role       = aws_iam_role.rr_lambda_secrets_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
@@ -162,7 +162,7 @@ This is the crux of the Lambda role, the permissions for rotating the secrets in
 
 ```hcl
 
-resource "aws_iam_policy" "rr_Lambda_secrets_custom_policy" {
+resource "aws_iam_policy" "rr_lambda_secrets_custom_policy" {
   name = "rr-${var.environment}-Lambda-secrets-manager-policy"
   policy = jsonencode({
     Version = "2012-10-17"
@@ -232,8 +232,8 @@ Then we finally attach the custom policy to the Lambda role using an `aws_iam_ro
 
 ```hcl
 resource "aws_iam_role_policy_attachment" "rr_custom_policy_attach" {
-  role       = aws_iam_role.rr_Lambda_secrets_role.name
-  policy_arn = aws_iam_policy.rr_Lambda_secrets_custom_policy.arn
+  role       = aws_iam_role.rr_lambda_secrets_role.name
+  policy_arn = aws_iam_policy.rr_lambda_secrets_custom_policy.arn
 }
 ```
 
@@ -244,9 +244,9 @@ The Lambda function will assume this role when it is invoked so that it can rota
 This Lambda role's ARN is required in the Lambda module. So we output it, making it available to the root module.
 
 ```hcl
-output "Lambda_role_arn" {
+output "lambda_role_arn" {
   description = "The Lambda role ARN"
-  value       = aws_iam_role.rr_Lambda_secrets_role.arn
+  value       = aws_iam_role.rr_lambda_secrets_role.arn
 }
 ```
 
@@ -268,7 +268,7 @@ data "aws_security_group" "rr_endpoints_sg" {
 [sg-Lambda.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/02-aws-rds/modules/iam/sg-Lambda.tf) houses the Lambda security group. Below we outline the highlights of this security group:
 
 ```hcl
-resource "aws_security_group" "rr_Lambda" {
+resource "aws_security_group" "rr_lambda" {
   name        = "rr-${var.environment}-Lambda-sg"
   description = "RR: Allow Lambda to reach RDS and Secrets Manager VPC Endpoints"
   vpc_id      = var.vpc_id
@@ -280,35 +280,35 @@ resource "aws_security_group" "rr_Lambda" {
 
 ```
 
-This defines **rr_Lambda** security group. The `vpc_id = var.vpc_id` ensures that this security group is created inside our VPC. As usual the tags merge all the common tags and the **Name** tag.
+This defines **rr_lambda** security group. The `vpc_id = var.vpc_id` ensures that this security group is created inside our VPC. As usual the tags merge all the common tags and the **Name** tag.
 
 Next we add egress security groups rules to enable outwards communication from the Lambda security group to the database security group and the VPC endpoints security group for Secrets Manager.
 
 ```hcl
-resource "aws_security_group_rule" "rr_Lambda_egress_to_db" {
+resource "aws_security_group_rule" "rr_lambda_egress_to_db" {
   type                     = "egress"
   description              = "RR: Allow Lambda to rotate DB credentials"
   from_port                = 3306
   to_port                  = 3306
   protocol                 = "tcp"
-  security_group_id        = aws_security_group.rr_Lambda.id
+  security_group_id        = aws_security_group.rr_lambda.id
   source_security_group_id = aws_security_group.rr_database.id
 }
 ```
 
-A few things to note above: Since this is an egress rule the `security_group_id` is the originating security group and the `source_security_group_id` is the destination security group. Essentially this is the outbound passport that allows anything with **rr_Lambda** security group attached to communicate with anything with the database security group, **rr_database**, on port 3306 using `tcp` protocol. The same applies to the second security group rule, `rr_Lambda_egress_to_endpoints` the difference being the use of port 443, HTTPS, and the corresponding source security id for VPC endpoints, `data.aws_security_group.rr_endpoints_sg.id`.
+A few things to note above: Since this is an egress rule the `security_group_id` is the originating security group and the `source_security_group_id` is the destination security group. Essentially this is the outbound passport that allows anything with **rr_lambda** security group attached to communicate with anything with the database security group, **rr_database**, on port 3306 using `tcp` protocol. The same applies to the second security group rule, `rr_lambda_egress_to_endpoints` the difference being the use of port 443, HTTPS, and the corresponding source security id for VPC endpoints, `data.aws_security_group.rr_endpoints_sg.id`.
 
 Since security groups are stateful, we don't need to specify a rule for the return traffic for anything initiated within the security group i.e. the security group will match/allow the return traffic with it's origin. However, expected inbound communication initiated from a given security group needs an ingress rule to enable that communication. Since the database **does not initiate any outbound communication anywhere**, we don't need an ingress communication from the database security group. But we do expect inbound communication from the endpoints security group to the Lambda security group, so we create an ingress rule for that:
 
 ```hcl
-resource "aws_security_group_rule" "endpoints_ingress_from_Lambda" {
+resource "aws_security_group_rule" "endpoints_ingress_from_lambda" {
   type                     = "ingress"
   description              = "RR: Injected by Layer 2 - Allow Lambda into Endpoints SG"
   from_port                = 443
   to_port                  = 443
   protocol                 = "tcp"
   security_group_id        = data.aws_security_group.rr_endpoints_sg.id
-  source_security_group_id = aws_security_group.rr_Lambda.id
+  source_security_group_id = aws_security_group.rr_lambda.id
 }
 ```
 
@@ -340,14 +340,14 @@ There are two interesting components worth noting here: `lifecycle` rule and `na
 In this layer there is a single service that communicates with the database, that is the Lambda function. As we move to layer 4 and layer 5, they will add their own corresponding security group rules to the database security group. Below is the ingress security group rule that enables inbound communication from the Lambda security group to the database security group.
 
 ```hcl
-resource "aws_security_group_rule" "rr_db_ingress_from_Lambda" {
+resource "aws_security_group_rule" "rr_db_ingress_from_lambda" {
   type                     = "ingress"
   description              = "RR: Lambda rotation access to MySQL"
   from_port                = 3306
   to_port                  = 3306
   protocol                 = "tcp"
   security_group_id        = aws_security_group.rr_database.id
-  source_security_group_id = aws_security_group.rr_Lambda.id
+  source_security_group_id = aws_security_group.rr_lambda.id
 }
 ```
 
@@ -373,7 +373,7 @@ This is the source code for the Lambda function. It assumes that the pymysql dep
 
 **Generating a random password**
 
-```Python
+```python
 def generate_random_password(length=16):
     characters = string.ascii_letters + string.digits + "!@#$%^&*"
     return ''.join(random.choices(characters, k=length))
@@ -383,8 +383,8 @@ The function above then generates a sixteen character random password using lett
 
 **Lambda handler function: the co-ordinator function**
 
-```Python
-def Lambda_handler(event, context):
+```python
+def lambda_handler(event, context):
     arn = event['SecretId']
     token = event['ClientRequestToken']
     step = event['Step']
@@ -421,7 +421,7 @@ If all is well then we proceed through the steps passing to the corresponding fu
 
 **get_secret_dict**
 
-```Python
+```python
 def get_secret_dict(client, arn, stage, token=None):
     if token:
         response = client.get_secret_value(SecretId=arn, VersionId=token, VersionStage=stage)
@@ -435,7 +435,7 @@ This function retrieves the secret value whether the token is set or not. We pas
 
 **create_secret**
 
-```Python
+```python
 def create_secret(client, arn, token):
     current_dict = get_secret_dict(client, arn, "AWSCURRENT")
     current_dict['password'] = generate_random_password()
@@ -459,7 +459,7 @@ This function performs a number of tasks:
 
 **Set secret**
 
-```Python
+```python
 def set_secret(client, arn, token):
     current_dict = get_secret_dict(client, arn, "AWSCURRENT")
     pending_dict = get_secret_dict(client, arn, "AWSPENDING", token)
@@ -497,7 +497,7 @@ This function performs the following tasks:
 
 **test_secret**
 
-```Python
+```python
 def test_secret(client, arn, token):
     pending_dict = get_secret_dict(client, arn, "AWSPENDING", token)
 
@@ -519,7 +519,7 @@ Now that the password has been changed successfully, this function attempts to l
 
 **finish_secret**
 
-```Python
+```python
 
 def finish_secret(client, arn, token):
     metadata = client.describe_secret(SecretId=arn)
@@ -554,7 +554,7 @@ In this file we install the pymysql dependency, zip it and cleanly remove the in
 
 **What are Lambda layers?**
 
-Lambda functions run inside an AWS managed environment. That environment is a runtime container that installs and executes the Lambda function. It is best practice to make these Lambda functions as lean and light as possible, that's a factor in how quickly the function boots up. This means stripping away all non essential code such as dependency libraries from the function source code. But we need these dependencies available to the function at runtime. So we bundle up the dependencies into a zipped file that gets uploaded with the function. AWS will unzip/extract this into **/opt** inside the runtime container. Since we're using Python, the dependencies can be stored in **/opt/Python** while the function itself gets stored under **/var/task**. Note a function can attach up to five layers, and the combined unzipped size of function code + all layers is capped at 250 MB, very light. One of the main flexibilities of Lambda layers is that a single Lambda layer can be used and reused by multiple Lambda functions, eliminating unnecessary duplications.
+Lambda functions run inside an AWS managed environment. That environment is a runtime container that installs and executes the Lambda function. It is best practice to make these Lambda functions as lean and light as possible, that's a factor in how quickly the function boots up. This means stripping away all non essential code such as dependency libraries from the function source code. But we need these dependencies available to the function at runtime. So we bundle up the dependencies into a zipped file that gets uploaded with the function. AWS will unzip/extract this into **/opt** inside the runtime container. Since we're using Python, the dependencies can be stored in **/opt/python** while the function itself gets stored under **/var/task**. Note a function can attach up to five layers, and the combined unzipped size of function code + all layers is capped at 250 MB, very light. One of the main flexibilities of Lambda layers is that a single Lambda layer can be used and reused by multiple Lambda functions, eliminating unnecessary duplications.
 
 **Packaging the dependency**
 
@@ -569,20 +569,20 @@ resource "null_resource" "rr_build_and_clean_layer" {
     command = <<EOT
         set -e
         # 1. Clean up any previous builds
-        rm -rf ${path.module}/layers/Python
+        rm -rf ${path.module}/layers/python
         rm -f ${path.module}/layers/db_driver.zip
 
-        mkdir -p ${path.module}/layers/Python
+        mkdir -p ${path.module}/layers/python
 
         # 2. Install purely from source, ignore caches
-        pip install pymysql -t ${path.module}/layers/Python/ --no-cache-dir --upgrade
+        pip install pymysql -t ${path.module}/layers/python/ --no-cache-dir --upgrade
 
         # 3. Zip while STRICTLY preserving permissions (-r = recursive, -q = quiet, -y = preserve symlinks)
         cd ${path.module}/layers
-        zip -rqy db_driver.zip Python/
+        zip -rqy db_driver.zip python/
 
         # 4. Clean up the unzipped folder
-        rm -rf Python/
+        rm -rf python/
     EOT
   }
 }
@@ -594,17 +594,17 @@ Next we have the provisioner block, this is a meta-block that runs arbitrary loc
 
 1. `set -e` - This ensures that if any command in this script exits with a non-zero status the **bash shell** should stop immediately and abort the rest of the scripts. Without this bash would continue on to the next line and so on. Eventually packaging an incomplete `.zip` dependency file which would lead to the Lambda function crashing because of missing dependencies. Thus `set -e` converts a silent partial failure into a loud, immediate fail; the provisioner fails, `terraform apply` fails and we're notified before the zip gets uploaded as a Lambda layer.
 2. `rm -rf ${...}/...` - These remove previous builds so that we start fresh below.
-3. `${path.module}` - This is Terraform's path reference expression; it resolves to the filesystem directory containing the `.tf` file. Since this file sits in `modules/Lambda/layers.tf`, then `${path.module}` resolves to absolute path of `modules/Lambda/` on the machine running `terraform apply`.
-4. `mkdir -p ${path.module}/layers/Python` - This recreates the directory that will house the dependency local installation, isolating it from the operating system
-5. `pip install pymysql -t ${path.module}/layers/Python/ --no-cache-dir --upgrade` - This installs pymysql with the `-t`, targeted install, into the specified directory, it also bypasses local cache (`--no-cache-dir`) and forces the latest version, `--upgrade` rather than relying on what's cached locally.
-6. `cd ${path.module}/layers` - To zip the `Python/` sub-directory we must be in its parent directory, so we cd into it.
-7. `zip -rqy db_driver.zip Python/` - This zips the `Python/` sub directory recursively `-r` into **db_driver.zip**. The `-q`, quiet mode, suppresses zip's normal file by file output. The `-y` preserves symbolic links as symbolic links instead of resolving them to the real path.
-8. `rm -rf Python/` - This deletes the unzipped staging directory to free up the memory space (keeping things clean).
+3. `${path.module}` - This is Terraform's path reference expression; it resolves to the filesystem directory containing the `.tf` file. Since this file sits in `modules/lambda/layers.tf`, then `${path.module}` resolves to absolute path of `modules/lambda/` on the machine running `terraform apply`.
+4. `mkdir -p ${path.module}/layers/python` - This recreates the directory that will house the dependency local installation, isolating it from the operating system
+5. `pip install pymysql -t ${path.module}/layers/python/ --no-cache-dir --upgrade` - This installs pymysql with the `-t`, targeted install, into the specified directory, it also bypasses local cache (`--no-cache-dir`) and forces the latest version, `--upgrade` rather than relying on what's cached locally.
+6. `cd ${path.module}/layers` - To zip the `python/` sub-directory we must be in its parent directory, so we cd into it.
+7. `zip -rqy db_driver.zip python/` - This zips the `python/` sub directory recursively `-r` into **db_driver.zip**. The `-q`, quiet mode, suppresses zip's normal file by file output. The `-y` preserves symbolic links as symbolic links instead of resolving them to the real path.
+8. `rm -rf python/` - This deletes the unzipped staging directory to free up the memory space (keeping things clean).
 
 One thing to note, the installation above is not fixated on a version of pymysql. This creates a reproducibility gap:
 `pip install pymysql` with no version specified means pip resolves to the `latest` version at the time the command runs. While the `--upgrade` flag explicitly tells pip to replace the cached/existing version with the newest available version. In this development environment, we'll maintain this flexible approach, however in production it would be best to fix the pymysql version to for example pymysql==1.1.1; that would change the command to:
 
-`pip install pymysql==1.1.1 -t ${path.module}/layers/Python/ --no-cache-dir`
+`pip install pymysql==1.1.1 -t ${path.module}/layers/python/ --no-cache-dir`
 
 The above command can be substituted even in this development environment as you wish as it matches the dependency versioning `dependency_version = "pymysql-v1.1"`.
 
@@ -613,12 +613,12 @@ The above command can be substituted even in this development environment as you
 This is how the dependency above is registered/published with AWS Lambda as a reusable artifact that functions can attach to. In AWS this lands on the `PublishLayerVersion` API, this then labels the layer with an immutable layer version. Now each time the zip file contents change and we run `terraform apply`, AWS publishes a new version number and keeps the old versions, facilitating roll backs, until we delete them.
 
 ```hcl
-resource "aws_Lambda_layer_version" "rr_db_layer" {
+resource "aws_lambda_layer_version" "rr_db_layer" {
   depends_on = [null_resource.rr_build_and_clean_layer]
 
   filename            = "${path.module}/layers/db_driver.zip"
   layer_name          = "rr-${var.environment}-db-driver-layer"
-  compatible_runtimes = ["Python3.9"]
+  compatible_runtimes = ["python3.12", "python3.13"]
   description         = "RR: Database driver dependencies for secret rotation"
 
   source_code_hash = base64sha256(null_resource.rr_build_and_clean_layer.id)
@@ -630,7 +630,7 @@ Let's look at the above resource block in more details:
 1. `depends_on = [null_resource.rr_build_and_clean_layer]` - Since Terraform likes to do things in parallel, this just means that the **null_resource** above it has to run beforehand.
 2. `filename` - This is the path to the layer zip file that Terraform uploads
 3. `layer_name` - This is the human readable name for this layer that will show in the Lambda console or on the CLI.
-4. `compatible_runtimes` - This is a list, currently only one object, that determines which Lambda runtime environments this layer is safe to attach to.
+4. `compatible_runtimes` - This is a list, that determines which Lambda runtime environments this layer is safe to attach to.
 5. `description` - Self explanatory
 6. `source_code_hash` - This determines whether AWS should create a new layer version or not. AWS checks this hash against the value in the state, if it has changed then this means the underlying contents has changed, thus there is a valid reason for publishing a new layer version, else it skips publishing a new layer version. Thus locally, we can rebuild the layer as many times as we like, unless the contents of the built package changes, AWS will do nothing with what's pushed up.
 
@@ -660,7 +660,7 @@ When an IAM role is created via Terraform, AWS's API returns success, the role t
 resource "time_sleep" "wait_for_iam" {
   create_duration = "15s"
   triggers = {
-    role_arn = var.Lambda_role_arn
+    role_arn = var.lambda_role_arn
   }
 }
 ```
@@ -671,21 +671,21 @@ This resource pauses for 15 seconds, buying enough time for the role ARN to reac
 This resource actually deploys the Lambda function ensuring that all the requirements are met for a successful deployment:
 
 ```hcl
-resource "aws_Lambda_function" "rr_secret_rotation_function" {
+resource "aws_lambda_function" "rr_secret_rotation_function" {
   function_name = "rr-${var.environment}-secret-rotation-function"
-  handler       = "index.Lambda_handler"
-  runtime       = "Python3.9"
+  handler       = "index.lambda_handler"
+  runtime       = "python3.13"
 
   filename         = data.archive_file.rr_rotation_zip.output_path
   source_code_hash = data.archive_file.rr_rotation_zip.output_base64sha256
 
-  role = var.Lambda_role_arn
+  role = var.lambda_role_arn
 
-  layers = [aws_Lambda_layer_version.rr_db_layer.arn]
+  layers = [aws_lambda_layer_version.rr_db_layer.arn]
 
   vpc_config {
     subnet_ids         = var.database_subnet_ids
-    security_group_ids = [var.Lambda_sg_id]
+    security_group_ids = [var.lambda_sg_id]
   }
 
   memory_size = 128
@@ -700,12 +700,12 @@ resource "aws_Lambda_function" "rr_secret_rotation_function" {
 Let's look at this resource in details:
 
 1. `function_name` - this is self explanatory, the name of the function. Notice that it references the environment variable, in our case this will equate **dev**.
-2. `handler = "index.Lambda_handler"` - This tells the Lambda runtime which function to invoke, the entry point, on each execution. Note, this is the Lambda_handler function within index.py i.e. the above syntax is in the form `module.function`.
-3. `runtime = "Python3.9"` - This specifies the Lambda execution environment.
+2. `handler = "index.lambda_handler"` - This tells the Lambda runtime which function to invoke, the entry point, on each execution. Note, this is the lambda_handler function within index.py i.e. the above syntax is in the form `module.function`.
+3. `runtime = "python3.13"` - This specifies the Lambda execution environment.
 4. `filename = data.archive_file.rr_rotation_zip.output_path` - This references the output file from the data source above
 5. `source_code_hash = data.archive_file.rr_rotation_zip.output_base64sha256` - This hash is what detects changes in index.py so that Terraform can push a new deployment of the Lambda function. If no change detected, then Terraform will do nothing whenever we run `tf apply`.
-6. `role = var.Lambda_role_arn` - This is the ARN for IAM role the Lambda function assumes at runtime; the same role whose propagation the `time_sleep` resource is tackling.
-7. `layers = [aws_Lambda_layer_version.rr_db_layer.arn]` - This attaches the PyMySQL layer dependency for this Lambda function. Now `import pymysql` will work.
+6. `role = var.lambda_role_arn` - This is the ARN for IAM role the Lambda function assumes at runtime; the same role whose propagation the `time_sleep` resource is tackling.
+7. `layers = [aws_lambda_layer_version.rr_db_layer.arn]` - This attaches the PyMySQL layer dependency for this Lambda function. Now `import pymysql` will work.
 8. `vpc_config {}` - This places the Lambda's execution environment inside our VPC, in the database subnets. This enables a direct private network path for the function to reach the MySQL database. It also attaches the necessary security group for the Lambda function which allows the Lambda ENIs to talk to the database
 9. `memory_size = 128` - This is the minimum allowed value for memory. Since this is a basic function the allocated memory and corresponding CPU is adequate.
 10. `timeout = 30` - This sets the maximum time before Lambda forcibly kills the invocation. This is plenty of time for the Lambda function to complete the rotation of the secret.
@@ -829,7 +829,7 @@ Now that the final secret version is created and the host address is updated, th
 ```hcl
 resource "aws_secretsmanager_secret_rotation" "rr_db_rotation" {
   secret_id           = aws_secretsmanager_secret.rr_db_secret.id
-  rotation_Lambda_arn = var.rotation_Lambda_arn
+  rotation_lambda_arn = var.rotation_lambda_arn
 
   rotation_rules {
     automatically_after_days = 7 # the standard rotation window is 30 days
@@ -843,19 +843,19 @@ resource "aws_secretsmanager_secret_rotation" "rr_db_rotation" {
 Lets have a look at the attributes:
 
 1. `secret_id` - This specifies the ID of our secret, locking down the rotation to `rr_db_secret` secret.
-2. `rotation_Lambda_arn = var.rotation_Lambda_arn` - This specifies our Lambda function's ARN, now we know which function to call. Note, this value is passed in through the root module variable, from the Lambda module.
+2. `rotation_lambda_arn = var.rotation_lambda_arn` - This specifies our Lambda function's ARN, now we know which function to call. Note, this value is passed in through the root module variable, from the Lambda module.
 3. `rotation_rules {}` - This specifies the cycle period for rotating the secret, here it's set to 7 days, `automatically_after_days = 7`, which narrows down the attack window should there be a breach in one of the containers. Note, the standard rotation window is 30 days.
 4. `depends_on = [aws_secretsmanager_secret_version.rr_db_host_update]` - This ensures that the rotation function is only invoked after the **rr_db_host_update** secret version has been created i.e. when the host name has been updated.
 
 **Lambda permissions for Secrets Manager**
 
-The IAM role controls what the Lambda function is allowed to do but it doesn't control who's allowed to invoke the Lambda function. As things are, if Secrets Manager attempts to invoke the rotation Lambda function, it would get an **AccessDenied** error. That's because Secrets Manager itself needs explicit permissions to call the Lambda function. `aws_Lambda_permission` resource is a resource based policy attached directly to the Lambda function itself. Note, this is different from an identity-based policy attached to a role/user. This is the mechanism AWS uses specifically for cross-service invocation grants.
+The IAM role controls what the Lambda function is allowed to do but it doesn't control who's allowed to invoke the Lambda function. As things are, if Secrets Manager attempts to invoke the rotation Lambda function, it would get an **AccessDenied** error. That's because Secrets Manager itself needs explicit permissions to call the Lambda function. `aws_lambda_permission` resource is a resource based policy attached directly to the Lambda function itself. Note, this is different from an identity-based policy attached to a role/user. This is the mechanism AWS uses specifically for cross-service invocation grants.
 
 ```hcl
-resource "aws_Lambda_permission" "allow_secretsmanager_to_call_Lambda" {
+resource "aws_lambda_permission" "allow_secretsmanager_to_call_lambda" {
   statement_id  = "AllowExecutionFromSecretsManager"
   action        = "Lambda:InvokeFunction"
-  function_name = var.rotation_Lambda_arn
+  function_name = var.rotation_lambda_arn
   principal     = "secretsmanager.amazonaws.com"
   source_arn    = aws_secretsmanager_secret.rr_db_secret.arn
 }
@@ -866,7 +866,7 @@ Lets take a closer look at this resource:
 1. `statement_id  = "AllowExecutionFromSecretsManager"` - This is the unique identifier, label, for this specific permission statement, within the Lambda's resource policy. This is required by AWS; it's useful if you ever need to reference/remove a specific statement for example:
    `aws Lambda remove-permission --statement-id AllowExecutionFromSecretsManager`
 2. `action = "Lambda:InvokeFunction"` - This is the specific permission being granted: The right to invoke this function. Note, this is the only action Secrets Manager needs. It doesn't need to read the function's code, update its configuration, or anything else.
-3. `function_name = var.rotation_Lambda_arn` - This specifies the Lambda function that the permission applies to. Note that referencing our Lambda function here creates an implicit dependency reference i.e. the Lambda function must be created first before this policy permission can be created.
+3. `function_name = var.rotation_lambda_arn` - This specifies the Lambda function that the permission applies to. Note that referencing our Lambda function here creates an implicit dependency reference i.e. the Lambda function must be created first before this policy permission can be created.
 4. `principal = "secretsmanager.amazonaws.com"` - This names the entity being granted the invocation permission. Note, this is very open: it allows any Secrets Manager rotation schedule in the entire account, not just from a specific role, to trigger this Lambda function when a rotation is due.
 5. `source_arn = aws_secretsmanager_secret.rr_db_secret.arn` - This restricts the invocation of our Lambda function to this secret ARN i.e. only secrets rotation events from this secret, `rr_db_secret`, can invoke the function.
 
@@ -952,28 +952,7 @@ Let's look into this a little deeper:
 15. `lifecycle` - As usual, this tells Terraform to stop tracking drift on the password after initial creation. Without this, every `tf apply` after rotating password changes will result in a mismatch and Terraform will try to reset the password.
 16. `tags` - Same as usual: merges project specific labels with the instance name.
 
-## 6. Known issues - AWS Lambda Python 3.9 runtime support
-
-AWS Lambda has officially ended support for the **Python 3.9 runtime**. This was phased out in the following deprecation schedule:
-
-1. **December 15, 2025** - AWS officially ended support and stopped applying security patches or updates to the `python3.9` runtime.
-2. **August 31, 2026** - AWS blocked the creation of new Lambda functions using Python 3.9
-3. **September 30, 2026** - AWS blocked updates to any existing Python 3.9 functions. Thus we can no longer modify code or configuration for remaining functions. _Note, however, I was able to execute this deployment without any issue. But I did receive a notice from AWS_
-
-**Upgrading our Lambda function**
-
-To avoid any issues we need to upgrade our Lambda function code from `Python 3.9` to any of the following:
-
-1. **Python 3.12:** - This is a stable widely compatible option supported through to **October 2028**
-2. **Python 3.13** - The newer option offering performance enhancements and support through **June 2029**
-
-**Steps to upgrade Python 3.9**
-
-1. In [rotation.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/02-aws-rds/modules/lambda/rotation.tf) update `runtime = "python3.9"` to either `"python3.12"` or `"python3.13"`
-2. In [layers.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/02-aws-rds/modules/lambda/layers.tf) update `compatible_runtimes = ["python3.9"]` to `compatible_runtimes = ["python3.12", "python3.13"]`
-3. Don't forget to commit and push with git from the project root: `git add .` , `git commit -m "Updated lambda runtime from python3.9 to python3.??"` and `git push origin main`.
-
-## 7. Instructions
+## 6. Instructions
 
 Here is the step by step guide to deploy Layer 2 successfully:
 

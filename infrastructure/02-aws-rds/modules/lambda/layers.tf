@@ -37,7 +37,7 @@ resource "aws_lambda_layer_version" "rr_db_layer" {
 
   filename            = "${path.module}/layers/db_driver.zip"
   layer_name          = "rr-${var.environment}-db-driver-layer"
-  compatible_runtimes = ["python3.9"]
+  compatible_runtimes = ["python3.12", "python3.13"]
   description         = "RR: Database driver dependencies for secret rotation"
 
   # --- THE STABLE HASH FIX ---
