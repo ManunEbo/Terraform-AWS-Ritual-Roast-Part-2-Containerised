@@ -475,7 +475,8 @@ def set_secret(client, arn, token):
             user=username,
             password=current_dict['password'], # Log in with old password
             database=db_name,
-            connect_timeout=5
+            connect_timeout=5,
+            ssl={"ca": RDS_CA}
         )
         with conn.cursor() as cursor:
             # Change password directly
@@ -486,6 +487,8 @@ def set_secret(client, arn, token):
         logger.error(f"Failed to update database password: {e}")
         raise
 ```
+
+**TLS note:** MySQL 8.4 creates users (including the master user) with `caching_sha2_password`, which only authenticates over TLS (or via RSA key exchange, which needs the Python `cryptography` package). Both `pymysql.connect()` calls therefore pass `ssl={"ca": RDS_CA}`, where `RDS_CA = "/var/task/global-bundle.pem"` is the RDS CA bundle packaged into the Lambda zip. With TLS, the layer needs only `pymysql`.
 
 This function performs the following tasks:
 
@@ -507,7 +510,8 @@ def test_secret(client, arn, token):
             user=pending_dict['username'],
             password=pending_dict['password'],
             database=pending_dict['dbname'],
-            connect_timeout=5
+            connect_timeout=5,
+            ssl={"ca": RDS_CA}
         )
         conn.close()
     except Exception as e:
@@ -638,17 +642,26 @@ Let's look at the above resource block in more details:
 
 In this section we deploy the Lambda function; we package `index.py` and send it to AWS Lambda. Everything is contained in one file rotation.tf. The process is split into four components, each accomplishing a different task.
 
-**Archiving index.py**
+**Archiving index.py and the RDS CA bundle**
 
-Lambda's deployment API only accepts a zip archive or an S3 pointer to one; it doesn't accept raw source files. So we need to zip the index.py:
+Lambda's deployment API only accepts a zip archive or an S3 pointer to one; it doesn't accept raw source files. So we zip `index.py` together with `global-bundle.pem` (the RDS CA bundle used for TLS). Each file gets its own `source` block so both sit at the zip root, and the bundle lands at `/var/task/global-bundle.pem` in the Lambda:
 
 ```hcl
 data "archive_file" "rr_rotation_zip" {
   type = "zip"
-  source_file = "${path.module}/index.py"
+  source {
+    content  = file("${path.module}/index.py")
+    filename = "index.py"
+  }
+  source {
+    content  = file("${path.module}/global-bundle.pem")
+    filename = "global-bundle.pem"
+  }
   output_path = "${path.module}/rotation.zip"
 }
 ```
+
+The bundle is public CA certificates, downloaded from `https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem` (the same source the backend Dockerfiles use).
 
 This is Terraform's built-in archiving mechanism. The three internal parameters are self explanatory: It reads in index.py and outputs rotation.zip, to the same directory.
 
@@ -703,7 +716,7 @@ Let's look at this resource in details:
 2. `handler = "index.lambda_handler"` - This tells the Lambda runtime which function to invoke, the entry point, on each execution. Note, this is the lambda_handler function within index.py i.e. the above syntax is in the form `module.function`.
 3. `runtime = "python3.13"` - This specifies the Lambda execution environment.
 4. `filename = data.archive_file.rr_rotation_zip.output_path` - This references the output file from the data source above
-5. `source_code_hash = data.archive_file.rr_rotation_zip.output_base64sha256` - This hash is what detects changes in index.py so that Terraform can push a new deployment of the Lambda function. If no change detected, then Terraform will do nothing whenever we run `tf apply`.
+5. `source_code_hash = data.archive_file.rr_rotation_zip.output_base64sha256` - This hash is what detects changes in index.py or the CA bundle so that Terraform can push a new deployment of the Lambda function. If no change detected, then Terraform will do nothing whenever we run `tf apply`.
 6. `role = var.lambda_role_arn` - This is the ARN for IAM role the Lambda function assumes at runtime; the same role whose propagation the `time_sleep` resource is tackling.
 7. `layers = [aws_lambda_layer_version.rr_db_layer.arn]` - This attaches the PyMySQL layer dependency for this Lambda function. Now `import pymysql` will work.
 8. `vpc_config {}` - This places the Lambda's execution environment inside our VPC, in the database subnets. This enables a direct private network path for the function to reach the MySQL database. It also attaches the necessary security group for the Lambda function which allows the Lambda ENIs to talk to the database
@@ -906,8 +919,11 @@ resource "aws_db_instance" "rr_database" {
   identifier = "rr-${var.environment}-db"
   db_name    = "ritual_roast"
 
-  engine            = "mysql"
-  engine_version    = "8.0"
+  engine         = "mysql"
+  engine_version = "8.4"
+
+  engine_lifecycle_support = "open-source-rds-extended-support-disabled"
+
   instance_class    = "db.t3.micro"
   allocated_storage = 20
   storage_type      = "gp3"
@@ -938,7 +954,8 @@ Let's look into this a little deeper:
 1. `identifier = "rr-${var.environment}-db"` - This is the instance's name as it appears in the RDS console/API. Note, this is AWS's internal identifier, not the database schema name.
 2. `db_name = "ritual_roast"` - This is the actual database(schema) name, created inside the MySQL engine on first boot i.e. this is what our apps connect to, the dbname in our secret JSON.
 3. `engine = "mysql"` - This is the selected database engine: The core data management software.
-4. `engine_version = "8.0"` - This is the major version, it determines the actual MySQL binary AWS provisions and manages.
+4. `engine_version = "8.4"` - This is the major version, it determines the actual MySQL binary AWS provisions and manages. We use 8.4 because RDS for MySQL 8.0 left standard support on 31 Jul 2026 and new 8.0 instances are billed for Extended Support. On 8.4, users authenticate with `caching_sha2_password`, which requires TLS; see the TLS note in the Lambda module.
+   - `engine_lifecycle_support = "open-source-rds-extended-support-disabled"` - If this major version ever passes end of standard support, creating the instance fails instead of silently enrolling it in paid Extended Support.
 5. `instance_class = "db.t3.micro"` - This is the compute/memory tier, although t3.micro is small it has burstable-CPU which means it can handle small spikes in traffic, to an extent. It's not ideal for production but for dev/or low traffic, it's adequate.
 6. `allocated_storage = 20` - This is the disk size in GB for the underlying storage volume i.e. the allocated storage size.
 7. `storage_type = "gp3"` - This is the Elastic Block Service (EBS) volume storage. Note **GP3** is the current-generation general-purpose SSD. It offers better baseline IOPS/throughput control than the older **GP2**. Consider this the physical disk the allocated 20GB actually lives on.
@@ -967,3 +984,5 @@ Here is the step by step guide to deploy Layer 2 successfully:
 9. Run terraform plan: `tf plan` review the outputs and if you're happy proceed to the next command
 10. Run terraform apply, with caution `tf apply`, or if you trusted the plan `tf apply -auto-approve`
 11. Congrats, you've deployed your RDS. Note, this will take 12 to 15 minutes
+
+**Cost note:** RDS Multi-AZ is billed per hour while the instance exists, so run `tf destroy` after each session and set an AWS Budget alert. `engine_lifecycle_support = "open-source-rds-extended-support-disabled"` stops the instance being enrolled in paid Extended Support when its engine version leaves standard support.

@@ -17,8 +17,13 @@ resource "aws_db_instance" "rr_database" {
   identifier = "rr-${var.environment}-db"
   db_name    = "ritual_roast"
 
-  engine            = "mysql"
-  engine_version    = "8.0"
+  engine         = "mysql"
+  engine_version = "8.4"
+
+  # Fail creation instead of silently enrolling in paid RDS Extended Support
+  # once this major version passes end of standard support.
+  engine_lifecycle_support = "open-source-rds-extended-support-disabled"
+
   instance_class    = "db.t3.micro"
   allocated_storage = 20
   storage_type      = "gp3"

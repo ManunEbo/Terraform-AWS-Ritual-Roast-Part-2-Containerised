@@ -5,8 +5,15 @@
 # Zipping index.py
 data "archive_file" "rr_rotation_zip" {
   type = "zip"
-  # Since index.py is in the same folder as this .tf file
-  source_file = "${path.module}/index.py"
+  # Both files sit at the zip root; the CA bundle lands at /var/task/global-bundle.pem
+  source {
+    content  = file("${path.module}/index.py")
+    filename = "index.py"
+  }
+  source {
+    content  = file("${path.module}/global-bundle.pem")
+    filename = "global-bundle.pem"
+  }
   output_path = "${path.module}/rotation.zip"
 }
 

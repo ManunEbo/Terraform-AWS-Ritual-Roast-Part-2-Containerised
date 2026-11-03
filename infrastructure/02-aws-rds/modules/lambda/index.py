@@ -5,6 +5,10 @@ import random
 import string
 import pymysql # Pulled from the Lambda Layer
 
+# RDS CA bundle packaged at the zip root (lands in /var/task); required for TLS,
+# which MySQL 8.4 caching_sha2_password needs without the cryptography package.
+RDS_CA = "/var/task/global-bundle.pem"
+
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
@@ -66,7 +70,8 @@ def set_secret(client, arn, token):
             user=username,
             password=current_dict['password'], # Log in with old password
             database=db_name,
-            connect_timeout=5
+            connect_timeout=5,
+            ssl={"ca": RDS_CA}
         )
         with conn.cursor() as cursor:
             # Change password directly
@@ -86,7 +91,8 @@ def test_secret(client, arn, token):
             user=pending_dict['username'],
             password=pending_dict['password'],
             database=pending_dict['dbname'],
-            connect_timeout=5
+            connect_timeout=5,
+            ssl={"ca": RDS_CA}
         )
         conn.close()
     except Exception as e:
