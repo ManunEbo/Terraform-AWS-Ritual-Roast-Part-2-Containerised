@@ -29,7 +29,7 @@ This is a modular setup identical to Layer 1: We have the environment that sets 
 
 1. Security groups - Here we create the security groups for locking down the database and for the Lambda function
 1. iam - Here we create the IAM role with the necessary policy attachments (permissions) for Lambda to perform all of its tasks
-1. Lambda - Here we create the Lambda function to rotate the secrets using the Lambda role
+1. lambda - Here we create the Lambda function to rotate the secrets using the Lambda role
 1. rds - Finally we create the database
 
 ### Dependency graph
@@ -108,20 +108,19 @@ From the first data source we can retrieve the account id. From the second, we c
 
 ### IAM Lambda role
 
-In [iam-Lambda.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/02-aws-rds/modules/iam/iam-Lambda.tf)
+In [iam-lambda.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/02-aws-rds/modules/iam/iam-lambda.tf)
 file we create the magic that permits the Lambda function to do what it needs to do. Firstly, we create the role:
 
 ```hcl
 resource "aws_iam_role" "rr_lambda_secrets_role" {
-  name = "rr-${var.environment}-Lambda-secrets-role"
+  name = "rr-${var.environment}-lambda-secrets-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
       Action = "sts:AssumeRole"
       Principal = {
-        # FIXED: Capitalized 'Service'
-        Service = "Lambda.amazonaws.com"
+        Service = "lambda.amazonaws.com"
       }
       Effect = "Allow"
       Sid    = ""
@@ -129,7 +128,7 @@ resource "aws_iam_role" "rr_lambda_secrets_role" {
   })
 
   tags = merge(var.common_tags, {
-    Name = "rr-${var.environment}-Lambda-secrets-role"
+    Name = "rr-${var.environment}-lambda-secrets-role"
   })
 }
 ```
@@ -163,7 +162,7 @@ This is the crux of the Lambda role, the permissions for rotating the secrets in
 ```hcl
 
 resource "aws_iam_policy" "rr_lambda_secrets_custom_policy" {
-  name = "rr-${var.environment}-Lambda-secrets-manager-policy"
+  name = "rr-${var.environment}-lambda-secrets-manager-policy"
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -265,16 +264,16 @@ data "aws_security_group" "rr_endpoints_sg" {
 
 ### Lambda security group
 
-[sg-Lambda.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/02-aws-rds/modules/iam/sg-Lambda.tf) houses the Lambda security group. Below we outline the highlights of this security group:
+[sg-lambda.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/02-aws-rds/modules/security_groups/sg-lambda.tf) houses the Lambda security group. Below we outline the highlights of this security group:
 
 ```hcl
 resource "aws_security_group" "rr_lambda" {
-  name        = "rr-${var.environment}-Lambda-sg"
+  name        = "rr-${var.environment}-lambda-sg"
   description = "RR: Allow Lambda to reach RDS and Secrets Manager VPC Endpoints"
   vpc_id      = var.vpc_id
 
   tags = merge(var.common_tags, {
-    Name = "rr-${var.environment}-Lambda-sg"
+    Name = "rr-${var.environment}-lambda-sg"
   })
 }
 
@@ -312,11 +311,11 @@ resource "aws_security_group_rule" "endpoints_ingress_from_lambda" {
 }
 ```
 
-As can be seen, above we have an ingress type security group enabling inbound communication from the endpoints security group. Notice how the `security_group_id` and the `source_security_group_id` values have reversed in comparison to the corresponding egress rule above it, see this in `sg-Lambda.tf`. That just indicates the direction of communication from where it was initiated.
+As can be seen, above we have an ingress type security group enabling inbound communication from the endpoints security group. Notice how the `security_group_id` and the `source_security_group_id` values have reversed in comparison to the corresponding egress rule above it, see this in `sg-lambda.tf`. That just indicates the direction of communication from where it was initiated.
 
 ### Database security group
 
-[sg-database.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/02-aws-rds/modules/iam/sg-database.tf) houses the database security group.
+[sg-database.tf](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/02-aws-rds/modules/security_groups/sg-database.tf) houses the database security group.
 
 ```hcl
 resource "aws_security_group" "rr_database" {
@@ -519,7 +518,7 @@ def test_secret(client, arn, token):
         raise
 ```
 
-Now that the password has been changed successfully, this function attempts to log in with the new password to ensure that the password was updated successfully. It starts off by retrieving the pending password: `pending_dict = get_secret_dict(client, arn, "AWSPENDING", token)`. Then the try block extracts the DB credentials from the pending dictionary and establishes a connection then immediately closes it. If it fails, the exception catches and logs the error before a bare raise which would **re-raise** the error and send it back to the Secrets Manager location logic, essentially terminating the rotation.
+Now that the password has been changed successfully, this function attempts to log in with the new password to ensure that the password was updated successfully. It starts off by retrieving the pending password: `pending_dict = get_secret_dict(client, arn, "AWSPENDING", token)`. Then the try block extracts the DB credentials from the pending dictionary and establishes a connection then immediately closes it. If it fails, the exception catches and logs the error before a bare raise which would **re-raise** the error and send it back to the Secrets Manager rotation logic, essentially terminating the rotation.
 
 **finish_secret**
 
@@ -867,7 +866,7 @@ The IAM role controls what the Lambda function is allowed to do but it doesn't c
 ```hcl
 resource "aws_lambda_permission" "allow_secretsmanager_to_call_lambda" {
   statement_id  = "AllowExecutionFromSecretsManager"
-  action        = "Lambda:InvokeFunction"
+  action        = "lambda:InvokeFunction"
   function_name = var.rotation_lambda_arn
   principal     = "secretsmanager.amazonaws.com"
   source_arn    = aws_secretsmanager_secret.rr_db_secret.arn
@@ -877,8 +876,8 @@ resource "aws_lambda_permission" "allow_secretsmanager_to_call_lambda" {
 Lets take a closer look at this resource:
 
 1. `statement_id  = "AllowExecutionFromSecretsManager"` - This is the unique identifier, label, for this specific permission statement, within the Lambda's resource policy. This is required by AWS; it's useful if you ever need to reference/remove a specific statement for example:
-   `aws Lambda remove-permission --statement-id AllowExecutionFromSecretsManager`
-2. `action = "Lambda:InvokeFunction"` - This is the specific permission being granted: The right to invoke this function. Note, this is the only action Secrets Manager needs. It doesn't need to read the function's code, update its configuration, or anything else.
+   `aws lambda remove-permission --statement-id AllowExecutionFromSecretsManager`
+2. `action = "lambda:InvokeFunction"` - This is the specific permission being granted: The right to invoke this function. Note, this is the only action Secrets Manager needs. It doesn't need to read the function's code, update its configuration, or anything else.
 3. `function_name = var.rotation_lambda_arn` - This specifies the Lambda function that the permission applies to. Note that referencing our Lambda function here creates an implicit dependency reference i.e. the Lambda function must be created first before this policy permission can be created.
 4. `principal = "secretsmanager.amazonaws.com"` - This names the entity being granted the invocation permission. Note, this is very open: it allows any Secrets Manager rotation schedule in the entire account, not just from a specific role, to trigger this Lambda function when a rotation is due.
 5. `source_arn = aws_secretsmanager_secret.rr_db_secret.arn` - This restricts the invocation of our Lambda function to this secret ARN i.e. only secrets rotation events from this secret, `rr_db_secret`, can invoke the function.
