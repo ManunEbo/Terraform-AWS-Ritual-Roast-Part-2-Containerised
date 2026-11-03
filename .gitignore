@@ -81,3 +81,9 @@ apps/v2-backend-go/ritual-roast-backend
 # Local docs/screenshots (not version-controlled)
 # =========================
 docs/
+
+#=========================
+# Claude
+#=========================
+.claude/briefs/
+
