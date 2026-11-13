@@ -125,7 +125,35 @@ EOF
   kubectl create namespace argocd || true
   helm repo add argo https://argoproj.github.io/argo-helm
   helm repo update
-  helm upgrade --install argocd argo/argo-cd -n argocd --version 9.5.16 --set server.service.type=ClusterIP
+  # Application health check: ArgoCD does not assess the health of child
+  # Application resources by default, so the root app-of-apps only waits for
+  # each sync wave's Applications to EXIST, not to be Healthy. On 2026-11-13 the
+  # v2 workloads (wave 3) were created at the same second as istiod's
+  # sidecar-injector webhook (wave 1) and came up without Envoy sidecars. This
+  # health check makes each wave wait until the previous wave's Applications
+  # are actually Healthy (e.g. istiod Ready -> webhook serving) before syncing.
+  # Quoted 'EOF': no shell expansion. The Lua contains no Terraform $${...}.
+cat <<'EOF' > /tmp/argocd-values.yaml
+server:
+  service:
+    type: ClusterIP
+configs:
+  cm:
+    resource.customizations.health.argoproj.io_Application: |
+      hs = {}
+      hs.status = "Progressing"
+      hs.message = ""
+      if obj.status ~= nil then
+        if obj.status.health ~= nil then
+          hs.status = obj.status.health.status
+          if obj.status.health.message ~= nil then
+            hs.message = obj.status.health.message
+          end
+        end
+      end
+      return hs
+EOF
+  helm upgrade --install argocd argo/argo-cd -n argocd --version 9.5.16 -f /tmp/argocd-values.yaml
 
   # Fetch Personal Access Token from AWS Secrets Manager
   GITHUB_SECRET_ID="rr-$ENVIRONMENT-argocd-github-token"
