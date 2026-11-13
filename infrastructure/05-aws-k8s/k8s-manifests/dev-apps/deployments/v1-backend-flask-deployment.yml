@@ -34,7 +34,7 @@ spec:
         tier: backend
       containers:
         - name: flask-backend
-          image: ghcr.io/manunebo/rr-v1-backend:d0af34c48fe8c4a9119d3e93405a3afff95d45fb
+          image: ghcr.io/manunebo/rr-v1-backend:9c8d70a98e948aa8aef9e42bb10fd56ddac4a7ed
           ports:
             - containerPort: 5000
           # v1 single-endpoint probe contract (UNCHANGED - do NOT copy to v2).

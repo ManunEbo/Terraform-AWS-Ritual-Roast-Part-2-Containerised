@@ -38,7 +38,7 @@ spec:
           # nginx listens on 3000 (same port as the v1 Next.js frontend, so one
           # Service fronts both) and sets the x-frontend=v2 cookie for Istio
           # session stickiness.
-          image: ghcr.io/manunebo/rr-v2-frontend:0cb383b3ed3d70edf305ec188eb23f37d53dc9df
+          image: ghcr.io/manunebo/rr-v2-frontend:9c8d70a98e948aa8aef9e42bb10fd56ddac4a7ed
           ports:
             - containerPort: 3000 # Vite/nginx rebuilt to listen on 3000
           # v2 frontend probe contract: nginx serves static files, so it is

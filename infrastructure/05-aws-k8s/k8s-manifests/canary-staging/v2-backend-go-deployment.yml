@@ -34,7 +34,7 @@ spec:
         tier: backend
       containers:
         - name: go-backend
-          image: ghcr.io/manunebo/rr-v2-backend:0cb383b3ed3d70edf305ec188eb23f37d53dc9df
+          image: ghcr.io/manunebo/rr-v2-backend:9c8d70a98e948aa8aef9e42bb10fd56ddac4a7ed
           ports:
             - containerPort: 5000 # confirmed: main.go ListenAndServe("0.0.0.0:5000")
           # =========================================================
