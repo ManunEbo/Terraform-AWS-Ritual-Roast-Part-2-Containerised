@@ -37,7 +37,7 @@ while true; do
     --region "$REGION" \
     --filters "Name=tag:Name,Values=rr-$ENVIRONMENT-k3s-control-plane" \
               "Name=instance-state-name,Values=running" \
-    --query 'length(Reservations[*].Instances[*])' \
+    --query 'length(Reservations[].Instances[])' \
     --output text 2>/dev/null || echo 0)
   [ "$CP_COUNT" -ge 3 ] && break
   echo "  $CP_COUNT/3 running — retrying in 15 s..."
