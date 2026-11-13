@@ -35,7 +35,7 @@ spec:
               memory: 256Mi
             limits:
               cpu: 200m
-              memory: 512Mi
+              memory: 768Mi
           # Prefer CP nodes (more headroom, no app workloads) but fall back
           # to any node if CP nodes are full. Worker nodes are tolerated via
           # the Exists toleration but deprioritised by the affinity weight.
@@ -50,81 +50,89 @@ spec:
                   - key: node-role.kubernetes.io/control-plane
                     operator: Exists
 
-        # Istio scrape jobs. The native Envoy metrics on istio_requests_total
-        # already carry all labels Kiali needs (source_workload,
-        # destination_workload, destination_version, reporter, response_code).
-        # We only relabel pod metadata (namespace, pod_name, app, version)
-        # for Kiali's namespace and workload filtering.
-        extraScrapeConfigs: |
-          # App sidecars in dev namespace
-          - job_name: 'istio-mesh'
-            kubernetes_sd_configs:
-            - role: pod
-              namespaces:
-                names: [dev]
-            relabel_configs:
-            - source_labels: [__meta_kubernetes_pod_annotation_sidecar_istio_io_status]
-              action: keep
-              regex: .+
-            - source_labels: [__address__]
-              action: replace
-              regex: '([^:]+)(?::\d+)?'
-              replacement: '$1:15020'
-              target_label: __address__
-            - source_labels: [__meta_kubernetes_namespace]
-              target_label: namespace
-            - source_labels: [__meta_kubernetes_pod_name]
-              target_label: pod_name
-            - source_labels: [__meta_kubernetes_pod_label_app]
-              target_label: app
-            - source_labels: [__meta_kubernetes_pod_label_version]
-              target_label: version
-            metric_relabel_configs:
-            - source_labels: [__name__]
-              regex: 'istio_.*|pilot_.*'
-              action: keep
+        # Scrape ONLY the three Istio jobs below. Setting
+        # serverFiles."prometheus.yml".scrape_configs REPLACES the chart's default
+        # jobs (kubernetes-api-servers, -nodes, -nodes-cadvisor, -pods,
+        # -service-endpoints, ...). Helm replaces lists rather than merging them.
+        # Those defaults collected far more than Kiali needs (kubernetes-pods also
+        # scraped every sidecar a second time via Istio's prometheus.io
+        # annotations) and OOM-killed Prometheus at 512Mi during the 2026-11-13
+        # canary test. The native Envoy metrics on istio_requests_total already
+        # carry all labels Kiali needs (source_workload, destination_workload,
+        # destination_version, reporter, response_code). We only relabel pod
+        # metadata (namespace, pod_name, app, version) for Kiali's filtering.
+        serverFiles:
+          prometheus.yml:
+            scrape_configs:
+            # App sidecars in dev namespace
+            - job_name: 'istio-mesh'
+              kubernetes_sd_configs:
+              - role: pod
+                namespaces:
+                  names: [dev]
+              relabel_configs:
+              - source_labels: [__meta_kubernetes_pod_annotation_sidecar_istio_io_status]
+                action: keep
+                regex: .+
+              - source_labels: [__address__]
+                action: replace
+                regex: '([^:]+)(?::\d+)?'
+                replacement: '$1:15020'
+                target_label: __address__
+              - source_labels: [__meta_kubernetes_namespace]
+                target_label: namespace
+              - source_labels: [__meta_kubernetes_pod_name]
+                target_label: pod_name
+              - source_labels: [__meta_kubernetes_pod_label_app]
+                target_label: app
+              - source_labels: [__meta_kubernetes_pod_label_version]
+                target_label: version
+              metric_relabel_configs:
+              - source_labels: [__name__]
+                regex: 'istio_.*|pilot_.*'
+                action: keep
 
-          # Istio ingress gateway (not sidecar-annotated, needs its own job)
-          - job_name: 'istio-ingress-gateway'
-            kubernetes_sd_configs:
-            - role: pod
-              namespaces:
-                names: [istio-ingress]
-            relabel_configs:
-            - source_labels: [__meta_kubernetes_pod_label_istio]
-              action: keep
-              regex: ingressgateway
-            - source_labels: [__address__]
-              action: replace
-              regex: '([^:]+)(?::\d+)?'
-              replacement: '$1:15020'
-              target_label: __address__
-            - source_labels: [__meta_kubernetes_namespace]
-              target_label: namespace
-            - source_labels: [__meta_kubernetes_pod_name]
-              target_label: pod_name
-            metric_relabel_configs:
-            - source_labels: [__name__]
-              regex: 'istio_.*'
-              action: keep
+            # Istio ingress gateway (not sidecar-annotated, needs its own job)
+            - job_name: 'istio-ingress-gateway'
+              kubernetes_sd_configs:
+              - role: pod
+                namespaces:
+                  names: [istio-ingress]
+              relabel_configs:
+              - source_labels: [__meta_kubernetes_pod_label_istio]
+                action: keep
+                regex: ingressgateway
+              - source_labels: [__address__]
+                action: replace
+                regex: '([^:]+)(?::\d+)?'
+                replacement: '$1:15020'
+                target_label: __address__
+              - source_labels: [__meta_kubernetes_namespace]
+                target_label: namespace
+              - source_labels: [__meta_kubernetes_pod_name]
+                target_label: pod_name
+              metric_relabel_configs:
+              - source_labels: [__name__]
+                regex: 'istio_.*'
+                action: keep
 
-          # istiod control plane (pilot metrics - used by Kiali's config tab)
-          - job_name: 'istiod'
-            kubernetes_sd_configs:
-            - role: pod
-              namespaces:
-                names: [istio-system]
-            relabel_configs:
-            - source_labels: [__meta_kubernetes_pod_label_app]
-              action: keep
-              regex: istiod
-            - source_labels: [__address__]
-              action: replace
-              regex: '([^:]+)(?::\d+)?'
-              replacement: '$1:15014'
-              target_label: __address__
-            - source_labels: [__meta_kubernetes_namespace]
-              target_label: namespace
+            # istiod control plane (pilot metrics - used by Kiali's config tab)
+            - job_name: 'istiod'
+              kubernetes_sd_configs:
+              - role: pod
+                namespaces:
+                  names: [istio-system]
+              relabel_configs:
+              - source_labels: [__meta_kubernetes_pod_label_app]
+                action: keep
+                regex: istiod
+              - source_labels: [__address__]
+                action: replace
+                regex: '([^:]+)(?::\d+)?'
+                replacement: '$1:15014'
+                target_label: __address__
+              - source_labels: [__meta_kubernetes_namespace]
+                target_label: namespace
 
         rbac:
           create: true
