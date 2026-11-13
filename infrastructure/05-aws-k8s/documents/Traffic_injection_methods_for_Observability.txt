@@ -7,7 +7,7 @@ The traffic then enters exactly as user traffic would, and Kiali draws the full 
 
 	gateway → frontend v1/v2 → backend v1/v2.
 
-Essentially run either ## 1. or ## 2. before you deploy any canary. Doing so will aid
+Essentially run ## 1., ## 2. or both before you deploy any canary. Doing so will aid
 the visualization in Kiali.
 
 **********************************************************************************************************
@@ -22,7 +22,7 @@ kubectl run loadgen --image=williamyeh/hey --restart=Never -- \
   http://istio-ingressgateway.istio-ingress.svc.cluster.local/
 ```
 
-- `-z 10m` runs for 15 minutes.
+- `-z 15m` runs for 15 minutes.
 - `-c 5 -q 4` means 5 workers at 4 requests per second each, about 20 req/s in total.
 
 That's gentle enough for our node sizes.
@@ -40,20 +40,31 @@ kubectl delete pod loadgen
 
 ## 2. Make the backend edges appear
 
-Hitting `/` alone may only exercise the frontends.
 The backend VirtualService is mesh-internal, so backend edges show up only when a frontend pod calls the backend.
-To produce that traffic, send requests to the API paths the frontends proxy.
-For example, if `/api/*` is proxied through the frontend:
+The two frontends do this differently:
+
+- v1 (Next.js) renders `/` on the server and calls the backend itself, so the cookieless traffic from ## 1.
+  already draws the v1 → backend edge.
+- v2 (Vite) serves `/` as static HTML. Only the browser's later call to `/api/get_recipe` reaches the backend,
+  through the nginx `location /api/` block in the v2 pods.
+
+So to draw the v2 → backend edge, send requests to `/api/get_recipe` with the v2 cookie set:
 
 ```bash
 kubectl run loadgen-api --image=williamyeh/hey --restart=Never -- \
   -z 10m -c 3 -q 4 \
+  -H "Cookie: x-frontend=v2" \
   http://istio-ingressgateway.istio-ingress.svc.cluster.local/api/get_recipe
 ```
 
-If Kiali still shows no frontend → backend edge, the frontends aren't proxying that path.
-Check which path our frontend uses for API calls:
+Important: do not send `/api/get_recipe` without the cookie. Requests without a cookie follow the weights,
+so most of them land on v1, and v1 has no `/api/get_recipe` route (it only has `/api/health`).
+Those requests return 404 and show as red edges in Kiali. That is a missing route, not a fault.
 
-the Next.js rewrites for v1, and the nginx `location` block for v2.
+Clean up with:
+
+```bash
+kubectl delete pod loadgen-api
+```
 
 

@@ -32,21 +32,21 @@ Layer-2 SG shells.
 - `null_resource.rr_build_and_clean_layer` — `modules/lambda/layers.tf` —
   local-exec that `pip install`s `pymysql` and zips it.
 - `aws_lambda_layer_version.rr_db_layer` — `modules/lambda/layers.tf` —
-  layer `rr-dev-db-driver-layer`, runtime `python3.9`.
+  layer `rr-dev-db-driver-layer`, runtime `python3.12 / python3.13`.
 
 ### Compute (inside VPC)
 - `aws_lambda_function.rr_secret_rotation_function` —
   `modules/lambda/rotation.tf` — handler `index.lambda_handler`,
-  runtime `python3.9`, mem 128MB, timeout 30s, VPC-attached in
+  runtime `python3.13`, mem 128MB, timeout 30s, VPC-attached in
   `data.aws_subnets.rr_db_subnets.ids` with `lambda_sg_id`.
   Depends on `time_sleep.wait_for_iam` (15s IAM eventual-consistency sleep).
-- `data.archive_file.rr_rotation_zip` — zips `index.py` next to the module.
+- `data.archive_file.rr_rotation_zip` — zips `index.py` and `global-bundle.pem` (RDS CA bundle) at the zip root.
 
 ### Data (inside VPC)
 - `aws_db_subnet_group.rr_db_subnet_group` — `modules/rds/rds.tf` —
   `rr-dev-db-subnet-group` built from the Layer-1 Data subnets.
 - `aws_db_instance.rr_database` — `modules/rds/rds.tf` —
-  `rr-dev-db`, `db_name=ritual_roast`, engine `mysql 8.0`,
+  `rr-dev-db`, `db_name=ritual_roast`, engine `mysql 8.4`,
   `db.t3.micro`, 20GB gp3, `multi_az=true`, `skip_final_snapshot=true`,
   `ignore_changes = [password]`. Credentials read from the SM secret
   via `data.aws_secretsmanager_secret_version.rr_latest_creds`.
@@ -94,4 +94,4 @@ Layer-2 SG shells.
   (in `modules/security_groups/sg-lambda.tf`).
 
 ## Findings (not fixed)
-- Rotation Lambda runtime pinned to `python3.9`.
+- Rotation Lambda runtime is `python3.13`.

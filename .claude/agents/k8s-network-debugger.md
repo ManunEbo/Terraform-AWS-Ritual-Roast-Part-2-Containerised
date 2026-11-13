@@ -15,9 +15,9 @@ Run in THIS order — cheap, high-yield checks first:
    a. From an in-VPC host (via SSM), curl -v http://<frontend-node-ip>:30080/ . 503 = gateway up but no healthy upstream (-> pods/istiod). 404 = route not programmed (-> istiod/gateway). Connection refused = gateway pod absent (-> scheduling/CNI). 200 = north-south works; pivot to east-west/app.
    b. kubectl get pods -A -o wide. If app/CNI/istiod pods are not Running/ready, networking was never the problem -> go to step 2.
 
-2. VERSION SKEW (the prime suspect — check early): kubectl version. Then kubectl get pods -n calico-system -o wide and -n tigera-operator; look for crashloops or API-deprecation errors. Calico v3.26.1 is only tested to Kubernetes ~1.28; K3s is installed UNPINNED (newest). A CNI many minors behind the API server can fail to give pods IPs, so nothing networks. Istio 1.30.1 carries the same risk. State the actual K8s version vs the pinned Calico/Istio versions and the size of the gap.
+2. CNI AND VERSIONS: kubectl version and kubectl get nodes (expect K3s v1.35.10+k3s1 on all 5 nodes). Then kubectl get tigerastatus (all Available), kubectl get pods -n calico-system -o wide and -n tigera-operator; look for crashloops or API-deprecation errors. Expected pins (2026-11, commit 78dbe9d): Calico v3.31.7, Istio charts 1.30.1 (supported on K8s 1.32–1.36), argo-cd chart 9.5.16 (Argo CD 3.4.3). Report any running version that differs from these. Confirm the IP pool is VXLAN Always: kubectl get ippool default-ipv4-ippool -o jsonpath='{.spec.vxlanMode}' -> Always. CrossSubnet here reproduces CLAUDE.md Bug 3 (sidecar-injector webhook unreachable -> zero pods) and needs a fresh deploy, because pool encapsulation is immutable.
 
-3. IMAGE PULLS / NAT: kubectl get pods -n dev for ImagePullBackOff; aws ec2 describe-route-tables for the K8s subnets — confirm BOTH AZ subnets (2a/2b) have a 0.0.0.0/0 -> NAT route (there is a single NAT in 2a).
+3. IMAGE PULLS / NAT: kubectl get pods -n dev for ImagePullBackOff; aws ec2 describe-route-tables for the K8s subnets — confirm ALL THREE K8s subnets (2a/2b/2c) have a 0.0.0.0/0 -> NAT route (there is a single NAT in 2a).
 
 4. ENDPOINTS: kubectl get endpoints -n dev for rr-frontend-svc and ritual-roast-backend. Empty = no ready pods (loops back to 2/3) or a selector/label mismatch.
 

@@ -14,7 +14,7 @@ alias k=kubectl
 
 **********************************************************************************************************
 
-### 2. Verify that Calico CNI status
+### 2. Verify the Calico CNI status
 
 To verify that Calico CNI is running and healthy on the Kubernetes cluster, run the following verification steps:
 
@@ -33,7 +33,7 @@ ip-10-16-48-114.eu-west-2.compute.internal    Ready    control-plane,etcd,master
 ip-10-16-63-71.eu-west-2.compute.internal     Ready    <none>                      4m23s   v1.28.15+k3s1
 [root@ip-10-16-118-64 bin]# 
 
-Verification: All nodes must display a `STATUS` of `READY`. If Calico is down or failing to initialize, nodes will remain in a `NotReady` state.
+Verification: All nodes must display a `STATUS` of `Ready`. If Calico is down or failing to initialize, nodes will remain in a `NotReady` state.
 
 2. Verify any deployments
 
@@ -70,7 +70,7 @@ csi-node-driver-wwdtc                      2/2     Running   0               5m5
 csi-node-driver-zrscj                      2/2     Running   0               5m59s   192.168.105.193   ip-10-16-118-64.eu-west-2.compute.internal    <none>           <none>
 [root@ip-10-16-118-64 bin]# 
 
-Verification: Ensure a `calico-node-*` pod is running on every node in your cluster with a `STATUS` of `Running` and `READY` count of `1/1` or `2/2` running with Typha/Feli components.
+Verification: Ensure a `calico-node-*` pod is running on every node in your cluster with a `STATUS` of `Running` and a `READY` count of `1/1`. The `calico-typha-*` pods should also show `1/1`, and the `csi-node-driver-*` pods `2/2`.
 
 4. Verify Tigera Operator Status i.e. Query the custom resource status managed by the Tigera operator
 
@@ -161,7 +161,7 @@ prometheus             OutOfSync     Missing
 root-observability     OutOfSync     Missing
 [root@ip-10-16-115-140 bin]# 
 
-Until this is resolved, non of our applications will work as this installs Istio.
+Until this is resolved, none of our applications will work as this installs Istio.
 
 But then it will eventually look like:
 
@@ -176,8 +176,6 @@ ritual-roast-canary      Synced        Healthy
 ritual-roast-workloads   Synced        Healthy
 root-observability       Synced        Healthy
 [root@ip-10-16-115-140 bin]# 
-
-[##### FILL THIS IN #####]
 
 Verification: The `SYNC STATUS` column should read `Synced` and `HEALTH STATUS` should read `Healthy`.
 
@@ -233,7 +231,7 @@ argocd-server                      ClusterIP   10.43.66.252    <none>        80/
 Verify Istio controlplane & Ingress gateway: confirm Istio components are healthy and running:
 
 
-2. Retrieve deployment status
+1. Retrieve deployment status
 
 ```bash
 k get deployment -n istio-system
@@ -252,7 +250,7 @@ NAME     READY   UP-TO-DATE   AVAILABLE   AGE
 istiod   1/1     1            1           6m37s
 [root@ip-10-16-115-140 bin]# 
 
-3. Retrieve pods status
+2. Retrieve pods status
 
 ```bash
 k get pods -n istio-system
@@ -263,7 +261,7 @@ NAME                     READY   STATUS    RESTARTS   AGE
 istiod-dc59cdcb5-jqst5   1/1     Running   0          7m18s
 [root@ip-10-16-115-140 bin]# 
 
-4. Retrieve services status
+3. Retrieve services status
 
 ```bash
 k get svc -n istio-system
@@ -281,6 +279,12 @@ Eventually it will look like:
 NAME     TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)                                 AGE
 istiod   ClusterIP   10.43.190.136   <none>        15010/TCP,15012/TCP,443/TCP,15014/TCP   7m55s
 [root@ip-10-16-115-140 bin]# 
+
+4. Retrieve the ingress gateway pods. The gateway runs in its own namespace, `istio-ingress`:
+
+```bash
+k get pods -n istio-ingress
+```
 
 Verification: Ensure `istiod` and `istio-ingressgateway` show a `STATUS` of `Running` and `READY`, counts are fully populated e.g. `1/1`
 
@@ -304,7 +308,7 @@ v2-backend-go        2/2     2            2           10m
 v2-frontend-vite     2/2     2            2           10m
 [root@ip-10-16-115-140 bin]# 
 
-3. Retrieve pods status
+2. Retrieve pods status
 
 ```bash
 k get pods -n dev
@@ -322,7 +326,7 @@ v2-frontend-vite-7b64dbcb89-j4k2f     2/2     Running   0          10m
 v2-frontend-vite-7b64dbcb89-pw9dt     2/2     Running   0          10m
 [root@ip-10-16-115-140 bin]# 
 
-4. Retrieve services status
+3. Retrieve services status
 
 ```bash
 k get svc -n dev
@@ -335,7 +339,7 @@ rr-frontend-svc        ClusterIP   10.43.21.1      <none>        80/TCP     11m
 [root@ip-10-16-115-140 bin]# 
 
 
-5. Lets verify the VirtualServices:
+4. Let's verify the VirtualServices:
 
 [root@ip-10-16-115-140 bin]# k get vs -n dev
 NAME             GATEWAYS                   HOSTS                      AGE
@@ -347,7 +351,7 @@ frontend-route   ["ritual-roast-gateway"]   ["*"]                      20m
 
 ### 7. Verify applications/deployments/pods in the `observability` namespace
 
-2. Retrieve deployment status
+1. Retrieve deployment status
 
 ```bash
 k get deployment -n observability
@@ -360,7 +364,7 @@ kiali-kiali-operator   1/1     1            1           13m
 prometheus-server      1/1     1            1           13m
 [root@ip-10-16-115-140 bin]# 
 
-3. Retrieve pods status
+2. Retrieve pods status
 
 ```bash
 k get pods -n observability
@@ -378,7 +382,7 @@ kiali-kiali-operator-775bf4b688-6xhd5   1/1     Running   0          14m
 prometheus-server-7fc68f6bb-v2hdr       2/2     Running   0          14m
 [root@ip-10-16-115-140 bin]# 
 
-4. Retrieve services status
+3. Retrieve services status
 
 ```bash
 k get svc -n observability

@@ -13,7 +13,7 @@ monorepo deployed sequentially**. All five layers live under **`infrastructure/`
 1. `infrastructure/01-aws-vpc` — VPC, subnets (public / private-app / private-data across
    eu-west-2a/2b), routing, gateways, the shared **public ALB** (port-80 listener, default action =
    404 fixed-response), VPC endpoints. VPC CIDR is **10.16.0.0/16**.
-2. `infrastructure/02-aws-rds` — shared **RDS MySQL** (Multi-AZ), Secrets Manager + a Lambda rotation
+2. `infrastructure/02-aws-rds` — shared **RDS MySQL 8.4** (Multi-AZ, TLS required), Secrets Manager + a Lambda rotation
    fn, IAM.
 3. `infrastructure/03-aws-ecr` — ECR registry + IAM; images built/pushed via GitHub workflows.
 4. `infrastructure/04-aws-ecs` — ECS/Fargate frontend + backend, an internal ALB, its own ALB listener
@@ -102,10 +102,29 @@ The ECS workflow (`deploy-ecs.yml`) is disabled during the K8s phase by renaming
 `deploy-ecs.yml.disabled` (its Layer-3 OIDC role is destroyed, so it red-X's on every `apps/v1-*` push
 otherwise). Re-enable when Layers 3-4 are redeployed. Do not delete it.
 
+## Pre-publish fixes — 2026-11 (branch `feat/pre-publish-fixes`)
+
+Validated (not deployed) until the end-to-end test passes. Do not re-litigate these:
+- **Versions (`78dbe9d`):** K3s `v1.35.10+k3s1` (all 4 install lines), Calico `v3.31.7`
+  (`operator-crds.yaml` applied before `tigera-operator.yaml` — since 3.30 the CRDs ship separately),
+  Helm `v3.21.3`, argo-cd chart `9.5.16` (Argo CD 3.4.3). Istio 1.30.1 is now inside its supported
+  window (K8s 1.32–1.36). Nodes are AL2023 (cgroup v2), which K8s 1.35 requires.
+- **RDS:** MySQL 8.4 with `engine_lifecycle_support` set to avoid Extended Support charges; the
+  rotation Lambda (python3.13) connects over TLS using the bundled `global-bundle.pem`.
+- **Kiali:** `view_only_mode: true` — read-only UI.
+- **nginx (v2 frontend):** `proxy_set_header Host ritual-roast-backend` so the backend sidecar
+  matches the backend VirtualService.
+- **Port-80 egress rules** on the CP/frontend/backend SGs are commented out. Leave them commented out;
+  the user deletes them by hand after the end-to-end test. Do not propose deleting, re-enabling or
+  changing any other security-group rule as part of this cleanup.
+- **`network_k8s`:** route-table lookup scoped to the project VPC (`vpc_id`).
+- **CP leader query:** flattened JMESPath `length(Reservations[].Instances[])`.
+- **Grafana variables** have no `PENDING_*` defaults — they must be exported before apply AND destroy.
+
 ## Current findings — verified 2026-07-01
 
 **CLEARED (do not re-litigate):**
-- K3s pinned to `v1.28.15+k3s1` on all install lines (CP + both worker user_data scripts) ✓
+- K3s pinned on all install lines (CP + both worker user_data scripts) ✓ — was `v1.28.15+k3s1`, now `v1.35.10+k3s1` (`78dbe9d`)
 - `dev` namespace has `istio-injection=enabled` — all app pods are 2/2 with Envoy sidecars ✓
 - istiod has `nodeSelector: tier: frontend`, toleration, and resource caps (100m/128Mi req, 500m/512Mi lim) ✓
 - `deploy-ecs.yml` renamed to `deploy-ecs.yml.disabled` ✓
@@ -136,7 +155,9 @@ otherwise). Re-enable when Layers 3-4 are redeployed. Do not delete it.
   no apps. The cluster appears running (nodes join) but is completely unbootstrapped.
 - **Fix:** Added `sleep 30` after applying `tigera-operator.yaml` (lets API server register CRDs before
   polling), increased timeout to 300s. Both committed and pushed.
-- **Live recovery (if it happens again):** `kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/custom-resources.yaml` then continue manual bootstrap below.
+- **Live recovery (if it happens again):** re-run the inline `Installation` + `APIServer` heredoc from
+  `user_data_cp.sh` (VXLAN Always), then continue the manual bootstrap below. Do NOT apply the upstream
+  `custom-resources.yaml` — its pool is `VXLANCrossSubnet`, which reintroduces Bug 3.
 
 **Pre-redeploy audit — verified 2026-07-02 (static, full four-domain pass; verdict: GO for redeploy):**
 - Both bootstrap fixes confirmed on disk AND on origin/main (`922621f`, `a63eebb`); working tree clean ✓
@@ -145,8 +166,8 @@ otherwise). Re-enable when Layers 3-4 are redeployed. Do not delete it.
   TOP level (verified against the release-1.30 chart deployment template — the old `pilot:` scoping is
   gone). Do NOT "fix" them under `pilot:`; that would make them inert. An audit agent flagged this as a
   HIGH bug — it is a FALSE POSITIVE for chart 1.30.x ✓
-- Istio 1.30.1 on K8s 1.28.15: outside Istio's official support window (K8s 1.32–1.36) but inside its
-  "tested" window (1.27–1.31). Accepted for dev; align versions when next bumping K3s/Calico.
+- Istio 1.30.1 on K8s 1.28.15: was outside Istio's support window (K8s 1.32–1.36). RESOLVED by the
+  2026-11 bump to K8s 1.35 (`78dbe9d`).
 - Seed image SHAs in all 4 deployments (`96d8b078…` ×3, `0ba5fb4e…` ×1) were written by the CI
   write-back bot AFTER the build jobs succeeded (`needs:` gating), so all 4 tags exist in GHCR — no
   first-sync ImagePullBackOff ✓ (paths-filter evaluates the push range; tags use the head SHA)
@@ -281,7 +302,7 @@ or SSM session state) even though the cluster/repo state described here is uncha
 | (earlier) | Sidecar memory cap, Prometheus, Kiali, canary staging, kiali-routing, metadata merge fix |
 
 ### Cluster state at end of session
-- **Nodes:** 5 Ready (3 CP + 2 workers), K3s v1.28.15+k3s1.
+- **Nodes:** 5 Ready (3 CP + 2 workers), K3s v1.28.15+k3s1 at the time (now pinned to v1.35.10+k3s1, `78dbe9d`).
 - **Calico:** VXLAN **Always** — verify `kubectl get ippool default-ipv4-ippool -o jsonpath='{.spec.vxlanMode}'` → `Always`. All calico pods Running.
 - **ArgoCD:** all 8 apps Synced/Healthy (istio-base, istiod, istio-ingressgateway, kiali, prometheus, ritual-roast-workloads, ritual-roast-canary, root-observability).
 - **dev:** v1 + v2 frontend/backend all 2/2 with sidecars. Istio routing at **canary 90% step: v1:10 / v2:90** on both tiers (frontend-route rule `[3]`, backend-route rule `[0]`).
@@ -422,12 +443,12 @@ The cluster has Calico but nothing else. SSM into any CP node and run these in o
 
 ```bash
 # 1. Install Helm
-curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | DESIRED_VERSION=v3.14.4 bash
+curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | DESIRED_VERSION=v3.21.3 bash
 
 # 2. ArgoCD
 kubectl create namespace argocd || true
 helm repo add argo https://argoproj.github.io/argo-helm && helm repo update
-helm upgrade --install argocd argo/argo-cd -n argocd --version 7.3.11 --set server.service.type=ClusterIP
+helm upgrade --install argocd argo/argo-cd -n argocd --version 9.5.16 --set server.service.type=ClusterIP
 
 # 3. GitHub PAT → ArgoCD repo secret
 GITHUB_PAT=$(aws secretsmanager get-secret-value --region eu-west-2 \
@@ -547,7 +568,7 @@ kubectl -n observability get svc kiali     # kiali service exists
 mesh traffic, strategy-agnostic (canary/blue-green/shadow). Source + push script:
 `infrastructure/05-aws-k8s/k8s-manifests/observability/dashboards/` (see its README). v1=green, v2=red,
 fixed across every panel.
-**Kiali access:** `http://<ALB-DNS>/kiali` — anonymous, no login.
+**Kiali access:** `http://<ALB-DNS>/kiali` — anonymous, no login, read-only (`view_only_mode: true`).
 **Kiali Graph settings:** Namespace=dev → Versioned app graph → enable Traffic Animation + Traffic Distribution.
 
 ### Canary strategy — GitOps only

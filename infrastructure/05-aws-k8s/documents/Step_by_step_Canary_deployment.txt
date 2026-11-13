@@ -1,5 +1,5 @@
 **********************************************************************************************************
-                                    Step by Step Cannary deployment
+                                    Step by Step Canary deployment
 **********************************************************************************************************
 
 Follow these steps for Canary deployment.
@@ -56,35 +56,35 @@ k describe vs -n dev
 
 We can narrow down the output to show just the "Weights"
 
-[root@ip-10-16-117-217 bin]# k describe vs -n dev | grep -b4 "Weight:"
-443-        Host:  ritual-roast-backend
-479-        Port:
-493-          Number:  5000
-517-        Subset:    v1
-539:      Weight:      100
-562-      Destination:
-581-        Host:  ritual-roast-backend
-617-        Port:
-631-          Number:  5000
-655-        Subset:    v2
-677:      Weight:      0
-698-Events:            <none>
-724-
-725-
-726-Name:         frontend-route
+[root@ip-10-16-117-217 bin]# k describe vs -n dev | grep -B4 "Weight:"
+        Host:  ritual-roast-backend
+        Port:
+          Number:  5000
+        Subset:    v1
+      Weight:      100
+      Destination:
+        Host:  ritual-roast-backend
+        Port:
+          Number:  5000
+        Subset:    v2
+      Weight:      0
+Events:            <none>
+
+
+Name:         frontend-route
 --
-1750-        Host:  rr-frontend-svc
-1781-        Port:
-1795-          Number:  80
-1817-        Subset:    v1
-1839:      Weight:      100
-1862-      Destination:
-1881-        Host:  rr-frontend-svc
-1912-        Port:
-1926-          Number:  80
-1948-        Subset:    v2
-1970:      Weight:      0
-1991-Events:            <none>
+        Host:  rr-frontend-svc
+        Port:
+          Number:  80
+        Subset:    v1
+      Weight:      100
+      Destination:
+        Host:  rr-frontend-svc
+        Port:
+          Number:  80
+        Subset:    v2
+      Weight:      0
+Events:            <none>
 [root@ip-10-16-117-217 bin]# 
 
 **********************************************************************************************************
@@ -92,7 +92,7 @@ We can narrow down the output to show just the "Weights"
 #### Phase 2: Disable Self-Healing locally and push to github
 
 3. **Edit the ArgoCD Application manifest:** On your local machine or repository workspace,
-     set `selfHeal: false` in `observability/ritual-roast-app.yml`:
+     set `selfHeal: false` in `infrastructure/05-aws-k8s/k8s-manifests/observability/ritual-roast-app.yml`:
 
 ```yaml
 syncPolicy:
@@ -107,7 +107,7 @@ syncPolicy:
 4. **Sync Git repository:** Commit and push this change so your repository stays in sync with what is running on the cluster:
 
 ```bash
-git add observability/ritual-roast-app.yml
+git add infrastructure/05-aws-k8s/k8s-manifests/observability/ritual-roast-app.yml
 git commit -m "ops: disable selfHeal for canary deployment"
 git push origin main
 
@@ -154,6 +154,7 @@ To avoid cloning the entire repository onto the control plane node, we stream in
 6. Export the GitHub PAT: inside the aws ssm session execute the following command:
 ```bash
 export GITHUB_PAT="PASTE GitHub PAT"
+```
 
 7. **THIS IS IMPORTANT:** Before executing the canary, it is ideal to inject traffic through the system to facilitate the kiali visualization.
    So open `05-aws-k8s/documents/Traffic_injection_methods_for_Observability.txt` and follow the instructions.
@@ -193,8 +194,8 @@ a. Stream Real-Time Logs for All v2 Pods
 k logs -n dev -l version=v2 --all-containers=true -f --tail=30
 ```
 
-b. Stream Specific Service Logs (Frontend vs. Backend). Open serparate terminal tabs or
-   SSM sessions to monitor and frontend and backend independently:
+b. Stream Specific Service Logs (Frontend vs. Backend). Open separate terminal tabs or
+   SSM sessions to monitor the frontend and backend independently:
 
 ```bash
 # Stream Backend v2 logs (Go app)
@@ -213,7 +214,7 @@ kubectl logs -n dev -l version=v2 -f --tail=100 | grep -E -i "error|exception|fa
 
 **********************************************************************************************************
 
-10. **Progress through remaining stages:** Repeat step 6 for `30%`, `50%`, `70%`, `90%`, and finally `100%`
+10. **Progress through remaining stages:** Repeat step 8 for `30%`, `50%`, `70%`, `90%`, and finally `100%`
    (`vs-frontend-canary-100.yml` and `vs-backend-canary-100.yml`).
 
 **********************************************************************************************************
@@ -224,20 +225,26 @@ kubectl logs -n dev -l version=v2 -f --tail=100 | grep -E -i "error|exception|fa
     If you enable `selfHeal` while Git still points to the `v1` routing manifest,
     ArgoCD will instantly wipe out your live `v2` rollout and revert traffic back to `v1`.
 
-11. **Update Git to match the 100% `v2` state:** Overwrite the contents of your tracked
-    `dev-apps/routing/istio-routing.yml` with the contents of your `canary-100.yml` variants.
+11. **Update Git to match the 100% `v2` state:** In your local repository, open
+    `infrastructure/05-aws-k8s/k8s-manifests/dev-apps/routing/istio-routing.yml` and change ONLY the weight values:
+    - `frontend-route`, the last http rule (the weighted rule with no `match:`): v1 `weight: 0`, v2 `weight: 100`
+    - `backend-route`, the weighted rule: v1 `weight: 0`, v2 `weight: 100`
+
+    Do NOT replace the file with the `canary-100` variant files. `istio-routing.yml` holds other resources as well,
+    and ArgoCD runs with `prune: true`, so anything missing from the file would be deleted from the cluster.
+    Do NOT touch the `/kiali` rule or the two cookie rules.
 
 12. **Commit the new baseline:**
 
 ```bash
-git add dev-apps/routing/istio-routing.yml
+git add infrastructure/05-aws-k8s/k8s-manifests/dev-apps/routing/istio-routing.yml
 git commit -m "feat(routing): promote v2 to 100% stable production release"
 git push origin main
 
 ```
 
 
-13. **Re-enable `selfHeal: true` in the application manifest:** Edit `observability/ritual-roast-app.yml`:
+13. **Re-enable `selfHeal: true` in the application manifest:** Edit `infrastructure/05-aws-k8s/k8s-manifests/observability/ritual-roast-app.yml`:
 ```yaml
 syncPolicy:
   automated:
@@ -247,14 +254,17 @@ syncPolicy:
 ```
 
 
-14. **Apply updated application spec and commit:**
+14. **Commit, push, then refresh ArgoCD:** On your local machine:
 ```bash
-kubectl apply -f observability/ritual-roast-app.yml
-
-git add observability/ritual-roast-app.yml
+git add infrastructure/05-aws-k8s/k8s-manifests/observability/ritual-roast-app.yml
 git commit -m "ops: re-enable selfHeal enforcement"
 git push origin main
 
+```
+
+Then, in the SSM session on the control plane, refresh the root application as in step 5 so the change applies immediately:
+```bash
+kubectl annotate application root-observability -n argocd argocd.argoproj.io/refresh=normal --overwrite
 ```
 
 15. **Final Verification:** Check ArgoCD to ensure the application status transitions back to **Synced** and **Healthy**.

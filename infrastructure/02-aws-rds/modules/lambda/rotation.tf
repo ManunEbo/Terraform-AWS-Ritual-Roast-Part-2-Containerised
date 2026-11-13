@@ -5,8 +5,15 @@
 # Zipping index.py
 data "archive_file" "rr_rotation_zip" {
   type = "zip"
-  # Since index.py is in the same folder as this .tf file
-  source_file = "${path.module}/index.py"
+  # Both files sit at the zip root; the CA bundle lands at /var/task/global-bundle.pem
+  source {
+    content  = file("${path.module}/index.py")
+    filename = "index.py"
+  }
+  source {
+    content  = file("${path.module}/global-bundle.pem")
+    filename = "global-bundle.pem"
+  }
   output_path = "${path.module}/rotation.zip"
 }
 
@@ -51,14 +58,3 @@ resource "aws_lambda_function" "rr_secret_rotation_function" {
   depends_on = [time_sleep.wait_for_iam]
 }
 
-# **** This has been moved to /modules/rds/secrets.tf so that we can add `source_arn` where it is created to stop the circular problem
-# and to restrict lambda function invokation to this specific  secret by introducing source_arn
-# CRITICAL: Lambda resource-based policy
-# This allows secrets manager to invoke the lambda function.
-# resource "aws_lambda_permission" "rr_allow_secretsmanager_to_call_lambda" {
-#     statement_id  = "AllowExecutionFromSecretsManager"
-#     action        = "lambda:InvokeFunction"
-#     function_name = aws_lambda_function.rr_secret_rotation_function.function_name
-#     # FIXED: Added "aws" to the domain
-#     principal     = "secretsmanager.amazonaws.com" 
-# }

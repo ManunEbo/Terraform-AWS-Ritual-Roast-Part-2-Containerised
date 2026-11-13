@@ -8,7 +8,7 @@ dnf update -y
 dnf install -y jq tar openssl
 
 # Install Helm CLI natively on the host OS
-curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | DESIRED_VERSION=v3.14.4 bash
+curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | DESIRED_VERSION=v3.21.3 bash
 
 # Variables injected dynamically via Terraform interpolation
 REGION="${aws_region}"
@@ -37,7 +37,7 @@ while true; do
     --region "$REGION" \
     --filters "Name=tag:Name,Values=rr-$ENVIRONMENT-k3s-control-plane" \
               "Name=instance-state-name,Values=running" \
-    --query 'length(Reservations[*].Instances[*])' \
+    --query 'length(Reservations[].Instances[])' \
     --output text 2>/dev/null || echo 0)
   [ "$CP_COUNT" -ge 3 ] && break
   echo "  $CP_COUNT/3 running — retrying in 15 s..."
@@ -60,7 +60,7 @@ MY_IP=$(curl -sH "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/
 # =========================================================================
 if [ -z "$EXISTING_CP" ] || [ "$EXISTING_CP" == "$MY_IP" ]; then
   echo "Designated cluster leader state matched. Initializing database cluster root..."
-  curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="v1.28.15+k3s1" K3S_TOKEN=$K3S_TOKEN sh -s - server \
+  curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="v1.35.10+k3s1" K3S_TOKEN=$K3S_TOKEN sh -s - server \
     --cluster-init \
     --disable-network-policy \
     --disable traefik \
@@ -69,7 +69,7 @@ if [ -z "$EXISTING_CP" ] || [ "$EXISTING_CP" == "$MY_IP" ]; then
     --cluster-cidr=192.168.0.0/16 \
     --tls-san="$NLB_DNS"
     
-  sleep 20
+  sleep 30
   export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
   # Deploy Calico operator and custom infrastructure manifests.
@@ -77,7 +77,8 @@ if [ -z "$EXISTING_CP" ] || [ "$EXISTING_CP" == "$MY_IP" ]; then
   # large CRDs (the tigera-operator manifest is ~600KB with embedded OpenAPI schemas).
   # Without it the Deployment is created but CRDs are missing, causing the operator
   # to crash-loop on every boot.
-  kubectl apply --server-side -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/tigera-operator.yaml
+  kubectl apply --server-side -f https://raw.githubusercontent.com/projectcalico/calico/v3.31.7/manifests/operator-crds.yaml
+  kubectl apply --server-side -f https://raw.githubusercontent.com/projectcalico/calico/v3.31.7/manifests/tigera-operator.yaml
   # Give the API server time to register the CRDs before we poll them.
   # On a freshly-booted leader under load the 120s default was observed to time
   # out, causing set -e to abort the script before custom-resources.yaml was
@@ -116,7 +117,7 @@ metadata:
   name: default
 spec: {}
 EOF
-  sleep 20
+  sleep 30
 
   # =========================================================================
   # 5. BOOTSTRAP ARGOCD VIA HELM (FIXES METADATA LIMIT OVERFLOW)
@@ -124,7 +125,7 @@ EOF
   kubectl create namespace argocd || true
   helm repo add argo https://argoproj.github.io/argo-helm
   helm repo update
-  helm upgrade --install argocd argo/argo-cd -n argocd --version 7.3.11 --set server.service.type=ClusterIP
+  helm upgrade --install argocd argo/argo-cd -n argocd --version 9.5.16 --set server.service.type=ClusterIP
 
   # Fetch Personal Access Token from AWS Secrets Manager
   GITHUB_SECRET_ID="rr-$ENVIRONMENT-argocd-github-token"
@@ -220,7 +221,7 @@ EOF
 else
   echo "Active environment leader discovered at $EXISTING_CP. Executing cluster join link..."
   sleep 30 
-  curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="v1.28.15+k3s1" K3S_TOKEN=$K3S_TOKEN sh -s - server \
+  curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="v1.35.10+k3s1" K3S_TOKEN=$K3S_TOKEN sh -s - server \
     --server https://$EXISTING_CP:6443 \
     --disable-network-policy \
     --disable traefik \
