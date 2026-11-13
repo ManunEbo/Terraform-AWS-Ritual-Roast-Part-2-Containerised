@@ -72,6 +72,7 @@ module "network_k8s" {
   common_tags      = local.common_tags
   vpc_name         = var.vpc_name
   public_subnet_id = data.aws_subnet.rr_public_subnet_1.id
+  vpc_id           = data.aws_vpc.rr_vpc.id
 }
 
 module "load_balancers_k8s" {
