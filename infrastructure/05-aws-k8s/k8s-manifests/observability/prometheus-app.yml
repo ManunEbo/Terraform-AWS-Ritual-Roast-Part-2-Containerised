@@ -50,17 +50,40 @@ spec:
                   - key: node-role.kubernetes.io/control-plane
                     operator: Exists
 
-        # Scrape ONLY the three Istio jobs below. Setting
-        # serverFiles."prometheus.yml".scrape_configs REPLACES the chart's default
-        # jobs (kubernetes-api-servers, -nodes, -nodes-cadvisor, -pods,
-        # -service-endpoints, ...). Helm replaces lists rather than merging them.
-        # Those defaults collected far more than Kiali needs (kubernetes-pods also
+        # Scrape ONLY the three Istio jobs below. The chart's default jobs
+        # (kubernetes-api-servers, -nodes, -nodes-cadvisor, -pods,
+        # -service-endpoints, ...) are switched off in scrapeConfigs. Those defaults collected far more than Kiali needs (kubernetes-pods also
         # scraped every sidecar a second time via Istio's prometheus.io
         # annotations) and OOM-killed Prometheus at 512Mi during the 2026-11-13
         # canary test. The native Envoy metrics on istio_requests_total already
         # carry all labels Kiali needs (source_workload, destination_workload,
         # destination_version, reporter, response_code). We only relabel pod
         # metadata (namespace, pod_name, app, version) for Kiali's filtering.
+        # Chart 29.x renders its default jobs from the top-level scrapeConfigs map,
+        # in ADDITION to serverFiles scrape_configs. The chart's documented way to
+        # turn a default off is enabled: false on each key.
+        scrapeConfigs:
+          prometheus:
+            enabled: false
+          kubernetes-api-servers:
+            enabled: false
+          kubernetes-nodes:
+            enabled: false
+          kubernetes-nodes-cadvisor:
+            enabled: false
+          kubernetes-service-endpoints:
+            enabled: false
+          kubernetes-service-endpoints-slow:
+            enabled: false
+          prometheus-pushgateway:
+            enabled: false
+          kubernetes-services:
+            enabled: false
+          kubernetes-pods:
+            enabled: false
+          kubernetes-pods-slow:
+            enabled: false
+
         serverFiles:
           prometheus.yml:
             scrape_configs:
