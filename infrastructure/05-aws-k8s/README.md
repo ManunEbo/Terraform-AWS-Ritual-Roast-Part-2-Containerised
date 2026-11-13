@@ -56,11 +56,12 @@ variable "grafana_token" {
   description = "Grafana Cloud API token (bearer token)"
   type        = string
   sensitive   = true
-  default     = "PENDING_TOKEN"
 }
 ```
 
 Marking them as sensitive means that they will not be printed directly in the terminal, as clear text when included in outputs, but they will show up in the state file as plain text.
+
+None of these variables has a default value, so Terraform requires all four (`github_pat`, `grafana_token`, `grafana_remote_write_url` and `grafana_instance_id`) to be set for both `terraform apply` and `terraform destroy`. If one is missing, Terraform stops and prompts for it, so export them in the same terminal before either command.
 
 # Modules
 
@@ -250,7 +251,7 @@ Let's now turn our attention to the Security Group rules:
 
    **Protocol `tcp`** - This provides the necessary connection transport for TLS handshakes and secure data transfers over HTTPS.
 
-3. `rr_backend_egress_http` - This allows backend nodes to initiate outbound unencrypted HTTP web requests to the internet. It is needed during instance bootstrapping to download Linux system packages `dnf update`, pull K3s binaries, and retrieve repository GPG keys.
+3. `rr_backend_egress_http` - **Disabled (commented out).** This rule allowed backend nodes to initiate outbound unencrypted HTTP web requests to the internet on port 80. Everything the nodes download, Linux packages (`dnf`), the K3s installer and binaries, Helm, the Calico manifests and container images, is fetched over HTTPS on port 443, which `rr_backend_egress_https` already allows. So port 80 was an unnecessary opening. The matching port-80 egress rules on the frontend (`rr_frontend_egress_http`) and controlplane (`rr_cp_egress_http`) security groups are disabled for the same reason.
 
    **Ports `from_port = 80`, `to_port = 80`** - This is the standard unencrypted HTTP port.
 
@@ -585,7 +586,7 @@ set -e
 dnf update -y
 dnf install -y jq tar openssl
 
-curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | DESIRED_VERSION=v3.14.4 bash
+curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | DESIRED_VERSION=v3.21.3 bash
 
 REGION="${aws_region}"
 ENVIRONMENT="${environment}"
@@ -607,12 +608,12 @@ NLB_DNS="${nlb_dns_name}"
 
    - `openssl` - This is a toolkit for generating and managing encryption keys and certificates.
 
-5. **Helm installation `curl https://raw... | DESIRED_VERSION=v3.14.4 bash`**
+5. **Helm installation `curl https://raw... | DESIRED_VERSION=v3.21.3 bash`**
    - `curl` - Downloads the official installation script for Helm, the package manager for Kubernetes applications.
 
    - `|` pipe symbol - this passes the output of the curl command as input to the next command, `bash`, to execute it.
 
-   - `DESIRED_VERSION=v3.14.4` - Sets an environment variable during installation to ensure we lock helm to version `3.14.4` for consistency.
+   - `DESIRED_VERSION=v3.21.3` - Sets an environment variable during installation to ensure we lock helm to version `3.21.3` for consistency. Helm 3.21 supports Kubernetes 1.33 to 1.36, which covers our 1.35 cluster; an older Helm is not guaranteed to work against a newer Kubernetes.
 
 6. Script variables `REGION="${aws_region}" ...` - These three lines set script variables using values injected by Terraform when rendering the template file:
    - `${aws_region}` - Gets replaced with the target AWS region e.g. `eu-west-2`.
@@ -776,7 +777,7 @@ In a High Availability setup, exactly one node must initialize the core database
 **Bootstrapping the leader node**
 
 1. `curl -sfL https://get.k3s.io | ... sh -s - server` - Downloads and runs the official K3s installation script in `server` controlplane mode.
-   - `INSTALL_K3S_VERSION="v1.28.15+k3s1"` - Locks the installation to a stable Kubernetes release.
+   - `INSTALL_K3S_VERSION="v1.35.10+k3s1"` - Locks the installation to a stable Kubernetes release, 1.35, which is supported until 28 Feb 2027.
 
    - `K3S_TOKEN=$K3S_TOKEN` - Passes the cluster join token fetched from Secrets Manager.
 
@@ -798,7 +799,7 @@ In a High Availability setup, exactly one node must initialize the core database
 
    - `export KUBECONFIG=/etc/rancher/k3s/k3s.yaml` - Tells `kubectl` where to find the cluster connection credentials file.
 
-   - ` kubectl apply --server-side -f ...` - This safely installs the "**brain**" that will manage the cluster's network, essentially hiring a robot administrator. It downloads a massive configuration file from GitHub and installs the **Tigera Operator**:
+   - `kubectl apply --server-side -f .../operator-crds.yaml` then `kubectl apply --server-side -f .../tigera-operator.yaml` - These two commands safely install the "**brain**" that will manage the cluster's network, essentially hiring a robot administrator. Since Calico 3.30, the Custom Resource Definitions (CRDs) ship in their own file, `operator-crds.yaml`, so we apply that first, then `tigera-operator.yaml`, which installs the **Tigera Operator** itself:
 
      #### Why
 
@@ -809,7 +810,7 @@ In a High Availability setup, exactly one node must initialize the core database
      This is the most critical part of this command. To understand why we need it let's consider how Kubernetes tracks changes:
      - Normally, when we run `kubectl apply`, our local computer (the client) takes the entire YAML file we're applying, squashes it into a text string, and saves it as a sticky note (an annotation) on the object inside the Kubernetes database, `etcd`. This is how Kubernetes remembers what we applied last time
      - However, Kubernetes has a strict size limit for these sticky notes: **256 KiB** in total per object.
-     - The Tigera operator manifest is enormous: some of the Custom Resource Definitions (CRDs) inside it are larger than that limit on their own, because they teach Kubernetes many new, complex networking resources.
+     - The CRD manifest, `operator-crds.yaml`, is enormous: some of the Custom Resource Definitions (CRDs) inside it are larger than that limit on their own, because they teach Kubernetes many new, complex networking resources.
      - If we run this command without `--server-side`, the sticky note is too big and Kubernetes rejects those CRDs with a `metadata.annotations: Too long` error. The operator Deployment is still created, but without its CRDs it crash-loops and Calico never starts.
      - By using `--server-side`, we tell Kubernetes: _"Don't try to cram this into a client-side sticky note. Send the raw file directly to the central API server and let the server handle the memory tracking natively"_. This bypasses the size limit and ensures the massive file is installed safely
 
@@ -882,7 +883,7 @@ At this point in the script, the Kubernetes cluster is running and its network i
 1. `kubectl create namespace argocd || true` - Creates a dedicated Kubernetes namespace named `argocd`. The `|| true` ensures the script continues even if the namespace already exists. It isolates ArgoCD's controlplane resources into its own logical boundary, keeping it separated from application workloads.
 2. `helm repo add argo https://argoproj.github.io/argo-helm` - Adds the official Argo project Helm repository to Helm's local registry under the alias `argo`. This registers the remote location where the ArgoCD package manifests live so Helm can download them.
 3. `helm repo update` - Refreshes the local cache of available Helm charts from all registered repositories. This ensures that Helm installs the exact specified chart version using the latest index metadata.
-4. `helm upgrade --install argocd argo/argo-cd -n argocd --version 7.3.11 --set server.service.type=ClusterIP` - Idempotently installs or updates the ArgoCD Helm chart _version 7.3.11_ (the chart version, not the ArgoCD application version) into the `argocd` namespace, explicitly setting the UI/API service type to `ClusterIP`. This deploys the ArgoCD management engine into the cluster. Restricting the service to `ClusterIP` keeps the administrative server internal and unexposed to the public internet.
+4. `helm upgrade --install argocd argo/argo-cd -n argocd --version 9.5.16 --set server.service.type=ClusterIP` - Idempotently installs or updates the ArgoCD Helm chart _version 9.5.16_ (the chart version; it installs ArgoCD application version 3.4.3) into the `argocd` namespace, explicitly setting the UI/API service type to `ClusterIP`. This deploys the ArgoCD management engine into the cluster. Restricting the service to `ClusterIP` keeps the administrative server internal and unexposed to the public internet.
 5. `GITHUB_SECRET_ID="rr-$ENVIRONMENT-argocd-github-token"` - Constructs a string variable representing the AWS Secrets Manager secret identifier. Dynamically formats the resource name using the current environment variable e.g. `dev` or `prod`.
 6. `GITHUB_PAT=$(aws secretsmanager get-secret-value --region $REGION --secret-id $GITHUB_SECRET_ID --query SecretString --output text)` - Calls the AWS API to extract the raw plaintext value of the GitHub PAT from AWS Secrets Manager and assigns it to `GITHUB_PAT`. It securely fetches sensitive authentication credentials at runtime without storing passwords in plain text inside source code or scripts.
 7. **Manifest 1: ArgoCD Git Repository Secret YAML** - Creates a Kubernetes `Secret` containing Git credentials and attaches a specific ArgoCD label so the ArgoCD controller automatically registers the private GitHub repository as an application source.
@@ -978,7 +979,7 @@ This section completes the controlplane bootstrap by splitting execution based o
 3. **Follower controlplane join block `curl -sfL https://get.k3s.io | ...`** - This downloads the K3s software and starts it in controlplane mode but instead of creating a brand new cluster, it authenticates with the existing cluster leader, using a secret token, and joins the HA quorum. At the same time it strips out all of K3s's default networking components, `Flannel and Traefik`, so that they don't conflict with the custom networking stack, `Calico/Istio` established earlier, and secures the API server so it can sit behind an AWS NLB.
    - `curl -sfL https://get.k3s.io | ...` - Securely downloads the official K3s installation script; `-s` for silent, `-f` to fail on errors, `-L` to follow redirects; and pipes it directly into the shell, `sh -s -` for immediate execution. Note, this is the standard automated method to pull and run the K3s bootstrap logic without manual file management on the EC2 instance.
 
-   - `INSTALL_K3S_VERSION="v1.28.15+k3s1"` - An environment variable that forces the installer to pull this exact version of K3s, rather than defaulting to the "latest" release. Note, version drift destroys clusters: Every node be it leader, follower or workers, must run the exact same Kubernetes version to ensure API compatibility and stability.
+   - `INSTALL_K3S_VERSION="v1.35.10+k3s1"` - An environment variable that forces the installer to pull this exact version of K3s, rather than defaulting to the "latest" release. Note, Kubernetes does tolerate small version differences, a kubelet may run up to three minor versions behind the API server, but the API servers themselves must stay within one minor version of each other. We pin one exact version on every node, leader, followers and workers, so every deploy is predictable and every node behaves the same.
 
    - `K3S_TOKEN=$K3S_TOKEN` - Passes the shared cluster password, retrieved from AWS Secrets Manager, as an environment variable to the installer. This provides cryptographic proof to the existing cluster leader that this new instance is authorized to join the highly sensitive `etcd` database and controlplane tier.
 
@@ -2012,16 +2013,16 @@ The rest of this file review is broken into sections; we'll review them in order
 
 ## c. [kiali-app.yml](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/k8s-manifests/observability/kiali-app.yml)
 
-Kiali is an open-source observability console and management dashboard built specifically for the Istio service mesh. Kiali automatically discovers the microservices running in a Kubernetes cluster and draws real-time visual diagrams of how they communicate. It maps traffic flows, monitors network health (like HTTP error rates and latency), validates Istio configurations, and allows us to view or edit mesh routing rules directly from its web interface. Here, we're using Kiali strictly as a live, visual topology map for our Istio traffic. By wiring Kiali to the lightweight, 2-hour-retention Prometheus instance we reviewed above, Kiali has exactly the real-time data it needs to draw accurate service dependency graphs and canary traffic splits. We also enable a specific feature flag (`istio_injection_action: true`) that lets us quickly toggle Istio sidecar injection on or off for different namespaces directly from the Kiali UI.
+Kiali is an open-source observability console and management dashboard built specifically for the Istio service mesh. Kiali automatically discovers the microservices running in a Kubernetes cluster and draws real-time visual diagrams of how they communicate. It maps traffic flows, monitors network health (like HTTP error rates and latency), validates Istio configurations, and can also let users edit mesh routing rules directly from its web interface. Here, we're using Kiali strictly as a live, visual topology map for our Istio traffic, so the UI is set to read-only (`view_only_mode: true`). By wiring Kiali to the lightweight, 2-hour-retention Prometheus instance we reviewed above, Kiali has exactly the real-time data it needs to draw accurate service dependency graphs and canary traffic splits.
 
 **Components**
 
 1. **ArgoCD metadata & Deployment sequencing** - The manifest defines an ArgoCD `Application` named `kiali`. Noticeably, it is assigned `sync-wave: "2"`. By placing Kiali in Wave 2, ArgoCD waits for Prometheus (deployed in Wave 1) to be fully up and running first. This ensures Kiali doesn't crash on initial startup while trying to reach a monitoring backend that doesn't exist yet.
 2. **Helm source & the operator pattern** - This section pulls the official Kiali Helm chart and locks it to version `2.28.0`. Interestingly, this chart doesn't install the Kiali web UI directly; it installs the **Kiali Operator**. The operator is a background controller that watches for a specific configuration file (**a Custom Resource**) and then builds the Kiali server based on those instructions.
 3. **Operator pod node placement** - Just like we did with Prometheus, `tolerations` and `nodeAffinity` are used to push the Kiali operator pod onto the cluster's `control-plane` nodes. Since the operator just sits in the background watching for config changes, placing it on the controlplane frees up valuable worker node resources for our apps.
-4. **The Kiali CR & Prometheus linking** - This block (`cr.create: true`) provides the instructions that the Kiali operator reads to actually deploy the Kiali server. It bypasses internal login screens (`auth.strategy: "anonymous"`) and explicitly wires Kiali to the local Prometheus instance using internal Kubernetes DNS (`http://prometheus-server.observability...`). Links to external Grafana and tracing services are disabled here to keep the setup focused purely on Istio topology.
+4. **The Kiali CR & Prometheus linking** - This block (`cr.create: true`) provides the instructions that the Kiali operator reads to actually deploy the Kiali server. It bypasses internal login screens (`auth.strategy: "anonymous"`), so anyone who can reach `/kiali` can use it. That is why the UI is read-only (`view_only_mode: true`): visitors can look at the graphs and configuration but cannot change routing rules or other mesh settings. Git, via ArgoCD, stays the only way to change the mesh. It also explicitly wires Kiali to the local Prometheus instance using internal Kubernetes DNS (`http://prometheus-server.observability...`). Links to external Grafana and tracing services are disabled here to keep the setup focused purely on Istio topology.
 5. **Server Web Config & the admission quirk** - The configuration sets the web root to `/kiali` and the port to `20001`. A vital detail here is that the port is wrapped in quotes (`"20001"`). Kiali's custom resource schema strictly requires a string for this field. If provided as an integer, the Kubernetes API would reject the file with an admission error, and the Kiali server would never deploy.
-6. **Server sizing & feature flags** - This section defines the footprint of the actual Kiali web server pod. It is given a lightweight profile (`100-200m CPU` and `128-256Mi RAM`) and is also instructed to prefer `control-plane` nodes. It disables a dedicated ingress, expecting us to route to it via a gateway, and turns on `istio_injection_action: true`, which allows us to toggle Istio sidecars for our namespaces directly from the Kiali UI.
+6. **Server sizing & feature flags** - This section defines the footprint of the actual Kiali web server pod. It is given a lightweight profile (`100-200m CPU` and `128-256Mi RAM`) and is also instructed to prefer `control-plane` nodes. It disables a dedicated ingress, expecting us to route to it via a gateway, and sets `istio_injection_action: false`, which hides the Kiali UI action for toggling Istio sidecar injection on a namespace. Sidecar injection is controlled only by the `istio-injection=enabled` label on the `dev` namespace, set by the bootstrap script.
 7. **Target destination & self-healing sync** - This is standard ArgoCD housekeeping: deploy everything into the `observability` namespace, creating it if it's missing. Automated pruning and self-healing enforce that Git remains the strict source of truth for the Operator deployment.
 8. **Advanced drift management** - This final block prevents a common GitOps headache. When the Kiali operator deploys the Kiali server, it automatically fills in missing `.spec` fields with default values. ArgoCD sees these new fields, realizes they aren't in Git, and flags the app as **"Out of Sync"**. By using `ignoreDifferences` and `jqPathExpressions`, ArgoCD is told to ignore modifications the operator makes. Using `jq` specifically is a clever workaround for Kiali's loose schema, avoiding errors that stricter synchronization methods would trigger.
 
@@ -2245,6 +2246,8 @@ This is another ArgoCD application manifest. It serves a specialized purpose: de
    export TF_VAR_grafana_remote_write_url="https://prometheus-..."
    export TF_VAR_grafana_instance_id="123..."
    ```
+
+   Note, these same four exports are needed again for `tf destroy` (step 20). If you open a new terminal to destroy, export them again first.
 
 10. Create an alias for terraform `alias tf=terraform`, this is easier than writing out the long word
 11. Initialize terraform: `tf init` and run terraform plan: `tf plan` review the outputs and if you're happy run `tf apply`, or if you trusted the plan `tf apply -auto-approve`
