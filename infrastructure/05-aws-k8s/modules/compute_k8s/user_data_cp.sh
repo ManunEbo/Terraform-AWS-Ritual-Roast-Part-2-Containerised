@@ -69,7 +69,7 @@ if [ -z "$EXISTING_CP" ] || [ "$EXISTING_CP" == "$MY_IP" ]; then
     --cluster-cidr=192.168.0.0/16 \
     --tls-san="$NLB_DNS"
     
-  sleep 20
+  sleep 30
   export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
   # Deploy Calico operator and custom infrastructure manifests.
@@ -116,7 +116,7 @@ metadata:
   name: default
 spec: {}
 EOF
-  sleep 20
+  sleep 30
 
   # =========================================================================
   # 5. BOOTSTRAP ARGOCD VIA HELM (FIXES METADATA LIMIT OVERFLOW)
