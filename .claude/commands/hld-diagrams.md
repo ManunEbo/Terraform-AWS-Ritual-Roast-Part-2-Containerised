@@ -19,10 +19,10 @@ Single, self-contained task. Do ONLY what this file describes.
   approved, authoritative content. Read .tf files only to resolve something
   the inventory leaves ambiguous, and say when you do.
 - Style reference (STYLE ONLY, never content):
-  `/home/kapanga/terraform/v2-ritual-roast/infrastructure/01-aws-vpc/documents/hld-architecture/example-hld.png`
+  `infrastructure/01-aws-vpc/documents/hld-architecture/example-hld.png`
   Never modify, move or delete it.
 
-Layers (deploy order) under `/home/kapanga/terraform/v2-ritual-roast/infrastructure/`:
+Layers (deploy order) under `infrastructure/`:
 01-aws-vpc, 02-aws-rds, 03-aws-ecr, 04-aws-ecs, 05-aws-k8s.
 
 # Outputs (per layer, in `<layer>/documents/hld-architecture/`)
