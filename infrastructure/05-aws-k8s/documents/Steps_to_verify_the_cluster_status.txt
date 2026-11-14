@@ -25,15 +25,17 @@ k get nodes
 ```
 
 [root@ip-10-16-118-64 bin]# k get nodes
-NAME                                          STATUS   ROLES                       AGE     VERSION
-ip-10-16-118-64.eu-west-2.compute.internal    Ready    control-plane,etcd,master   5m19s   v1.28.15+k3s1
-ip-10-16-180-175.eu-west-2.compute.internal   Ready    control-plane,etcd,master   4m16s   v1.28.15+k3s1
-ip-10-16-187-226.eu-west-2.compute.internal   Ready    <none>                      4m17s   v1.28.15+k3s1
-ip-10-16-48-114.eu-west-2.compute.internal    Ready    control-plane,etcd,master   4m32s   v1.28.15+k3s1
-ip-10-16-63-71.eu-west-2.compute.internal     Ready    <none>                      4m23s   v1.28.15+k3s1
+NAME                                          STATUS   ROLES                AGE   VERSION
+ip-10-16-112-12.eu-west-2.compute.internal    Ready    <none>               10m   v1.35.10+k3s1
+ip-10-16-123-198.eu-west-2.compute.internal   Ready    control-plane,etcd   11m   v1.35.10+k3s1
+ip-10-16-187-232.eu-west-2.compute.internal   Ready    control-plane,etcd   10m   v1.35.10+k3s1
+ip-10-16-51-173.eu-west-2.compute.internal    Ready    <none>               10m   v1.35.10+k3s1
+ip-10-16-61-164.eu-west-2.compute.internal    Ready    control-plane,etcd   10m   v1.35.10+k3s1
 [root@ip-10-16-118-64 bin]# 
 
 Verification: All nodes must display a `STATUS` of `Ready`. If Calico is down or failing to initialize, nodes will remain in a `NotReady` state.
+
+Note: on K3s 1.35 the controlplane roles show as `control-plane,etcd` (older K3s also showed `master`). Workers show `<none>`.
 
 2. Verify any deployments
 
@@ -43,9 +45,12 @@ k get deployment -n calico-system
 
 [root@ip-10-16-118-64 bin]# k get deployment -n calico-system
 NAME                      READY   UP-TO-DATE   AVAILABLE   AGE
-calico-kube-controllers   1/1     1            1           5m21s
-calico-typha              3/3     3            3           5m21s
+calico-apiserver          2/2     2            2           10m
+calico-kube-controllers   1/1     1            1           10m
+calico-typha              3/3     3            3           10m
 [root@ip-10-16-118-64 bin]# 
+
+Note: on Calico 3.31 `calico-apiserver` runs in the `calico-system` namespace (there is no separate `calico-apiserver` namespace).
 
 3. Check Calico System pods. Inspect the Calico daemonSet and control pods. Note "modern" installations run in the calico-system namespace, while legacy/manifest installations run in Kube-system namespace.
 
@@ -78,12 +83,15 @@ Verification: Ensure a `calico-node-*` pod is running on every node in your clus
 k get tigerastatus
 ```
 [root@ip-10-16-118-64 bin]# k get tigerastatus
-NAME        AVAILABLE   PROGRESSING   DEGRADED   SINCE
-apiserver   True        False         False      6m21s
-calico      True        False         False      6m36s
+NAME        AVAILABLE   PROGRESSING   DEGRADED   SINCE   MESSAGE
+apiserver   True        False         False      10m     All objects available
+calico      True        False         False      10m     All objects available
+ippools     True        False         False      11m     All objects available
 [root@ip-10-16-118-64 bin]# 
 
 Verify: Confirm that `AVAILABLE` reads `True`, `PROGRESSING` reads `False`, and `DEGRADED` reads `False`
+
+Note: on Calico 3.31 there is an extra `ippools` line alongside `apiserver` and `calico`.
 
 **********************************************************************************************************
 
@@ -97,17 +105,18 @@ k get ns
 ```
 
 [root@ip-10-16-118-64 bin]# k get ns
-NAME               STATUS   AGE
-argocd             Active   7m25s
-calico-apiserver   Active   7m
-calico-system      Active   7m45s
-default            Active   8m42s
-dev                Active   6m43s
-kube-node-lease    Active   8m42s
-kube-public        Active   8m42s
-kube-system        Active   8m42s
-observability      Active   6m39s
-tigera-operator    Active   8m18s
+NAME              STATUS   AGE
+argocd            Active   11m
+calico-system     Active   11m
+default           Active   12m
+dev               Active   10m
+istio-ingress     Active   2m22s
+istio-system      Active   8m9s
+kube-node-lease   Active   12m
+kube-public       Active   12m
+kube-system       Active   12m
+observability     Active   10m
+tigera-operator   Active   12m
 [root@ip-10-16-118-64 bin]# 
 
 Alternatively
@@ -117,17 +126,18 @@ k get namespaces
 ```
 
 [root@ip-10-16-118-64 bin]# k get namespaces
-NAME               STATUS   AGE
-argocd             Active   7m48s
-calico-apiserver   Active   7m23s
-calico-system      Active   8m8s
-default            Active   9m5s
-dev                Active   7m6s
-kube-node-lease    Active   9m5s
-kube-public        Active   9m5s
-kube-system        Active   9m5s
-observability      Active   7m2s
-tigera-operator    Active   8m41s
+NAME              STATUS   AGE
+argocd            Active   11m
+calico-system     Active   11m
+default           Active   12m
+dev               Active   10m
+istio-ingress     Active   2m22s
+istio-system      Active   8m9s
+kube-node-lease   Active   12m
+kube-public       Active   12m
+kube-system       Active   12m
+observability     Active   10m
+tigera-operator   Active   12m
 [root@ip-10-16-118-64 bin]# 
 
 If this is not fully populated yet, then the cluster hasn't finished the booting process. Step by step the various namespaces will be created, one at a time.
@@ -186,12 +196,12 @@ k get deployment -n argocd
 ```
 [root@ip-10-16-115-140 bin]# k get deployments -n argocd
 NAME                               READY   UP-TO-DATE   AVAILABLE   AGE
-argocd-applicationset-controller   1/1     1            1           6m11s
-argocd-dex-server                  1/1     1            1           6m11s
-argocd-notifications-controller    1/1     1            1           6m11s
-argocd-redis                       1/1     1            1           6m11s
-argocd-repo-server                 1/1     1            1           6m11s
-argocd-server                      1/1     1            1           6m11s
+argocd-applicationset-controller   1/1     1            1           13m
+argocd-dex-server                  1/1     1            1           13m
+argocd-notifications-controller    1/1     1            1           13m
+argocd-redis                       1/1     1            1           13m
+argocd-repo-server                 1/1     1            1           13m
+argocd-server                      1/1     1            1           13m
 [root@ip-10-16-115-140 bin]# 
 
 3. Verify the status of pods in `argocd` namespace this will also tell you which node they're running on.
@@ -217,11 +227,11 @@ k get svc -n argocd
 ```
 [root@ip-10-16-115-140 bin]# k get svc -n argocd
 NAME                               TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)             AGE
-argocd-applicationset-controller   ClusterIP   10.43.73.72     <none>        7000/TCP            7m59s
-argocd-dex-server                  ClusterIP   10.43.12.241    <none>        5556/TCP,5557/TCP   7m59s
-argocd-redis                       ClusterIP   10.43.245.247   <none>        6379/TCP            7m59s
-argocd-repo-server                 ClusterIP   10.43.196.75    <none>        8081/TCP            7m59s
-argocd-server                      ClusterIP   10.43.66.252    <none>        80/TCP,443/TCP      7m59s
+argocd-applicationset-controller   ClusterIP   10.43.143.147   <none>        7000/TCP            14m
+argocd-dex-server                  ClusterIP   10.43.167.202   <none>        5556/TCP,5557/TCP   14m
+argocd-redis                       ClusterIP   10.43.108.232   <none>        6379/TCP            14m
+argocd-repo-server                 ClusterIP   10.43.226.247   <none>        8081/TCP            14m
+argocd-server                      ClusterIP   10.43.22.12     <none>        80/TCP,443/TCP      14m
 [root@ip-10-16-115-140 bin]# 
 
 **********************************************************************************************************
@@ -247,7 +257,7 @@ No resources found in istio-system namespace.
 Eventually it will look like:
 [root@ip-10-16-115-140 bin]# k get deployments -n istio-system
 NAME     READY   UP-TO-DATE   AVAILABLE   AGE
-istiod   1/1     1            1           6m37s
+istiod   1/1     1            1           7m6s
 [root@ip-10-16-115-140 bin]# 
 
 2. Retrieve pods status
@@ -258,7 +268,7 @@ k get pods -n istio-system
 
 [root@ip-10-16-115-140 bin]# k get pods -n istio-system
 NAME                     READY   STATUS    RESTARTS   AGE
-istiod-dc59cdcb5-jqst5   1/1     Running   0          7m18s
+istiod-8c9dc779d-rv9tm   1/1     Running   0          7m38s
 [root@ip-10-16-115-140 bin]# 
 
 3. Retrieve services status
@@ -277,7 +287,7 @@ Eventually it will look like:
 
 [root@ip-10-16-115-140 bin]# k get svc -n istio-system
 NAME     TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)                                 AGE
-istiod   ClusterIP   10.43.190.136   <none>        15010/TCP,15012/TCP,443/TCP,15014/TCP   7m55s
+istiod   ClusterIP   10.43.252.233   <none>        15010/TCP,15012/TCP,443/TCP,15014/TCP   8m11s
 [root@ip-10-16-115-140 bin]# 
 
 4. Retrieve the ingress gateway pods. The gateway runs in its own namespace, `istio-ingress`:
@@ -285,6 +295,13 @@ istiod   ClusterIP   10.43.190.136   <none>        15010/TCP,15012/TCP,443/TCP,1
 ```bash
 k get pods -n istio-ingress
 ```
+
+(Captured on an earlier test deploy, 2026-11-13; it was not re-captured on 2026-11-14.)
+
+[root@ip-10-16-113-101 bin]# k get pods -n istio-ingress
+NAME                                    READY   STATUS    RESTARTS   AGE
+istio-ingressgateway-678995c9c9-cx947   1/1     Running   0          7m25s
+[root@ip-10-16-113-101 bin]# 
 
 Verification: Ensure `istiod` and `istio-ingressgateway` show a `STATUS` of `Running` and `READY`, counts are fully populated e.g. `1/1`
 
@@ -302,10 +319,10 @@ When it's ready it will look like this:
 
 [root@ip-10-16-115-140 bin]# k get deployments -n dev
 NAME                 READY   UP-TO-DATE   AVAILABLE   AGE
-v1-backend-flask     2/2     2            2           9m58s
-v1-frontend-nextjs   2/2     2            2           9m58s
-v2-backend-go        2/2     2            2           10m
-v2-frontend-vite     2/2     2            2           10m
+v1-backend-flask     2/2     2            2           8m45s
+v1-frontend-nextjs   2/2     2            2           8m45s
+v2-backend-go        2/2     2            2           8m46s
+v2-frontend-vite     2/2     2            2           8m46s
 [root@ip-10-16-115-140 bin]# 
 
 2. Retrieve pods status
@@ -316,14 +333,14 @@ k get pods -n dev
 
 [root@ip-10-16-115-140 bin]# k get pods -n dev
 NAME                                  READY   STATUS    RESTARTS   AGE
-v1-backend-flask-75664dc9-6l6b9       2/2     Running   0          10m
-v1-backend-flask-75664dc9-pbgbj       2/2     Running   0          10m
-v1-frontend-nextjs-7ffc4b4599-8cssl   2/2     Running   0          10m
-v1-frontend-nextjs-7ffc4b4599-djrkm   2/2     Running   0          10m
-v2-backend-go-55b6697f7b-qrzs6        2/2     Running   0          10m
-v2-backend-go-55b6697f7b-v7jcc        2/2     Running   0          10m
-v2-frontend-vite-7b64dbcb89-j4k2f     2/2     Running   0          10m
-v2-frontend-vite-7b64dbcb89-pw9dt     2/2     Running   0          10m
+v1-backend-flask-7d978c8b6-9z52s      2/2     Running   0          9m30s
+v1-backend-flask-7d978c8b6-jsggn      2/2     Running   0          9m30s
+v1-frontend-nextjs-848557945c-72mkd   2/2     Running   0          9m30s
+v1-frontend-nextjs-848557945c-8qc4p   2/2     Running   0          9m30s
+v2-backend-go-5c7dcd677f-cqqdh        2/2     Running   0          9m31s
+v2-backend-go-5c7dcd677f-rz5lf        2/2     Running   0          9m31s
+v2-frontend-vite-784b89f488-f9pzx     2/2     Running   0          9m31s
+v2-frontend-vite-784b89f488-ktxwg     2/2     Running   0          9m31s
 [root@ip-10-16-115-140 bin]# 
 
 3. Retrieve services status
@@ -333,9 +350,9 @@ k get svc -n dev
 ```
 
 [root@ip-10-16-115-140 bin]# k get svc -n dev
-NAME                   TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE
-ritual-roast-backend   ClusterIP   10.43.109.138   <none>        5000/TCP   11m
-rr-frontend-svc        ClusterIP   10.43.21.1      <none>        80/TCP     11m
+NAME                   TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)    AGE
+ritual-roast-backend   ClusterIP   10.43.17.209   <none>        5000/TCP   10m
+rr-frontend-svc        ClusterIP   10.43.80.121   <none>        80/TCP     10m
 [root@ip-10-16-115-140 bin]# 
 
 
@@ -343,8 +360,8 @@ rr-frontend-svc        ClusterIP   10.43.21.1      <none>        80/TCP     11m
 
 [root@ip-10-16-115-140 bin]# k get vs -n dev
 NAME             GATEWAYS                   HOSTS                      AGE
-backend-route                               ["ritual-roast-backend"]   20m
-frontend-route   ["ritual-roast-gateway"]   ["*"]                      20m
+backend-route                               ["ritual-roast-backend"]   10m
+frontend-route   ["ritual-roast-gateway"]   ["*"]                      10m
 [root@ip-10-16-115-140 bin]# 
 
 **********************************************************************************************************
@@ -359,9 +376,9 @@ k get deployment -n observability
 
 [root@ip-10-16-115-140 bin]# k get deployments -n observability
 NAME                   READY   UP-TO-DATE   AVAILABLE   AGE
-kiali                  1/1     1            1           12m
-kiali-kiali-operator   1/1     1            1           13m
-prometheus-server      1/1     1            1           13m
+kiali                  1/1     1            1           10m
+kiali-kiali-operator   1/1     1            1           11m
+prometheus-server      1/1     1            1           11m
 [root@ip-10-16-115-140 bin]# 
 
 2. Retrieve pods status
@@ -372,14 +389,14 @@ k get pods -n observability
 
 [root@ip-10-16-115-140 bin]# k get pods -n observability
 NAME                                    READY   STATUS    RESTARTS   AGE
-grafana-alloy-agent-5dlcs               1/1     Running   0          14m
-grafana-alloy-agent-9f6p6               1/1     Running   0          14m
-grafana-alloy-agent-svr2f               1/1     Running   0          14m
-grafana-alloy-agent-vrhvf               1/1     Running   0          14m
-grafana-alloy-agent-wqb9c               1/1     Running   0          14m
-kiali-7d745479f5-tfcz6                  1/1     Running   0          13m
-kiali-kiali-operator-775bf4b688-6xhd5   1/1     Running   0          14m
-prometheus-server-7fc68f6bb-v2hdr       2/2     Running   0          14m
+grafana-alloy-agent-7jmxl               1/1     Running   0          11m
+grafana-alloy-agent-chbdn               1/1     Running   0          11m
+grafana-alloy-agent-d8rgk               1/1     Running   0          11m
+grafana-alloy-agent-g99rs               1/1     Running   0          11m
+grafana-alloy-agent-vx6r6               1/1     Running   0          11m
+kiali-58494ffdd8-sg77c                  1/1     Running   0          11m
+kiali-kiali-operator-569f58c979-zz7mv   1/1     Running   0          12m
+prometheus-server-7ccb66858f-gbdfq      2/2     Running   0          12m
 [root@ip-10-16-115-140 bin]# 
 
 3. Retrieve services status
@@ -390,6 +407,6 @@ k get svc -n observability
 
 [root@ip-10-16-115-140 bin]# k get svc -n observability
 NAME                TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)              AGE
-kiali               ClusterIP   10.43.125.231   <none>        20001/TCP,9090/TCP   14m
-prometheus-server   ClusterIP   10.43.255.102   <none>        80/TCP               15m
+kiali               ClusterIP   10.43.242.177   <none>        20001/TCP,9090/TCP   11m
+prometheus-server   ClusterIP   10.43.83.75     <none>        80/TCP               12m
 [root@ip-10-16-115-140 bin]# 

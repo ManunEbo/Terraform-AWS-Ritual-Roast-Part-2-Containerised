@@ -30,6 +30,10 @@ In summary, we're going to accomplish the following:
 4. Test various deployment strategies with Istio
 5. Setup observability with Kiali and Grafana Cloud Dashboards
 
+## Design decisions
+
+To save cost, the platform add-ons (ArgoCD, Prometheus, Kiali) share the controlplane nodes; the application workloads are kept on the workers by node labels and taints. K3s does not taint its server nodes by default. A production setup would taint the servers (`--node-taint CriticalAddonsOnly=true:NoExecute`), remove the control-plane affinity and `Exists` toleration from the Prometheus and Kiali values, and run the add-ons on a dedicated infra node pool.
+
 ## Costs Summary
 
 Note, this is the most expensive of the Layers in this project. The following are some of the highest contributors to costs:
@@ -883,7 +887,7 @@ At this point in the script, the Kubernetes cluster is running and its network i
 1. `kubectl create namespace argocd || true` - Creates a dedicated Kubernetes namespace named `argocd`. The `|| true` ensures the script continues even if the namespace already exists. It isolates ArgoCD's controlplane resources into its own logical boundary, keeping it separated from application workloads.
 2. `helm repo add argo https://argoproj.github.io/argo-helm` - Adds the official Argo project Helm repository to Helm's local registry under the alias `argo`. This registers the remote location where the ArgoCD package manifests live so Helm can download them.
 3. `helm repo update` - Refreshes the local cache of available Helm charts from all registered repositories. This ensures that Helm installs the exact specified chart version using the latest index metadata.
-4. `helm upgrade --install argocd argo/argo-cd -n argocd --version 9.5.16 --set server.service.type=ClusterIP` - Idempotently installs or updates the ArgoCD Helm chart _version 9.5.16_ (the chart version; it installs ArgoCD application version 3.4.3) into the `argocd` namespace, explicitly setting the UI/API service type to `ClusterIP`. This deploys the ArgoCD management engine into the cluster. Restricting the service to `ClusterIP` keeps the administrative server internal and unexposed to the public internet.
+4. `helm upgrade --install argocd argo/argo-cd -n argocd --version 9.5.16 -f /tmp/argocd-values.yaml` - Idempotently installs or updates the ArgoCD Helm chart _version 9.5.16_ (the chart version; it installs ArgoCD application version 3.4.3) into the `argocd` namespace, taking its settings from the values file the script writes to `/tmp/argocd-values.yaml` just before this command. The values file does two things. First, it keeps the UI/API service type `ClusterIP`, so the administrative server stays internal and unexposed to the public internet. Second, it adds a custom health check for ArgoCD `Application` resources (`resource.customizations.health.argoproj.io_Application`), which makes each sync wave wait until the previous wave's Applications are actually `Healthy` before it starts. Why this matters: on 2026-11-13 the v2 pods were created in the same second as istiod's sidecar-injector webhook and came up without sidecars (`1/1`). With the health check in place, the 2026-11-14 deploy had all 8 app pods `2/2` on first boot, created about 10 seconds after the webhook.
 5. `GITHUB_SECRET_ID="rr-$ENVIRONMENT-argocd-github-token"` - Constructs a string variable representing the AWS Secrets Manager secret identifier. Dynamically formats the resource name using the current environment variable e.g. `dev` or `prod`.
 6. `GITHUB_PAT=$(aws secretsmanager get-secret-value --region $REGION --secret-id $GITHUB_SECRET_ID --query SecretString --output text)` - Calls the AWS API to extract the raw plaintext value of the GitHub PAT from AWS Secrets Manager and assigns it to `GITHUB_PAT`. It securely fetches sensitive authentication credentials at runtime without storing passwords in plain text inside source code or scripts.
 7. **Manifest 1: ArgoCD Git Repository Secret YAML** - Creates a Kubernetes `Secret` containing Git credentials and attaches a specific ArgoCD label so the ArgoCD controller automatically registers the private GitHub repository as an application source.
@@ -2002,9 +2006,9 @@ The rest of this file review is broken into sections; we'll review them in order
 1. **Metadata & Sync Wave** - This opening section declares the resources as an ArgoCD `Application` named `prometheus` inside the `argocd` namespace. By assigning it `argocd.argoproj.io/sync-wave: "1"`, ArgoCD knows to deploy Prometheus early in the cluster rollout. Spinning up the monitoring backend in Wave 1 ensures it is active and ready to collect metrics before application services start up in later waves.
 2. **Helm chart source & version locking** - Here, ArgoCD is directed to pull the official Prometheus Helm chart directly from the community repository. The deployment is explicitly locked to `targetRevision: '29.13.1'`. Pinning the exact chart version ensures that upstream changes won't automatically modify or break our monitoring setup during routine deployments.
 3. **Stripping down unneeded services** - Default Prometheus deployments come bundled with extra sub-tools like alert managers, node exporters, and metrics push gateways. Because Grafana Alloy and Grafana Cloud already handle cluster-wide node monitoring and alerting, these auxiliary services are set to `enabled: false`. This removes unnecessary background containers and keeps the footprint lean.
-4. **Memory-Only server sizing & retention** - The core Prometheus server is customized to act as an ultra-lightweight, short term buffer. Setting `retention: "2h"` and disabling persistent disk storage (`persistentVolume.enabled: false`) forces Prometheus to hold metrics purely in RAM and discard anything older than two hours. Tight resource boundaries (`100-200m CPU` and `256-512Mi RAM`) ensure it provides real-time data to Kiali without inflating cluster storage costs.
+4. **Memory-Only server sizing & retention** - The core Prometheus server is customized to act as an ultra-lightweight, short term buffer. Setting `retention: "2h"` and disabling persistent disk storage (`persistentVolume.enabled: false`) forces Prometheus to hold metrics purely in RAM and discard anything older than two hours. Tight resource boundaries (`100-200m CPU` and `256-768Mi RAM`) ensure it provides real-time data to Kiali without inflating cluster storage costs.
 5. **Controlplane node placement** - Using `tolerations` and `nodeAffinity`, Kubernetes is instructed to preferentially schedule this Prometheus pod onto a `control-plane` node, using worker nodes only as a backup. Controlplane nodes typically have spare CPU and memory headroom. Placing Prometheus here offloads monitoring overhead from worker nodes, preserving their resources for actual application traffic.
-6. **Custom Istio scrape pipelines** - Under `extraScrapeConfigs`, three distinct scrape jobs define how Prometheus gathers metrics across the mesh:
+6. **Default scrape jobs disabled, three Istio jobs kept** - The chart's 10 default scrape jobs are switched off with `scrapeConfigs.<job>.enabled: false`, and only three custom jobs under `serverFiles.prometheus.yml.scrape_configs` remain. Why: the defaults collected far more than Kiali needs (`kubernetes-pods` also scraped every sidecar a second time through Istio's `prometheus.io` annotations) and OOM-killed Prometheus at 512Mi. After the change it ran at about 60Mi with 0 restarts for 77+ minutes; the limit is now 768Mi. The three jobs are:
    - **`istio-mesh`** - Discovers application pods in the `dev` namespace containing Istio sidecars. It rewrites target endpoints to Istio's telemetry port (`15020`), attaches identity tags like `app` and `version`, and filters specifically for `istio_*` and `pilot_*` metrics.
    - **`istio-ingress-gateway`** - Targets the edge gateway in the `istio-ingress` namespace on port `15020` so we can observe external traffic entering the cluster.
    - **`istiod`** - Connects to the mesh controlplane in `istio-system` on port `15014` to gather controlplane health and performance metrics.
@@ -2237,7 +2241,7 @@ This is another ArgoCD application manifest. It serves a specialized purpose: de
    - `05-aws-k8s/k8s-manifests/dev-apps/deployments/v1-backend-flask-deployment.yml` update **Line: `37`**
    - `05-aws-k8s/k8s-manifests/canary-staging/v2-frontend-vite-deployment.yml` update **Line: `41`**
    - `05-aws-k8s/k8s-manifests/canary-staging/v2-backend-go-deployment.yml` update **Line: `37`**
-8. **Grafana setup:** To setup Grafana follow the instructions on `05-aws-k8s/documents/Creating_a_Grafana_account_and_credentials`
+8. **Grafana setup:** To setup Grafana follow the instructions on `05-aws-k8s/documents/Creating_a_Grafana_account_and_credentials.txt`
 9. If on Linux change directory to the Layer 5 dev directory `cd infrastructure/05-aws-k8s/environments/dev/` and Export the GitHub PAT and Grafana credentials:
 
    ```bash
@@ -2300,7 +2304,7 @@ export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 - Under Namespace select `dev`
 - Under Display play with the selection to see which draws out desirable characteristics. I recommend `traffic animation`.
 
-19. View Observability with Grafana: Open `05-aws-k8s/documents/Creating_a_Grafana_account_and_credentials` and follow the instructions under `Phase 5: Viewing observability with Grafana`
+19. View Observability with Grafana: Open `05-aws-k8s/documents/Creating_a_Grafana_account_and_credentials.txt` and follow the instructions under `Phase 5: Viewing observability with Grafana`
 
 20. When you're done, destroy the Layers in reverse order. If you also deployed Layers 3 and 4, destroy Layer 4 then Layer 3 after Layer 5, before Layer 2:
 
