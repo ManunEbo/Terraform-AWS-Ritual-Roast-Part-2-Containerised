@@ -91,7 +91,5 @@ shared public ALB, Layer-1 SG shells. Region `eu-west-2`.
 - `rr-dev-alb-sg` allows 443 ingress but no port-443 listener exists on
   `aws_lb.rr_public`.
 - `aws_route_table.private` has no `Tier` tag (only `Name` + common tags).
-  Layer 4 later tries to look up private route tables filtered by
-  `tag:Tier=app`, which fails to match any RT. See Layer 4 inventory.
 - `aws_route_table.k8s_rt` has no S3 Gateway endpoint attached;
   K8s pod S3 traffic exits via the NAT GW added by Layer 5.
