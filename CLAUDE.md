@@ -11,7 +11,7 @@ monorepo deployed sequentially**. All five layers live under **`infrastructure/`
 `.github/workflows/` are at the repo root.
 
 1. `infrastructure/01-aws-vpc` — VPC, subnets (public / private-app / private-data across
-   eu-west-2a/2b), routing, gateways, the shared **public ALB** (port-80 listener, default action =
+   eu-west-2a/2b/2c), routing, gateways, the shared **public ALB** (port-80 listener, default action =
    404 fixed-response), VPC endpoints. VPC CIDR is **10.16.0.0/16**.
 2. `infrastructure/02-aws-rds` — shared **RDS MySQL 8.4** (Multi-AZ, TLS required), Secrets Manager + a Lambda rotation
    fn, IAM.
@@ -104,7 +104,7 @@ otherwise). Re-enable when Layers 3-4 are redeployed. Do not delete it.
 
 ## Pre-publish fixes — 2026-11 (branch `feat/pre-publish-fixes`)
 
-Validated (not deployed) until the end-to-end test passes. Do not re-litigate these:
+Verified live on the 2026-11-13/14 end-to-end test (Layers 1-5). Do not re-litigate these:
 - **Versions (`78dbe9d`):** K3s `v1.35.10+k3s1` (all 4 install lines), Calico `v3.31.7`
   (`operator-crds.yaml` applied before `tigera-operator.yaml` — since 3.30 the CRDs ship separately),
   Helm `v3.21.3`, argo-cd chart `9.5.16` (Argo CD 3.4.3). Istio 1.30.1 is now inside its supported
@@ -114,12 +114,17 @@ Validated (not deployed) until the end-to-end test passes. Do not re-litigate th
 - **Kiali:** `view_only_mode: true` — read-only UI.
 - **nginx (v2 frontend):** `proxy_set_header Host ritual-roast-backend` so the backend sidecar
   matches the backend VirtualService.
-- **Port-80 egress rules** on the CP/frontend/backend SGs are commented out. Leave them commented out;
-  the user deletes them by hand after the end-to-end test. Do not propose deleting, re-enabling or
-  changing any other security-group rule as part of this cleanup.
+- **Port-80 egress rules** on the CP/frontend/backend SGs were removed; the 2026-11-13/14 deploys
+  bootstrapped cleanly without them. Do not propose re-enabling them or changing any other
+  security-group rule as part of this cleanup.
 - **`network_k8s`:** route-table lookup scoped to the project VPC (`vpc_id`).
 - **CP leader query:** flattened JMESPath `length(Reservations[].Instances[])`.
 - **Grafana variables** have no `PENDING_*` defaults — they must be exported before apply AND destroy.
+- **ArgoCD Application health check (`613d73c`):** the ArgoCD values file adds a health check for
+  `Application` resources, so each sync wave waits for the previous wave's apps to be Healthy
+  (all 8 app pods came up 2/2 on first boot on 2026-11-14).
+- **Prometheus scrape jobs (`5990096`, `10839bd`):** the chart's 10 default jobs are disabled via
+  `scrapeConfigs.<job>.enabled: false`, only the three Istio jobs remain, memory limit is 768Mi.
 
 ## Current findings — verified 2026-07-01
 
@@ -346,7 +351,7 @@ and the same for `backend-route` with `http[0]`. Nudge ArgoCD if it hasn't polle
 `kubectl -n argocd annotate application ritual-roast-workloads argocd.argoproj.io/refresh=hard --overwrite`.
 
 **Driving/observing traffic — the load-bearing lesson (v1 SSR vs v2 SPA):** ALB =
-`http://rr-dev-public-alb-1057461043.eu-west-2.elb.amazonaws.com`
+`http://<ALB-DNS>`
 - **Frontend split + v1's backend hop:** drive the ROOT cookieless (`curl -s $ALB/` in a loop). v1
   (Next.js) renders **server-side** and calls the backend → v1→backend edge appears. v2 (Vite) serves
   static HTML on `/` — no backend call from curl (correct, not a fault).
@@ -415,7 +420,7 @@ full detail. Summary:
 
 - **Files:** `ritual-roast-mesh-dashboard.json` (the dashboard, source of truth — edit this, not the
   Grafana UI), `push-to-grafana.sh` (pushes/updates it via Grafana's `/api/dashboards/import`), `README.md`.
-- **Live now:** pushed to `https://curiousquince1187.grafana.net/d/rr-mesh-traffic/...` — request rate,
+- **Live now:** pushed to `https://<your-stack>.grafana.net/d/rr-mesh-traffic/...` — request rate,
   observed traffic-share %, error rate, p95 latency (all by `destination_version`), scrape target health,
   and backend→RDS TCP bytes. Colors are fixed: **v1 = green (`#0ca30c`), v2 = red (`#d03b3b`)** across
   every panel.
@@ -424,7 +429,7 @@ full detail. Summary:
   traffic-share panel even at 0% official weight) without any changes.
 - **Only shows what's scraped:** the `istio_*` family (+ `up`) — no node/cAdvisor metrics, per the
   429-rate-limit trim in `9b7c501`.
-- **To push an edit:** `export GRAFANA_URL=https://curiousquince1187.grafana.net`,
+- **To push an edit:** `export GRAFANA_URL=https://<your-stack>.grafana.net`,
   `export GRAFANA_API_TOKEN=<service-account-token>` (a Grafana **instance** Service Account token,
   Editor+ role — NOT the Alloy remote-write token in `rr-dev-grafana-cloud-token`, which is
   metrics:write-only and can't create dashboards), then `./push-to-grafana.sh`. `overwrite:true` + fixed
@@ -560,11 +565,11 @@ kubectl -n observability get svc kiali     # kiali service exists
 | Component | Purpose | Where |
 |---|---|---|
 | Grafana Alloy | Scrapes Envoy sidecars + nodes → remote-writes to Grafana Cloud | `observability` ns, DaemonSet on all 5 nodes |
-| In-cluster Prometheus | Scrapes Istio metrics for Kiali's live graph only (2h retention, no PV) | `observability` ns, prefers CP node |
+| In-cluster Prometheus | Scrapes only the three Istio jobs (istio-mesh, istio-ingress-gateway, istiod) for Kiali's live graph (2h retention, no PV) | `observability` ns, prefers CP node |
 | Kiali | Live service mesh graph, traffic animation, VirtualService viewer | `observability` ns, prefers CP node |
 | Grafana Cloud | Long-term metrics, dashboards, alerting | External (remote-write target) |
 
-**Grafana Cloud dashboard access:** `https://curiousquince1187.grafana.net/d/rr-mesh-traffic/...` — v1/v2
+**Grafana Cloud dashboard access:** `https://<your-stack>.grafana.net/d/rr-mesh-traffic/...` — v1/v2
 mesh traffic, strategy-agnostic (canary/blue-green/shadow). Source + push script:
 `infrastructure/05-aws-k8s/k8s-manifests/observability/dashboards/` (see its README). v1=green, v2=red,
 fixed across every panel.
@@ -609,4 +614,4 @@ All nodes are t3.medium (4096 MiB). After sidecar limit cap:
 | Backend worker | ~2432 MiB | 59% | ✓ |
 
 Sidecar limit is 128 MiB (was 1024 MiB default). Actual Envoy usage ~50–80 MiB under normal load.
-Prometheus (256 MiB limit) and Kiali (256 MiB limit) land on CP nodes via nodeAffinity preference.
+Prometheus (768 MiB limit) and Kiali (256 MiB limit) land on CP nodes via nodeAffinity preference.
