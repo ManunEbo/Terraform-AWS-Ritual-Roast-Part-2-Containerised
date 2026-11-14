@@ -255,11 +255,7 @@ Let's now turn our attention to the Security Group rules:
 
    **Protocol `tcp`** - This provides the necessary connection transport for TLS handshakes and secure data transfers over HTTPS.
 
-3. `rr_backend_egress_http` - **Disabled (commented out).** This rule allowed backend nodes to initiate outbound unencrypted HTTP web requests to the internet on port 80. Everything the nodes download, Linux packages (`dnf`), the K3s installer and binaries, Helm, the Calico manifests and container images, is fetched over HTTPS on port 443, which `rr_backend_egress_https` already allows. So port 80 was an unnecessary opening. The matching port-80 egress rules on the frontend (`rr_frontend_egress_http`) and controlplane (`rr_cp_egress_http`) security groups are disabled for the same reason.
-
-   **Ports `from_port = 80`, `to_port = 80`** - This is the standard unencrypted HTTP port.
-
-   **Protocol `tcp`** - This provides reliable packet delivery required for downloading installation binaries and Linux OS packages over HTTP.
+3. **No port-80 egress rule** - There is deliberately no outbound HTTP (port 80) rule. Everything the nodes download, Linux packages (`dnf`), the K3s installer and binaries, Helm, the Calico manifests and container images, is fetched over HTTPS on port 443, which `rr_backend_egress_https` already allows. So port 80 would be an unnecessary opening. The frontend and controlplane security groups have no port-80 egress rule either, for the same reason.
 
 ### [worker-frontend-sg](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/infrastructure/05-aws-k8s/modules/security_k8s/worker-frontend-sg.tf)
 
@@ -2222,6 +2218,24 @@ This is another ArgoCD application manifest. It serves a specialized purpose: de
 3.  **Shared target environment `namespace: dev`** - This is the most critical detail in the file. It deploys the canary components into the exact same `dev` namespace as the main application. They share the same environment. This shared living space is what allows Istio to seamlessly intercept incoming web traffic and safely split it between the stable version and the new canary version.
 4.  **Strict state enforcement `syncPolicy`** - It uses the same strict GitOps rules `prune: true` and `selfHeal: true`. This is especially useful for canary testing: if the canary version fails its tests, we can simply delete the respective canary file from GitHub. ArgoCD's prune feature will instantly see the files are gone and automatically delete the failing canary pods from the live cluster, instantly stopping the test.
 
+# Known issues
+
+## Platform add-ons run on the controlplane nodes
+
+**What** - The three controlplane nodes run more than the controlplane. Prometheus and Kiali (both the operator and the server) are set to prefer the controlplane nodes, using node affinity plus an `Exists` toleration. ArgoCD is installed by Helm with no placement rules, so it can also land there. The Grafana Alloy DaemonSet tolerates every taint, so it runs on every node, including the controlplane. Only istiod and the ingress gateway are pinned to the frontend workers.
+
+**Why it breaks the principle** - Controlplane nodes host etcd and the API server, and both are sensitive to resource pressure. If an add-on uses too much memory, the kubelet can start evicting pods or the kernel can OOM-kill processes on a controlplane node. That risks etcd quorum, which means the whole cluster. There's also a security cost: add-ons with cluster-wide RBAC permissions run on the same machines that hold etcd's data and the cluster's secrets, so a compromised add-on has a bigger blast radius.
+
+**Why it was accepted** - Cost. The three `t3.medium` controlplane nodes had spare capacity, and a dedicated node pool for add-ons would have meant more EC2 instances in a development environment. To limit the risk, every add-on has CPU and memory requests and limits (Prometheus is capped at 768Mi), and application workloads stay on the workers through node labels and taints. K3s doesn't taint its server nodes by default, so nothing stops the add-ons from landing there.
+
+**Production fix**
+
+- Taint the servers with `--node-taint CriticalAddonsOnly=true:NoExecute`.
+- Remove the controlplane affinity and the `Exists` toleration from the Prometheus and Kiali values.
+- Run ArgoCD, Prometheus and Kiali on a dedicated infra node pool.
+
+Alloy can keep its toleration, because a node-level agent is meant to run everywhere.
+
 # Instructions
 
 0. The whole project should have already been pushed to GitHub by now, in your own new repo. Thus unless [.github/workflows/deploy-ghcr-k8s.yml](https://github.com/ManunEbo/Terraform-AWS-Ritual-Roast-Part-2-Containerised/blob/main/.github/workflows/deploy-ghcr-k8s.yml) was disabled, it would have executed and pushed 4 images up to `ghcr.io`. If not, then please enable it by removing the postfix `.disabled` and pushing to GitHub. Note, the workflow only builds the apps whose files changed in a push to `main` (`apps/**`), so a push that only renames the workflow file won't build anything; push a change under each of the four `apps/` folders to build all four images.
@@ -2232,7 +2246,7 @@ This is another ArgoCD application manifest. It serves a specialized purpose: de
    - `05-aws-k8s/modules/compute_k8s/variables.tf`
 4. Open `05-aws-k8s/environments/dev/shared_locals.tf` and update `Project_owner`, `s3_bucket` and any other values you want to add or remove.
 5. Open the following files and update the URL to your GitHub repo:
-   - `05-aws-k8s/modules/compute_k8s/user_data_cp.sh` update **Lines: `145` & `206`**, and on **Line `157`** replace `--docker-username=ManunEbo` with your GitHub user name
+   - `05-aws-k8s/modules/compute_k8s/user_data_cp.sh` update **Lines: `174` & `235`**, and on **Line `186`** replace `--docker-username=ManunEbo` with your GitHub user name
    - `05-aws-k8s/k8s-manifests/observability/canary-staging-app.yml` update **Line: `11`**
    - `05-aws-k8s/k8s-manifests/observability/ritual-roast-app.yml` update **Line: `11`**
 6. **Find the ghcr.io images:** If the workflow in step 0 built all four images in your repo, it has already written your image references into the four manifests below (a commit named `ci: pin changed app images ...`); run `git pull` and skip to step 8. Otherwise: Update the following with your GitHub account name **`https://github.com/manunebo?tab=packages`** i.e. replace `manunebo` with your account name. Then paste that on your browser to retrieve a list of images in **ghcr.io**. If this is the only project you have, you should have 4 packages. Clicking on the package title e.g `rr-v1-frontend` will open **the image tag history** with the latest at the top. Copy the **current full image reference** e.g. `ghcr.io/manunebo/rr-v1-frontend:46dd0cae58aa503c7ccd4abe03c93820bd4febad` i.e. the one with the docker pull prefix.
