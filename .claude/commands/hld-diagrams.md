@@ -48,8 +48,10 @@ Layers (deploy order) under `infrastructure/`:
    ports in a side legend.
 6. Session Manager appears on Layer 5 only. No service may appear unless the
    inventory cites a resource for it.
-7. Layer 4's S3 Gateway endpoint carries the visible annotation
-   "route_table_ids = [] (Tier=app matches no RT)".
+7. The S3 Gateway endpoint is owned by Layer 1 (attached to the private
+   route table). Layer 4 defines no S3 endpoint of its own; it draws one
+   greyed, dashed reference labelled "S3 Gateway endpoint (from 01-aws-vpc)
+   — serves the private RT".
 8. Never use an icon that contains baked-in example text (e.g. CIDRs).
 
 # Style (match the example)
