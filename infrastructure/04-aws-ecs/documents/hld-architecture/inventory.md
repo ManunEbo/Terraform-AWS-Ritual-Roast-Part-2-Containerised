@@ -1,8 +1,7 @@
 # Layer 04-aws-ecs — HLD inventory
 
 Scope: ECS/Fargate frontend+backend, internal ALB, CW log groups,
-VPC interface endpoints (ECR/Logs), S3 Gateway endpoint, IAM task
-roles, Layer-4 SG chain. Injects a listener rule into the Layer-1
+VPC interface endpoints (ECR/Logs), IAM task roles, Layer-4 SG chain. Injects a listener rule into the Layer-1
 public ALB listener.
 
 ## Approved decisions
@@ -13,8 +12,9 @@ public ALB listener.
 - VPC Interface endpoints (`ecr.api`, `ecr.dkr`, `logs`) grouped
   in a small sub-cluster of the App subnet column.
 - Keep CloudWatch icon on this layer (CW log groups are owned here).
-- Layer-4 S3 Gateway endpoint drawn with an "orphan" annotation
-  because its `route_table_ids` resolves to `[]` (see Findings).
+- The S3 Gateway endpoint is owned by Layer 1 (`rr-dev-s3-gateway`,
+  attached to the private RT). It is drawn as a greyed, dashed
+  "from 01-aws-vpc" reference.
 
 ## Components
 
@@ -28,20 +28,21 @@ public ALB listener.
   execution role `ecs_execution_role_arn`,
   task role `ecs_frontend_task_role_arn`,
   container `rr-frontend-container-01`
-  (image `.../rr-dev-frontend:latest`, port 3000,
+  (image `.../rr-dev-frontend@<digest>` — pinned via
+  `data.aws_ecr_image`, port 3000,
   `readonlyRootFilesystem=true`, volume `nextjs-cache` mounted at
   `/app/.next/cache`), env `BACKEND_URL=http://<internal-alb>`,
   log group `/ecs/rr-dev-frontend`.
 - `aws_ecs_task_definition.rr_backend_task` — cpu 256 mem 512,
   task role `ecs_backend_task_role_arn`,
-  container `rr-backend-container-01` (image `.../rr-dev-backend:latest`,
-  port 5000, read-only root FS),
+  container `rr-backend-container-01` (image `.../rr-dev-backend@<digest>`
+  — pinned via `data.aws_ecr_image`, port 5000, read-only root FS),
   env `SECRET_ARN`, `AWS_REGION`, log group `/ecs/rr-dev-backend`.
 - `aws_ecs_service.rr_frontend_service` — `modules/ecs/services.tf` —
   desired 2, FARGATE weight=1 base=1, `health_check_grace_period_seconds=120`,
   `assign_public_ip=false`, Web subnets + frontend SG,
   load_balancer target `frontend_tg_arn` port 3000,
-  `ignore_changes=[task_definition, desired_count]`.
+  `ignore_changes=[desired_count]`.
 - `aws_ecs_service.rr_backend_service` — desired 2, `FARGATE_SPOT` weight=1,
   App subnets + backend SG, target `backend_tg_arn` port 5000.
 
@@ -64,9 +65,7 @@ public ALB listener.
   Interface in App subnets, `private_dns_enabled`, SG `endpoints_sg_id`.
 - `aws_vpc_endpoint.ecr_dkr` — Interface in App subnets.
 - `aws_vpc_endpoint.logs` — Interface in App subnets.
-- `aws_vpc_endpoint.s3` — Gateway, `route_table_ids = var.route_table_ids`
-  (see Findings — resolves to `[]`), with
-  `policy = data.aws_iam_policy_document.s3_gateway.json`.
+- No S3 Gateway endpoint in this layer; it lives in Layer 1.
 
 ### CloudWatch
 - `aws_cloudwatch_log_group.rr_frontend_logs` —
@@ -124,7 +123,6 @@ public ALB listener.
 - `data.aws_secretsmanager_secret.rr_db_secret` — name `rr-${env}-db-secret` (L2).
 - `data.aws_lb.gateway_alb` + `data.aws_lb_listener.gateway_http_listener` —
   L1 public ALB listener on port 80.
-- `data.aws_route_tables.private_rts` — filter `tag:Tier=app` (see Findings).
 
 ## Rules this layer injects into other layers
 - INTO Layer-1 `public_alb_sg`:
@@ -145,10 +143,5 @@ public ALB listener.
   `aws_lb_listener_rule.rr_ecs_frontend_rule`, priority 100,
   `/* → rr_frontend` TG.
 
-## Findings (not fixed)
-- Layer 4's S3 Gateway endpoint has `route_table_ids = []` —
-  `data.aws_route_tables.private_rts` filters by `tag:Tier=app`, and
-  no route table in this VPC carries a `Tier` tag. The endpoint is
-  created but attaches to no route table.
-- Layer 1's S3 Gateway endpoint attaches to the shared private RT and
-  serves Web/App/Database subnets; this layer's duplicate is orphan.
+## Findings
+- None specific to this layer.
