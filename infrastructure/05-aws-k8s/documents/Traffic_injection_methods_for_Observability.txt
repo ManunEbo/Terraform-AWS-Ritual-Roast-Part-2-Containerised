@@ -10,6 +10,10 @@ The traffic then enters exactly as user traffic would, and Kiali draws the full 
 Essentially run ## 1., ## 2. or both before you deploy any canary. Doing so will aid
 the visualization in Kiali.
 
+Note: for canary splits use the cookieless loader (## 1) only. It shows both the frontend split and the
+backend split (v1 renders server-side and calls the backend). The cookie loader (## 2) pins traffic to v2 and
+distorts the frontend split; use it only to show the v2 -> backend edge.
+
 **********************************************************************************************************
 
 ## 1. Steady traffic in one command (`hey`)

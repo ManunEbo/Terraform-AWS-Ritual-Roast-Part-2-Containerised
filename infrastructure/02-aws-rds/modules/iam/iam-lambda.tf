@@ -11,7 +11,6 @@ resource "aws_iam_role" "rr_lambda_secrets_role" {
     Statement = [{
       Action = "sts:AssumeRole"
       Principal = {
-        # FIXED: Capitalized 'Service'
         Service = "lambda.amazonaws.com"
       }
       Effect = "Allow"
@@ -50,7 +49,6 @@ resource "aws_iam_policy" "rr_lambda_secrets_custom_policy" {
         "secretsmanager:PutSecretValue",
         "secretsmanager:UpdateSecretVersionStage" #  Permits shifting the "AWSCURRENT" label
       ]
-      # FIXED: Capitalized 'Resource'
       Resource = "arn:aws:secretsmanager:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:secret:rr-${var.environment}-db-secret-*"
       },
       {

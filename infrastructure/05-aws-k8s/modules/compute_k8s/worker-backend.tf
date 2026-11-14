@@ -14,9 +14,7 @@ resource "aws_launch_template" "rr_k3s_worker_backend" {
   metadata_options {
     http_endpoint = "enabled"
     http_tokens   = "required"
-    # =========================================================
-    # THE FIX: Kubernetes pods require 2 hops to reach IMDSv2
-    # =========================================================
+    # Pods need 2 hops to reach IMDSv2 (node -> pod network namespace)
     http_put_response_hop_limit = 2
   }
 

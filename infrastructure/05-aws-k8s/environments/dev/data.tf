@@ -31,14 +31,6 @@ data "aws_security_group" "rr_rds_sg" {
   }
 }
 
-# Fetch the Existing Internet gateway
-data "aws_internet_gateway" "rr_igw" {
-  # These are the tags attached to the IGW from 01-aws-vpc, retrieved from the IGW itself
-  tags = merge(local.common_tags_vpc, {
-    Name = "${var.environment}-igw"
-  })
-}
-
 # Fetch aws_subnet.public_subnets[1].id
 data "aws_subnet" "rr_public_subnet_1" {
   vpc_id = data.aws_vpc.rr_vpc.id

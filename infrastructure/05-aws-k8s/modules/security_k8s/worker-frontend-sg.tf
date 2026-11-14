@@ -149,16 +149,6 @@ resource "aws_security_group_rule" "rr_frontend_egress_https" {
   security_group_id = aws_security_group.rr_k8s_worker_frontend_sg.id
 }
 
-# resource "aws_security_group_rule" "rr_frontend_egress_http" {
-#   description       = "Allow HTTP outbound for linux package updates and K3s dependencies"
-#   type              = "egress"
-#   from_port         = 80
-#   to_port           = 80
-#   protocol          = "tcp"
-#   cidr_blocks       = ["0.0.0.0/0"]
-#   security_group_id = aws_security_group.rr_k8s_worker_frontend_sg.id
-# }
-
 # Inject Egress rules into ALB to route to Frontend Workers
 resource "aws_security_group_rule" "rr_alb_egress_to_frontend_http" {
   description              = "Allow public ALB to route HTTP traffic to Frontend Workers on NodePort"

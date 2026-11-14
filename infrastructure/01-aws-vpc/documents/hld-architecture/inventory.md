@@ -17,9 +17,8 @@ shared public ALB, Layer-1 SG shells. Region `eu-west-2`.
   - `rr-dev-vpc-endpoints-sg` standalone (no edge from ALB-SG);
     the relationship to the Secrets Mgr interface endpoint is carried
     in labels only.
-- Tier header pills were tried (Public / Web / App / Data / K8s) and
-  dropped — graphviz would not keep them aligned with their columns.
-  Deviation from the reference example.
+- Tier header pills (DMZ / Web / App / Data / K8s) are drawn above the
+  subnet columns.
 - `RouteTable` icon from mingrammer replaced with plain purple-outlined
   boxes because the icon ships with baked-in "172.16.x.x" text that
   contradicts this VPC's `10.16.0.0/16`.
@@ -44,9 +43,12 @@ shared public ALB, Layer-1 SG shells. Region `eu-west-2`.
 
 ### Gateways / endpoints
 - `aws_internet_gateway.main` — `modules/vpc/gateways.tf` — `dev-igw`.
-- `aws_vpc_endpoint.s3` (Gateway) — `modules/vpc/gateways.tf` —
-  attached to `aws_route_table.private` (verified; shared by web/app/db
-  subnets).
+- `aws_vpc_endpoint.s3` (Gateway, `rr-dev-s3-gateway`) —
+  `modules/endpoints/s3_endpoint.tf` — attached to
+  `aws_route_table.private` (verified; shared by web/app/db subnets).
+  Endpoint policy allows `s3:GetObject` on
+  `prod-<region>-starport-layer-bucket/*` only (ECR image layers) —
+  `modules/endpoints/data.tf`.
 - `aws_vpc_endpoint.rr_secretsmanager` (Interface) —
   `modules/endpoints/secrets_manager_endpoint.tf` — ENIs in
   App subnets 2a/2b/2c, `private_dns_enabled`,
@@ -89,7 +91,5 @@ shared public ALB, Layer-1 SG shells. Region `eu-west-2`.
 - `rr-dev-alb-sg` allows 443 ingress but no port-443 listener exists on
   `aws_lb.rr_public`.
 - `aws_route_table.private` has no `Tier` tag (only `Name` + common tags).
-  Layer 4 later tries to look up private route tables filtered by
-  `tag:Tier=app`, which fails to match any RT. See Layer 4 inventory.
 - `aws_route_table.k8s_rt` has no S3 Gateway endpoint attached;
   K8s pod S3 traffic exits via the NAT GW added by Layer 5.

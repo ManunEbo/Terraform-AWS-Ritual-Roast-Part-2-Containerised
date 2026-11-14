@@ -1181,4 +1181,4 @@ Without an ECS Service, we would have to manually start, stop and route traffic 
 12. Run terraform apply, with caution `tf apply`, or if you trusted the plan `tf apply --auto-approve`
 13. Copy the Public ALB URL and paste it in the browser.
 14. Congratulations you've deployed your website with ECS Fargate
-15. When you've finished playing with Layer 4 destroy **Layer 4 & Layer 3**: run `tf destroy --auto-approve` on both as we won't need it in Layer 5.
+15. When you've finished playing with Layer 4 destroy **Layer 4 then Layer 3, in that order**: run `tf destroy --auto-approve` on both as we won't need it in Layer 5.

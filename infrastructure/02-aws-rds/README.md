@@ -979,6 +979,7 @@ Here is the step by step guide to deploy Layer 2 successfully:
 5. If on Linux change directory to the Layer 2 dev directory `cd infrastructure/02-aws-rds/environments/dev`
 6. Create an alias for terraform `alias tf=terraform`, this is easier than writing out the long word
 7. Export the db credentials: `export TF_VAR_db_username="elvy"` and `export TF_VAR_db_password="Password3!"`
+   Note: the rotation Lambda replaces this password within seconds of the apply (the first rotation runs immediately), so the example is never the live password for long. Use your own.
 8. Initialize terraform: `tf init`
 9. Run terraform plan: `tf plan` review the outputs and if you're happy proceed to the next command
 10. Run terraform apply, with caution `tf apply`, or if you trusted the plan `tf apply -auto-approve`

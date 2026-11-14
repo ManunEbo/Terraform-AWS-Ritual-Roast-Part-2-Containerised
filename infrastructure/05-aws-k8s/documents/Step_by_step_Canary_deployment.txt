@@ -151,6 +151,9 @@ status:
 
 To avoid cloning the entire repository onto the control plane node, we stream individual canary manifests directly. Private GitHub repositories return 404 errors for unauthenticated raw URLs, so we pass the GITHUB_PAT authorization header via curl. We include the --fail flag to catch HTTP errors before piping into kubectl apply -f -, safely applying updates in-memory.
 
+WARNING: pushing any commit to `main` while a manual canary is applied makes ArgoCD auto-sync
+`ritual-roast-workloads` back to Git (100/0), even with selfHeal off. Do not push until the canary is finished.
+
 6. Export the GitHub PAT: inside the aws ssm session execute the following command:
 ```bash
 export GITHUB_PAT="PASTE GitHub PAT"
