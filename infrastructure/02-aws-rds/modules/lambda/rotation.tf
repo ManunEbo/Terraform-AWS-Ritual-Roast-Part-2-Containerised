@@ -17,7 +17,7 @@ data "archive_file" "rr_rotation_zip" {
   output_path = "${path.module}/rotation.zip"
 }
 
-# --- ADDED: The IAM Eventual Consistency Speed Bump ---
+# Wait for IAM eventual consistency before creating the Lambda
 resource "time_sleep" "wait_for_iam" {
   create_duration = "15s"
 
@@ -33,7 +33,6 @@ resource "aws_lambda_function" "rr_secret_rotation_function" {
   handler       = "index.lambda_handler"
   runtime       = "python3.13"
 
-  # FIXED: Pointing to the automated zip created above, removing S3 references
   filename         = data.archive_file.rr_rotation_zip.output_path
   source_code_hash = data.archive_file.rr_rotation_zip.output_base64sha256
 
@@ -53,7 +52,6 @@ resource "aws_lambda_function" "rr_secret_rotation_function" {
   # the handshake and the multi-step database update without being cut off mid-process.
   timeout = 30
 
-  # --- ADDED: The Dependency Chain ---
   # This forces Terraform to pause Lambda creation until the 15-second timer finishes
   depends_on = [time_sleep.wait_for_iam]
 }

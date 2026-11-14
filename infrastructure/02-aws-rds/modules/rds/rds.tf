@@ -34,13 +34,11 @@ resource "aws_db_instance" "rr_database" {
   vpc_security_group_ids = [var.database_sg_id]
 
   # Dynamic credentials
-  # FIXED: Name matches the data source in secrets.tf
   username = jsondecode(data.aws_secretsmanager_secret_version.rr_latest_creds.secret_string)["username"]
   password = jsondecode(data.aws_secretsmanager_secret_version.rr_latest_creds.secret_string)["password"]
 
   skip_final_snapshot = true
 
-  # FIXED: Reference the actual resource in secrets.tf, not a variable
   depends_on = [aws_secretsmanager_secret_version.rr_db_skeleton]
 
   lifecycle {
