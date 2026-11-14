@@ -103,7 +103,7 @@ for GitOps + Grafana + the K3s join token, IAM instance profiles.
   `modules/security_k8s/controlplane-sg.tf`.
   - Ingress 6443/tcp from worker-frontend, worker-backend, nlb SGs.
   - Self-ingress all protos (etcd/mesh).
-  - Egress all VPC CIDR + 80/tcp 443/tcp to `0.0.0.0/0`.
+  - Egress all VPC CIDR + 443/tcp to `0.0.0.0/0`.
 - `aws_security_group.rr_k8s_worker_frontend_sg` —
   `modules/security_k8s/worker-frontend-sg.tf`.
   - Ingress 30080/tcp from Layer-1 ALB SG —
@@ -111,7 +111,7 @@ for GitOps + Grafana + the K3s join token, IAM instance profiles.
   - Ingress 10250/tcp (kubelet) from CP SG.
   - Ingress 15017/tcp (Istio webhook) from CP SG.
   - Self-ingress all protos.
-  - Egress all VPC CIDR + 80/443 to `0.0.0.0/0`.
+  - Egress all VPC CIDR + 443/tcp to `0.0.0.0/0`.
 - `aws_security_group.rr_k8s_worker_backend_sg` —
   `modules/security_k8s/worker-backend-sg.tf`.
   - Ingress all protos from worker-frontend SG —
@@ -119,7 +119,7 @@ for GitOps + Grafana + the K3s join token, IAM instance profiles.
     (frontend→backend overlay path).
   - Ingress 10250/tcp from CP SG; Ingress 15017/tcp from CP SG.
   - Self-ingress all protos.
-  - Egress all VPC CIDR + 80/443 to `0.0.0.0/0`.
+  - Egress all VPC CIDR + 443/tcp to `0.0.0.0/0`.
 - `aws_security_group.rr_k8s_nlb_sg` —
   `modules/security_k8s/nlb-sg.tf`.
   - Ingress 6443/tcp from worker-frontend and worker-backend SGs.
